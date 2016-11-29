@@ -404,8 +404,8 @@ void main_view_t::display_region( koord lt, koord wh, sint16 y_min, sint16 y_max
 				if(  grund_t* const kb = welt->lookup_kartenboden(pos)  ) {
 					const sint16 yypos = ypos - tile_raster_scale_y( min( kb->get_hoehe(), hmax_ground ) * TILE_HEIGHT_STEP, IMG_SIZE );
 					if(  yypos - IMG_SIZE < lt.y + wh.y  &&  yypos + IMG_SIZE > lt.y  ) {
-#ifdef MULTI_THREAD
 						bool force_show_grid = false;
+#ifdef MULTI_THREAD
 						if(  env_t::hide_under_cursor  ) {
 							const uint32 cursor_dist = shortest_distance( pos, cursor_pos );
 							if(  cursor_dist <= env_t::cursor_hide_range + 2u  ) {  // +2 to allow for rapid diagonal movement
@@ -420,7 +420,7 @@ void main_view_t::display_region( koord lt, koord wh, sint16 y_min, sint16 y_max
 						if(  env_t::hide_under_cursor  ) {
 							const bool saved_grid = grund_t::show_grid;
 							const uint32 cursor_dist = shortest_distance( pos, cursor_pos );
-							if(  cursor_dist <= env_t::cursor_hide_range + 2u  ) {
+							if(  cursor_dist <= env_t::cursor_hide_range + 2u  ) {  // +2 to allow for rapid diagonal movement
 								kb->set_flag( grund_t::dirty );
 								if(  cursor_dist <= env_t::cursor_hide_range  ) {
 									grund_t::show_grid = true;
@@ -429,9 +429,7 @@ void main_view_t::display_region( koord lt, koord wh, sint16 y_min, sint16 y_max
 							kb->display_if_visible( xpos, yypos, IMG_SIZE );
 							grund_t::show_grid = saved_grid;
 						}
-						else {
-							kb->display_if_visible( xpos, yypos, IMG_SIZE );
-						}
+						kb->display_if_visible( xpos, yypos, IMG_SIZE, force_show_grid );
 #endif
 						plotted = true;
 
