@@ -944,7 +944,7 @@ void grund_t::calc_back_image(const sint8 hgt, const slope_t::type slope_this)
 #ifdef MULTI_THREAD
 void grund_t::display_boden(const sint16 xpos, const sint16 ypos, const sint16 raster_tile_width, const sint8 clip_num, const bool force_show_grid ) const
 #else
-void grund_t::display_boden(const sint16 xpos, const sint16 ypos, const sint16 raster_tile_width) const
+void grund_t::display_boden(const sint16 xpos, const sint16 ypos, const sint16 raster_tile_width, const bool force_show_grid ) const
 #endif
 {
 	static const uint16 wall_image_offset[grund_t::BACK_WALL_COUNT] = {0, 11};
@@ -1150,11 +1150,7 @@ void grund_t::display_boden(const sint16 xpos, const sint16 ypos, const sint16 r
 
 				// we show additionally a grid
 				// for undergroundmode = ugm_all the grid is plotted in display_obj
-#ifdef MULTI_THREAD
 				if(  show_grid  || force_show_grid  ) {
-#else
-				if(  show_grid  ){
-#endif
 					const uint8 hang = get_grund_hang();
 					display_normal( ground_desc_t::get_border_image(hang), xpos, ypos, 0, true, dirty CLIP_NUM_PAR );
 				}
@@ -1264,7 +1260,7 @@ void grund_t::display_border( sint16 xpos, sint16 ypos, const sint16 raster_tile
 #ifdef MULTI_THREAD
 void grund_t::display_if_visible(sint16 xpos, sint16 ypos, const sint16 raster_tile_width, const sint8 clip_num, const bool force_show_grid )
 #else
-void grund_t::display_if_visible(sint16 xpos, sint16 ypos, const sint16 raster_tile_width)
+void grund_t::display_if_visible(sint16 xpos, sint16 ypos, const sint16 raster_tile_width, const bool force_show_grid )
 #endif
 {
 	if(  !is_karten_boden_visible()  ) {
@@ -1284,7 +1280,7 @@ void grund_t::display_if_visible(sint16 xpos, sint16 ypos, const sint16 raster_t
 #ifdef MULTI_THREAD
 		display_boden( xpos, ypos, raster_tile_width, clip_num, force_show_grid );
 #else
-		display_boden( xpos, ypos, raster_tile_width );
+		display_boden( xpos, ypos, raster_tile_width, force_show_grid );
 #endif
 	}
 }

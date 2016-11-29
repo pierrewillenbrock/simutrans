@@ -539,7 +539,7 @@ public:
 #ifdef MULTI_THREAD
 	void display_boden(const sint16 xpos, const sint16 ypos, const sint16 raster_tile_width, const sint8 clip_num, bool force_show_grid=false) const;
 #else
-	void display_boden(const sint16 xpos, const sint16 ypos, const sint16 raster_tile_width) const;
+	void display_boden(const sint16 xpos, const sint16 ypos, const sint16 raster_tile_width, bool force_show_grid=false) const;
 #endif
 
 	/**
@@ -554,7 +554,7 @@ public:
 #ifdef MULTI_THREAD
 	void display_if_visible(sint16 xpos, sint16 ypos, const sint16 raster_tile_width, const sint8 clip_num, bool force_show_grid=false);
 #else
-	void display_if_visible(sint16 xpos, sint16 ypos, const sint16 raster_tile_width);
+	void display_if_visible(sint16 xpos, sint16 ypos, const sint16 raster_tile_width, bool force_show_grid=false);
 #endif
 
 	/**
