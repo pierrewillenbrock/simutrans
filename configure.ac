@@ -161,5 +161,7 @@ else
 fi
 
 
-AC_CONFIG_FILES([config.default])
-AC_OUTPUT
+dnl AC_CONFIG_FILES([config.default])
+dnl AC_OUTPUT
+dnl details: it fails to properly detect freetype and static compile etc.
+AC_MSG_WARN([This configure script does no longer modify config.default. edit by hand.])
