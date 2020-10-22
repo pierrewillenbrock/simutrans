@@ -4034,3 +4034,309 @@ bool display_snapshot( const scr_rect &area )
 #endif
 	return img.write_png( filename );
 }
+
+
+/* context info
+ *
+
+ for all drawing functions, i want to know the context (relevant to drawing),
+ so the context can be captured the drawing be deferred.
+ we have to consider drawing order for pixels that are affected by multiple
+ operations.
+
+ so, in addition to the information to do the drawing operation,
+ we also need to know where the drawing happens.
+
+ when referencing textures, only reference to the GL texture is allowed,
+ no referencing images or any of the other texture caches
+
+
+ these generate textures
+
+//this function initialises the index_tex of images, if needed. idempotent.
+static GLuint getIndexImgTex(struct imd &image,
+			     const PIXVAL *sp)
+
+//this function initialises the base_tex of images, if needed. idempotent.
+static GLuint getBaseImgTex(struct imd &image,
+			     const PIXVAL *sp)
+
+//this function creates new entries in the arrayInfo map and is idempotent when arrayInfo map is not cleared
+static GLuint getArrayTex(const PIXVAL *arr, scr_coord_val w, scr_coord_val h)
+
+//this function creates new entries in the charatlas and is idempotent when charatlas is not cleared
+static GLuint getGlyphTex(uint32_t c, const font_t* fnt,
+			 GLfloat &x1, GLfloat &y1,
+			 GLfloat &x2, GLfloat &y2)
+
+//creates/returns an entry in rgbmap_cache. idempotent, keys on code
+static void updateRGBMap(GLuint &tex, PIXVAL *rgbmap, uint64_t code)
+
+
+
+
+
+
+//changes base_tile_raster_width, tile_raster_width
+scr_coord_val display_set_base_raster_width(scr_coord_val new_raster)
+
+//using disp_width
+sint16 display_get_width()
+
+//changes disp_width
+void display_set_actual_width(scr_coord_val w)
+
+//using disp_height
+sint16 display_get_height()
+
+//changes disp_height
+void display_set_height(scr_coord_val const h)
+
+//using clips
+clip_dimension display_get_clip_wh(CLIP_NUM_DEF0)
+
+//changes clips
+//using disp_width, disp_height
+void display_set_clip_wh(scr_coord_val x, scr_coord_val y, scr_coord_val w, scr_coord_val h  CLIP_NUM_DEF, bool fit)
+
+//changes clips
+//using CLIP_NUM_PAR, disp_width, disp_height
+void display_push_clip_wh(scr_coord_val x, scr_coord_val y, scr_coord_val w, scr_coord_val h  CLIP_NUM_DEF)
+
+//changes clips
+void display_swap_clip_wh(CLIP_NUM_DEF0)
+
+//changes clips
+void display_pop_clip_wh(CLIP_NUM_DEF0)
+
+//changes clips
+void add_poly_clip(int x0,int y0, int x1, int y1, int ribi  CLIP_NUM_DEF)
+
+//changes clips
+void clear_all_poly_clip(CLIP_NUM_DEF0)
+
+//changes clips
+void activate_ribi_clip(int ribi  CLIP_NUM_DEF)
+
+//changes zoom_factor, tile_raster_width
+//using base_tile_raster_width
+void set_zoom_factor(int z)
+
+//changes zoom_factor, tile_raster_width
+//using base_tile_raster_width, zoom_factor
+int zoom_factor_up()
+
+//changes zoom_factor, tile_raster_width
+//using base_tile_raster_width, zoom_factor
+int zoom_factor_down()
+
+//same context as updateRGBMap
+//changing night_shift, rgbmap_day_night, specialcolormap_day_night, player_night
+//using rgbmap_day_night_tex, player_offsets
+void display_day_night_shift(int night)
+
+//same context as updateRGBMap
+//changes player_offsets, transparent_map_all_day, rgbmap_all_day, rgbmap_day_night, specialcolormap_day_night, player_night
+//using night_shift, rgbmap_all_day_tex, rgbmap_day_night_tex, player_offsets
+void display_set_player_color_scheme(const int player, const uint8 col1, const uint8 col2 )
+
+//only images for context
+void register_image(image_t *image_in)
+
+//only images for context
+//this one must flush the draw queue
+void display_free_all_images_above( image_id above )
+
+//only images for context
+void display_get_image_offset(image_id image, scr_coord_val *xoff, scr_coord_val *yoff, scr_coord_val *xw, scr_coord_val *yw)
+
+//only images for context
+void display_get_base_image_offset(image_id image, scr_coord_val *xoff, scr_coord_val *yoff, scr_coord_val *xw, scr_coord_val *yw)
+
+//this function draws
+//same context as updateRGBMap, getIndexImgTex
+//changes player_day, player_night, rgbmap_all_day, rgbmap_current, rgbmap_current_tex, rgbmap_day_night, GL_STENCIL
+//using rgbmap_all_day_tex, rgbmap_day_night_tex, CLIP_NUM_PAR, images, clips as clip rect, GL_STENCIL
+void display_img_aligned( const image_id n, scr_rect area, int align, const int dirty)
+
+//this function draws
+//same context as updateRGBMap, getIndexImgTex
+//changes player_day, player_night, rgbmap_all_day, rgbmap_current, rgbmap_current_tex, rgbmap_day_night, GL_STENCIL
+//using rgbmap_all_day_tex, rgbmap_day_night_tex, CLIP_NUM_PAR, images, clips as clip rect, GL_STENCIL
+void display_img_aux(const image_id n, scr_coord_val xp, scr_coord_val yp, const sint8 player_nr_raw, const int , const int   CLIP_NUM_DEF)
+
+//this function draws
+//same context as getIndexImgTex, updateRGBMap
+//changes player_day, player_night, rgbmap_all_day, rgbmap_current, rgbmap_current_tex, rgbmap_day_night, GL_STENCIL, clips
+//using CLIP_NUM_DEFAULT, CLIP_NUM_PAR, clips for clip rect, rgbmap_current_tex, images, rgbmap_all_day_tex, rgbmap_day_night_tex, GL_STENCIL, disp_width, disp_height
+void display_img_stretch( const stretch_map_t &imag, scr_rect area )
+
+//this function draws
+//same context as getIndexImgTex
+//changes clips
+//using CLIP_NUM_PAR, rgbmap_day_night_tex, images, clips, CLIPNUM_IGNORE, disp_width, disp_height
+void display_img_stretch_blend( const stretch_map_t &imag, scr_rect area, FLAGGED_PIXVAL color )
+
+//this function draws
+//same context as getIndexImgTex, updateRGBMap
+//changes player_day, player_night, rgbmap_all_day, rgbmap_current, rgbmap_current_tex, rgbmap_day_night, GL_STENCIL
+//using CLIP_NUM_PAR, clips for clip rect, rgbmap_current_tex, images, rgbmap_all_day_tex, rgbmap_day_night_tex, GL_STENCIL
+void display_color_img(const image_id n, scr_coord_val xp, scr_coord_val yp, sint8 player_nr_raw, const int daynight, const int dirty  CLIP_NUM_DEF)
+
+//this function draws
+//same context as getIndexImgTex, updateRGBMap
+//changes player_day, player_night, rgbmap_all_day, rgbmap_current, rgbmap_current_tex, rgbmap_day_night, GL_STENCIL
+//using CLIP_NUM_PAR, base_tile_raster_width, tile_raster_width, clips for clip rect, rgbmap_current_tex, images, rgbmap_all_day_tex, rgbmap_day_night_tex, GL_STENCIL
+void display_base_img(const image_id n, scr_coord_val xp, scr_coord_val yp, const sint8 player_nr, const int daynight, const int dirty  CLIP_NUM_DEF)
+
+//this function is pure.
+PIXVAL display_blend_colors(PIXVAL background, PIXVAL foreground, int percent_blend)
+
+//this function draws
+//using clips
+void display_blend_wh_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL colval, int percent_blend )
+
+//this function draws
+//same context as getIndexImgTex
+//using CLIP_NUM_PAR, rgbmap_day_night_tex, images, clips
+void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp, const signed char , const FLAGGED_PIXVAL color_index, const int , const int   CLIP_NUM_DEF)
+
+//this function draws
+//same context as getIndexImgTex, getBaseImgTex
+//using CLIP_NUM_PAR, rgbmap_day_night_tex, images, clips
+void display_rezoomed_img_alpha(const image_id n, const unsigned alpha_n, const unsigned alpha_flags, scr_coord_val xp, scr_coord_val yp, const signed char , const FLAGGED_PIXVAL color_index, const int , const int  CLIP_NUM_DEF)
+
+//this function draws
+//same context as getIndexImgTex, updateRGBMap
+//changes player_day, player_night, rgbmap_all_day, rgbmap_current, rgbmap_current_tex, rgbmap_day_night
+//using CLIP_NUM_PAR, base_tile_raster_width, tile_raster_width, clips for clip rect, rgbmap_current_tex, rgbmap_all_day_tex, rgbmap_day_night_tex, images
+void display_base_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp, const signed char player_nr, const FLAGGED_PIXVAL color_index, const int daynight, const int dirty  CLIP_NUM_DEF)
+
+//this function draws
+//same context as getIndexImgTex, getBaseImgTex, updateRGBMap
+//changes player_day, player_night, rgbmap_all_day, rgbmap_current, rgbmap_current_tex, rgbmap_day_night
+//using CLIP_NUM_PAR, base_tile_raster_width, tile_raster_width, clips for clip rect, rgbmap_current_tex, rgbmap_all_day_tex, rgbmap_day_night_tex, images
+void display_base_img_alpha(const image_id n, const image_id alpha_n, const unsigned alpha_flags, scr_coord_val xp, scr_coord_val yp, const signed char player_nr, const FLAGGED_PIXVAL color_index, const int daynight, const int dirty  CLIP_NUM_DEF)
+
+//this function draws; draw on entire viewport, but is predictable
+//using disp_height, disp_width
+void display_scroll_band(scr_coord_val start_y, scr_coord_val x_offset, scr_coord_val h)
+
+//this function draws
+//using disp_width, disp_height
+void display_fillbox_wh_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL color, bool dirty)
+
+//this function draws
+//using clips for clip rect
+void display_fillbox_wh_clip_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL color, bool dirty  CLIP_NUM_DEF)
+
+//this function draws
+//using disp_width, disp_height
+void display_vline_wh_rgb(const scr_coord_val xp, scr_coord_val yp, scr_coord_val h, const PIXVAL color, bool dirty)
+
+//this function draws
+//using clips for cliprect
+void display_vline_wh_clip_rgb(const scr_coord_val xp, scr_coord_val yp, scr_coord_val h, const PIXVAL color, bool dirty  CLIP_NUM_DEF)
+
+//this function draws
+//same context as getArrayTex
+//using clips
+void display_array_wh(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, const PIXVAL *arr)
+
+//this clears charatlas
+//changes default_font, default_font_ascent, default_font_linespace
+bool display_load_font(const char *fname, bool reload)
+
+//no context
+size_t get_next_char(const char* text, size_t pos)
+
+//no context
+sint32 get_prev_char(const char* text, sint32 pos)
+
+//using default_font
+scr_coord_val display_get_char_width(utf32 c)
+
+//using default_font
+scr_coord_val display_get_char_max_width(const char* text, size_t len)
+
+//using default_font
+utf32 get_next_char_with_metrics(const char* &text, unsigned char &byte_length, unsigned char &pixel_width)
+
+//using default_font
+bool has_character( utf16 char_code )
+
+//using default_font
+size_t display_fit_proportional( const char *text, scr_coord_val max_width, scr_coord_val ellipsis_width )
+
+//using default_font
+utf32 get_prev_char_with_metrics(const char* &text, const char *const text_start, unsigned char &byte_length, unsigned char &pixel_width)
+
+//using default_font
+int display_calc_proportional_string_len_width(const char *text, size_t len)
+
+//using default_font
+void display_calc_proportional_multiline_string_len_width(int &xw, int &yh, const char *text, size_t len)
+
+//this function draws
+//same context as getGlyphTex
+//using clips, disp_width, disp_height, default_font
+int display_text_proportional_len_clip_rgb(scr_coord_val x, scr_coord_val y, const char* txt, control_alignment_t flags, const PIXVAL color, bool , sint32 len  CLIP_NUM_DEF)
+
+//this function draws
+//same context as getGlyphTex
+//using CLIP_NUM_DEFAULT, default_font, clips, disp_width, disp_height
+scr_coord_val display_proportional_ellipsis_rgb( scr_rect r, const char *text, int align, const PIXVAL color, const bool dirty, bool shadowed, PIXVAL shadow_color)
+
+//this function draws
+//using disp_width, disp_height
+void display_ddd_box_rgb(scr_coord_val x1, scr_coord_val y1, scr_coord_val w, scr_coord_val h, PIXVAL tl_color, PIXVAL rd_color, bool dirty)
+
+//this function draws
+//same context as getGlyphTex
+//using CLIP_NUM_DEFAULT, clips, disp_width, disp_height, default_font
+void display_outline_proportional_rgb(scr_coord_val xpos, scr_coord_val ypos, PIXVAL text_color, PIXVAL shadow_color, const char *text, int dirty, sint32 len)
+
+//this function draws
+//same context as getGlyphTex
+//using CLIP_NUM_DEFAULT, clips, disp_width, disp_height, default_font
+void display_shadow_proportional_rgb(scr_coord_val xpos, scr_coord_val ypos, PIXVAL text_color, PIXVAL shadow_color, const char *text, int dirty, sint32 len)
+
+//this function draws
+//using clips for clip rect
+void display_ddd_box_clip_rgb(scr_coord_val x1, scr_coord_val y1, scr_coord_val w, scr_coord_val h, PIXVAL tl_color, PIXVAL rd_color)
+
+//this function draws
+//same context as getGlyphTex
+//using clips, disp_width, disp_height, default_font
+void display_ddd_proportional_clip(scr_coord_val xpos, scr_coord_val ypos, scr_coord_val width, scr_coord_val hgt, FLAGGED_PIXVAL ddd_color, FLAGGED_PIXVAL text_color, const char *text, int dirty  CLIP_NUM_DEF)
+
+//this function draws
+//same context as getGlyphTex
+//using clips, disp_width, disp_height, default_font
+int display_multiline_text_rgb(scr_coord_val x, scr_coord_val y, const char *buf, PIXVAL color)
+
+//this function draws
+//using clips for clip rect
+void display_direct_line_rgb(const scr_coord_val x, const scr_coord_val y, const scr_coord_val xx, const scr_coord_val yy, const PIXVAL colval)
+
+//this function draws
+//using clips for clip rect
+void display_direct_line_dotted_rgb(const scr_coord_val x, const scr_coord_val y, const scr_coord_val xx, const scr_coord_val yy, const scr_coord_val draw, const scr_coord_val dontDraw, const PIXVAL colval)
+
+//this function draws
+//using clips for clip rect
+void display_circle_rgb( scr_coord_val x0, scr_coord_val  y0, int radius, const PIXVAL colval )
+
+//this function draws
+//using clips for clip rect
+void display_filled_circle_rgb( scr_coord_val x0, scr_coord_val  y0, int radius, const PIXVAL colval )
+
+//this function draws
+//using clips for clip rect
+void draw_bezier_rgb(scr_coord_val Ax, scr_coord_val Ay, scr_coord_val Bx, scr_coord_val By, scr_coord_val ADx, scr_coord_val ADy, scr_coord_val BDx, scr_coord_val BDy, const PIXVAL colore, scr_coord_val draw, scr_coord_val dontDraw)
+
+//this function draws
+//using disp_width, disp_height
+void display_right_triangle_rgb(scr_coord_val x, scr_coord_val y, scr_coord_val height, const PIXVAL colval, const bool dirty)
+
+*/
