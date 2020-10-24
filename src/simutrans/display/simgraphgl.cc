@@ -81,6 +81,42 @@ namespace simgraphgl {
 template <typename T> struct GLcolor { T r,g,b,a; };
 typedef GLcolor<GLfloat> GLcolorf;
 
+template <typename T> struct GLvec4
+{
+	union
+	{
+		struct { T r,g,b,a; };
+		struct { T s,t,u,v; };
+		struct { T x,y,z,w; };
+		GLcolor<T> glcolor;
+	};
+};
+template <typename T> struct GLvec3
+{
+	union
+	{
+		struct { T r,g,b; };
+		struct { T s,t,u; };
+		struct { T x,y,z; };
+	};
+};
+template <typename T> struct GLvec2
+{
+	union
+	{
+		struct { T r,g; };
+		struct { T b,a; };
+		struct { T s,t; };
+		struct { T u,v; };
+		struct { T x,y; };
+		struct { T z,w; };
+	};
+};
+typedef GLvec4<GLfloat> GLvec4f;
+typedef GLvec3<GLshort> GLvec3s;
+typedef GLvec2<GLfloat> GLvec2f;
+typedef GLvec2<GLshort> GLvec2s;
+
 }
 
 static void build_stencil_for(int _x0, int _y0, int _x1, int _y1,
@@ -489,6 +525,15 @@ struct DrawCommand
 	GLfloat ay2;
 	GLcolorf alpha;
 	GLcolorf color;
+};
+
+struct Vertex
+{
+	GLvec4f alpha;
+	GLvec4f color;
+	GLvec2f texcoord;
+	GLvec2f alphacoord;
+	GLvec2s vertex;
 };
 
 }
@@ -1355,31 +1400,85 @@ static void runDrawCommand(DrawCommand const &cmd)
 	glActiveTextureARB( GL_TEXTURE2_ARB );
 	glBindTexture( GL_TEXTURE_2D, cmd.alphatex );
 
-	//the rest should be vertex attributes.
+	GLuint vertices_name;
+	GLuint indices_name;
 
-	glVertexAttrib4f( combined_a_alphaMask_Location,
-	                  cmd.alpha.r, cmd.alpha.g, cmd.alpha.b, cmd.alpha.a );
-	glColor4f( cmd.color.r, cmd.color.g, cmd.color.b, cmd.color.a );
+	glGenBuffers( 1, &vertices_name );
+	glGenBuffers( 1, &indices_name );
+	std::vector<Vertex> vertices;
+	std::vector<GLushort> indices;
+	vertices.reserve( 4 );
+	indices.reserve( 4 );
 
-	glBegin( GL_QUADS );
-	glTexCoord2f( cmd.tx1,  cmd.ty1 );
-	glMultiTexCoord2f( GL_TEXTURE1, cmd.ax1, cmd.ay1 );
-	glVertex2i( cmd.vx1, cmd.vy1 );
-	glTexCoord2f( cmd.tx2,  cmd.ty1 );
-	glMultiTexCoord2f( GL_TEXTURE1, cmd.ax2, cmd.ay1 );
-	glVertex2i( cmd.vx2, cmd.vy1 );
-	glTexCoord2f( cmd.tx2, cmd.ty2 );
-	glMultiTexCoord2f( GL_TEXTURE1, cmd.ax2, cmd.ay2 );
-	glVertex2i( cmd.vx2, cmd.vy2 );
-	glTexCoord2f( cmd.tx1, cmd.ty2 );
-	glMultiTexCoord2f( GL_TEXTURE1, cmd.ax1, cmd.ay2 );
-	glVertex2i( cmd.vx1, cmd.vy2 );
-	glEnd();
+	Vertex v;
+	v.alpha.glcolor = cmd.alpha;
+	v.color.glcolor = cmd.color;
+	v.texcoord.x = cmd.tx1;
+	v.texcoord.y = cmd.ty1;
+	v.alphacoord.x = cmd.ax1;
+	v.alphacoord.y = cmd.ay1;
+	v.vertex.x = cmd.vx1;
+	v.vertex.y = cmd.vy1;
+	indices.push_back( vertices.size() );
+	vertices.push_back( v );
+
+	v.texcoord.x = cmd.tx2;
+	v.texcoord.y = cmd.ty1;
+	v.alphacoord.x = cmd.ax2;
+	v.alphacoord.y = cmd.ay1;
+	v.vertex.x = cmd.vx2;
+	v.vertex.y = cmd.vy1;
+	indices.push_back( vertices.size() );
+	vertices.push_back( v );
+
+	v.texcoord.x = cmd.tx1;
+	v.texcoord.y = cmd.ty2;
+	v.alphacoord.x = cmd.ax1;
+	v.alphacoord.y = cmd.ay2;
+	v.vertex.x = cmd.vx1;
+	v.vertex.y = cmd.vy2;
+	indices.push_back( vertices.size() );
+	vertices.push_back( v );
+
+	v.texcoord.x = cmd.tx2;
+	v.texcoord.y = cmd.ty2;
+	v.alphacoord.x = cmd.ax2;
+	v.alphacoord.y = cmd.ay2;
+	v.vertex.x = cmd.vx2;
+	v.vertex.y = cmd.vy2;
+	indices.push_back( vertices.size() );
+	vertices.push_back( v );
+
+	glBindBuffer( GL_ARRAY_BUFFER, vertices_name );
+	//when keeping the buffer around, we want GL_DYNAMIC_DRAW.
+	glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STREAM_DRAW );
+
+	glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, indices_name );
+	glBufferData( GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLushort), indices.data(), GL_STREAM_DRAW );
+
+	glEnableClientState( GL_VERTEX_ARRAY );
+	glVertexPointer( 2, GL_SHORT, sizeof(Vertex), (void *)offsetof( Vertex, vertex ) );
+	glClientActiveTexture( GL_TEXTURE0 );
+	glEnableClientState( GL_TEXTURE_COORD_ARRAY );
+	glTexCoordPointer( 2, GL_FLOAT, sizeof(Vertex), (void *)offsetof( Vertex, texcoord ) );
+	glClientActiveTexture( GL_TEXTURE1 );
+	glEnableClientState( GL_TEXTURE_COORD_ARRAY );
+	glTexCoordPointer( 2, GL_FLOAT, sizeof(Vertex), (void *)offsetof( Vertex, alphacoord ) );
+	glEnableClientState( GL_COLOR_ARRAY );
+	glColorPointer( 4, GL_FLOAT, sizeof(Vertex), (void *)offsetof( Vertex, color ) );
+
+	glEnableVertexAttribArray( combined_a_alphaMask_Location );
+	glVertexAttribPointer( combined_a_alphaMask_Location, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof( Vertex, alpha ) );
+
+	glDrawElements( GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_SHORT, ( void * )0 );
 
 	if(  cmd.cr.number_of_clips > 0  ) {
 		glDisable( GL_STENCIL_TEST );
 		glStencilFunc( GL_ALWAYS, 1, 1 );
 	}
+
+	glDeleteBuffers( 1, &vertices_name );
+	glDeleteBuffers( 1, &indices_name );
 }
 
 static std::vector<DrawCommand> drawCommands;
@@ -1409,6 +1508,11 @@ static void flushDrawCommands()
 		runDrawCommand( *it );
 	}
 	drawCommands.clear();
+
+	glDisableClientState( GL_VERTEX_ARRAY );
+	glDisableClientState( GL_TEXTURE_COORD_ARRAY );
+	glDisableClientState( GL_COLOR_ARRAY );
+	glDisableVertexAttribArray( combined_a_alphaMask_Location );
 
 	glUseProgram( 0 );
 
