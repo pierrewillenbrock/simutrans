@@ -116,6 +116,8 @@ static int width = 16;
 static int height = 16;
 static int tex_w = 16;
 static int tex_h = 16;
+static int actual_tex_w = 16;
+static int actual_tex_h = 16;
 
 static int sync_blit = 0;
 static sint16 fullscreen = WINDOWED;
@@ -124,18 +126,9 @@ static SDL_Cursor *arrow;
 static SDL_Cursor *hourglass;
 static SDL_Cursor *blank;
 
-// Number of fractional bits for screen scaling
-#define SCALE_SHIFT_X 5
-#define SCALE_SHIFT_Y 5
-
-#define SCALE_NEUTRAL_X (1 << SCALE_SHIFT_X)
-#define SCALE_NEUTRAL_Y (1 << SCALE_SHIFT_Y)
-
-// Multiplier when converting from texture to screen coords, fixed point format
-// Example: If x_scale==2*SCALE_NEUTRAL_X && y_scale==2*SCALE_NEUTRAL_Y,
-// then things on screen are 2*2 = 4 times as big by area
-static sint32 x_scale = SCALE_NEUTRAL_X;
-static sint32 y_scale = SCALE_NEUTRAL_Y;
+static float x_screen_space_scale = 1.0;
+static float y_screen_space_scale = 1.0;
+static float gl_coord_scale = 1.0;
 
 // When using -autodpi, attempt to scale things on screen to this DPI value
 #ifdef __ANDROID__
@@ -151,14 +144,17 @@ static sint32 y_scale = SCALE_NEUTRAL_Y;
 #define MAX_AUTOSCALE_WIDTH (1280)
 
 // screen -> texture coords
-#define SCREEN_TO_TEX_X(x) (((x) * SCALE_NEUTRAL_X) / x_scale)
-#define SCREEN_TO_TEX_Y(y) (((y) * SCALE_NEUTRAL_Y) / y_scale)
+#define SCREEN_TO_TEX_X(x) ((x) / x_screen_space_scale / gl_coord_scale)
+#define SCREEN_TO_TEX_Y(y) ((y) / y_screen_space_scale / gl_coord_scale)
 
 // texture -> screen coords
-#define TEX_TO_SCREEN_X(x) (((x) * x_scale) / SCALE_NEUTRAL_X)
-#define TEX_TO_SCREEN_Y(y) (((y) * y_scale) / SCALE_NEUTRAL_Y)
+#define TEX_TO_SCREEN_X(x) ((x) * x_screen_space_scale * gl_coord_scale)
+#define TEX_TO_SCREEN_Y(y) ((y) * y_screen_space_scale * gl_coord_scale)
 
 static int tex_max_size;
+
+void simgraphgl_CopyTexBufferToBuffer( GLuint dstBuffer, GLuint srcBuffer, GLuint srcTex,
+				       int width, int height, float x_scale, float y_scale );
 
 /**
  * Checks for the extensions this backend can use
@@ -203,11 +199,10 @@ static void check_max_texture_size()
 
 bool has_soft_keyboard = false;
 
-
 bool dr_set_screen_scale(sint16 scale_percent)
 {
-	const sint32 old_x_scale = x_scale;
-	const sint32 old_y_scale = y_scale;
+	const sint32 old_x_scale = x_screen_space_scale;
+	const sint32 old_y_scale = y_screen_space_scale;
 
 	if (scale_percent == -1) {
 		float hdpi, vdpi;
@@ -219,19 +214,19 @@ bool dr_set_screen_scale(sint16 scale_percent)
 		// auto scale only for high enough screens
 		if (mode.h > 1.5 * MIN_SCALE_HEIGHT && SDL_GetDisplayDPI(0, NULL, &hdpi, &vdpi) == 0) {
 
-			x_scale = ((sint64)hdpi * SCALE_NEUTRAL_X + 1) / TARGET_DPI;
-			y_scale = ((sint64)vdpi * SCALE_NEUTRAL_Y + 1) / TARGET_DPI;
-			DBG_MESSAGE("auto_dpi_scaling", "x=%i, y=%i", x_scale, y_scale);
+			x_screen_space_scale = (hdpi + 1.0) / TARGET_DPI;
+			y_screen_space_scale = (vdpi + 1.0) / TARGET_DPI;
+			DBG_MESSAGE("auto_dpi_scaling", "x=%i, y=%i", x_screen_space_scale, y_screen_space_scale);
 		}
 
 #ifdef __ANDROID__
 		// most Android are underpowered to run more than 1280 pixel horizontal
 		sint32 current_x = SCREEN_TO_TEX_X(mode.w);
 		if (current_x > MAX_AUTOSCALE_WIDTH) {
-			sint32 new_x_scale = ((sint64)mode.w * SCALE_NEUTRAL_X + 1) / MAX_AUTOSCALE_WIDTH;
-			y_scale = (y_scale * new_x_scale) / x_scale;
-			x_scale = new_x_scale;
-			DBG_MESSAGE("new scaling (max 1280)", "x=%i, y=%i", x_scale, y_scale);
+			sint32 new_x_scale = (mode.w + 1.0) / MAX_AUTOSCALE_WIDTH;
+			y_screen_space_scale = (y_screen_space_scale * new_x_screen_space_scale) / x_screen_space_scale;
+			x_screen_space_scale = new_x_scale;
+			DBG_MESSAGE("new scaling (max 1280)", "x=%i, y=%i", x_screen_space_scale, y_screen_space_scale);
 	}
 #endif
 
@@ -239,27 +234,27 @@ bool dr_set_screen_scale(sint16 scale_percent)
 		sint32 current_y = SCREEN_TO_TEX_Y(mode.h);
 		if (current_y < MIN_SCALE_HEIGHT) {
 			DBG_MESSAGE("dr_auto_scale", "virtual height=%d < %d", current_y, MIN_SCALE_HEIGHT);
-			x_scale = (x_scale * current_y) / MIN_SCALE_HEIGHT;
-			y_scale = (y_scale * current_y) / MIN_SCALE_HEIGHT;
-			DBG_MESSAGE("new scaling (min 640)", "x=%i, y=%i", x_scale, y_scale);
+			x_screen_space_scale = ( x_screen_space_scale * current_y) / MIN_SCALE_HEIGHT;
+			y_screen_space_scale = ( y_screen_space_scale * current_y) / MIN_SCALE_HEIGHT;
+			DBG_MESSAGE("new scaling (min 640)", "x=%i, y=%i", x_screen_space_scale, y_screen_space_scale);
 		}
 #else
 #pragma message "SDL version must be at least 2.0.4 to support autoscaling."
 		// 1.5 scale up by default
-		x_scale = (150*SCALE_NEUTRAL_X)/100;
-		y_scale = (150*SCALE_NEUTRAL_Y)/100;
+		x_scale = 1.5;
+		y_scale = 1.5;
 #endif
 	}
 	else if (scale_percent == 0) {
-		x_scale = SCALE_NEUTRAL_X;
-		y_scale = SCALE_NEUTRAL_Y;
+		x_screen_space_scale = 1.0;
+		y_screen_space_scale = 1.0;
 	}
 	else {
-		x_scale = (scale_percent*SCALE_NEUTRAL_X)/100;
-		y_scale = (scale_percent*SCALE_NEUTRAL_Y)/100;
+		x_screen_space_scale = scale_percent/100.0;
+		y_screen_space_scale = scale_percent/100.0;
 	}
 
-	if (window  &&  (x_scale != old_x_scale || y_scale != old_y_scale)  ) {
+	if (window  &&  ( x_screen_space_scale != old_x_scale || y_screen_space_scale != old_y_scale)  ) {
 		// force window resize
 		int w, h;
 		SDL_GetWindowSize(window, &w, &h);
@@ -275,13 +270,17 @@ bool dr_set_screen_scale(sint16 scale_percent)
 		}
 	}
 
+	gl_coord_scale = x_screen_space_scale;
+	x_screen_space_scale = 1.0;
+	y_screen_space_scale = y_screen_space_scale / gl_coord_scale;
+
 	return true;
 }
 
 
 sint16 dr_get_screen_scale()
 {
-	return (x_scale*100)/SCALE_NEUTRAL_X;
+	return x_screen_space_scale*100;
 }
 
 
@@ -442,8 +441,8 @@ int dr_os_open(const scr_size window_size, sint16 fs)
 {
 	// scale up
 	resolution res = dr_query_screen_resolution();
-	tex_w = clamp( res.w, 1, SCREEN_TO_TEX_X(window_size.w) );
-	tex_h = clamp( res.h, 1, SCREEN_TO_TEX_Y(window_size.h) );
+	tex_w = clamp( res.w, 1, scr_coord_val(SCREEN_TO_TEX_X(window_size.w)) );
+	tex_h = clamp( res.h, 1, scr_coord_val(SCREEN_TO_TEX_Y(window_size.h)) );
 
 	DBG_MESSAGE("dr_os_open()", "Screen requested %i,%i, available max %i,%i", tex_w, tex_h, res.w, res.h);
 
@@ -506,13 +505,15 @@ int dr_os_open(const scr_size window_size, sint16 fs)
 		return 0;
 	}
 
+	actual_tex_w = tex_w * gl_coord_scale;
+	actual_tex_h = tex_h * gl_coord_scale;
 
         //RGBA8 2D texture, 24 bit depth texture, 256x256
         glGenTextures(1, &fb_color_tex);
         glGenFramebuffers(1, &framebuffer);
         glGenRenderbuffers(1, &fb_depth_rb);
 
-	glViewport(0, 0, tex_w, tex_h);
+	glViewport(0, 0, actual_tex_w, actual_tex_h);
 	//map x[0,width] to x[-1,1]: X(x) = x/width*2-1
 	//map y[0,height] to y[1,-1]: Y(x) = -x/height*2+1
 	gl_MVP_mat[0] = 2.0/tex_w;
@@ -525,11 +526,11 @@ int dr_os_open(const scr_size window_size, sint16 fs)
 	                 GL_CLAMP_TO_EDGE );
 	glTexParameteri( GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,
 	                 GL_CLAMP_TO_EDGE );
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, tex_w, tex_h, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, actual_tex_w, actual_tex_h, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
         glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fb_color_tex, 0);
         glBindRenderbuffer(GL_RENDERBUFFER, fb_depth_rb);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, tex_w, tex_h);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, actual_tex_w, actual_tex_h);
         glFramebufferRenderbufferEXT(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, fb_depth_rb);
         //-------------------------
         //Does the GPU support current FBO configuration?
@@ -584,6 +585,8 @@ int dr_textur_resize(unsigned short** const textur, int _tex_w, int const _tex_h
 	// w, h are the width in pixel, we calculate now the scree size
 	tex_w = _tex_w;
 	tex_h = _tex_h;
+	actual_tex_w = tex_w * gl_coord_scale;
+	actual_tex_h = tex_h * gl_coord_scale;
 	width = TEX_TO_SCREEN_X(tex_w);
 	height = TEX_TO_SCREEN_Y(tex_h);
 	display_set_actual_width( tex_w );
@@ -593,17 +596,17 @@ int dr_textur_resize(unsigned short** const textur, int _tex_w, int const _tex_h
 	}
 	setupGL();
 
-	glViewport(0,0,width,height);
+	glViewport(0,0, actual_tex_w, actual_tex_h);
 	//map x[0,width] to x[-1,1]: X(x) = x/width*2-1
 	//map y[0,height] to y[1,-1]: Y(x) = -x/height*2+1
 	gl_MVP_mat[0] = 2.0/tex_w;
 	gl_MVP_mat[5] = -2.0/tex_h;
         glBindTexture(GL_TEXTURE_2D, fb_color_tex);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, tex_w, tex_h, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, actual_tex_w, actual_tex_h, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
         glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fb_color_tex, 0);
         glBindRenderbuffer(GL_RENDERBUFFER, fb_depth_rb);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, tex_w, tex_h);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, actual_tex_w, actual_tex_h);
         glFramebufferRenderbufferEXT(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, fb_depth_rb);
         //-------------------------
         //Does the GPU support current FBO configuration?
@@ -649,16 +652,13 @@ void dr_prepare_flush()
 	return;
 }
 
-void simgraphgl_CopyTexBufferToBuffer( GLuint dstBuffer, GLuint srcBuffer, GLuint srcTex,
-				       int width, int height, float x_scale, float y_scale );
-
 void dr_flush()
 {
 	display_flush_buffer();
 	glViewport(0, 0, width, height);
 	simgraphgl_CopyTexBufferToBuffer( sdl_draw_framebuffer, framebuffer,
-	                                  fb_color_tex, width, height, x_scale / SCALE_NEUTRAL_X, y_scale / SCALE_NEUTRAL_Y );
-	glViewport(0, 0, tex_w, tex_h);
+	                                  fb_color_tex, width, height, x_screen_space_scale, y_screen_space_scale );
+	glViewport(0, 0, actual_tex_w, actual_tex_h);
 	glFlush();
 	glFinish();
 	glBindFramebuffer( GL_DRAW_FRAMEBUFFER, sdl_draw_framebuffer );
