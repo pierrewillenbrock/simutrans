@@ -201,8 +201,8 @@ bool has_soft_keyboard = false;
 
 bool dr_set_screen_scale(sint16 scale_percent)
 {
-	const sint32 old_x_scale = x_screen_space_scale;
-	const sint32 old_y_scale = y_screen_space_scale;
+	const float old_x_scale = x_screen_space_scale;
+	const float old_y_scale = y_screen_space_scale;
 
 	if (scale_percent == -1) {
 		float hdpi, vdpi;
@@ -213,10 +213,11 @@ bool dr_set_screen_scale(sint16 scale_percent)
 #if SDL_VERSION_ATLEAST(2,0,4)
 		// auto scale only for high enough screens
 		if (mode.h > 1.5 * MIN_SCALE_HEIGHT && SDL_GetDisplayDPI(0, NULL, &hdpi, &vdpi) == 0) {
+			DBG_MESSAGE("auto_dpi_scaling", "hdpi=%g, vdpi=%g", hdpi, vdpi);
 
 			x_screen_space_scale = (hdpi + 1.0) / TARGET_DPI;
 			y_screen_space_scale = (vdpi + 1.0) / TARGET_DPI;
-			DBG_MESSAGE("auto_dpi_scaling", "x=%i, y=%i", x_screen_space_scale, y_screen_space_scale);
+			DBG_MESSAGE("auto_dpi_scaling", "x=%g, y=%g", x_screen_space_scale, y_screen_space_scale);
 		}
 
 #ifdef __ANDROID__
@@ -280,7 +281,7 @@ bool dr_set_screen_scale(sint16 scale_percent)
 
 sint16 dr_get_screen_scale()
 {
-	return x_screen_space_scale*100;
+	return gl_coord_scale*100;
 }
 
 
