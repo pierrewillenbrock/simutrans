@@ -134,7 +134,7 @@ ifdef OPTIMISE
     endif
   endif
 else
-  CFLAGS += -O1
+  CFLAGS += -Og
 endif
 
 ifneq ($(LTO),)
