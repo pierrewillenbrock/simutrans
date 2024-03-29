@@ -27,7 +27,7 @@ FREETYPE_CONFIG  ?= pkg-config freetype2
 # FREETYPE_CONFIG ?= freetype-config
 FONTCONFIG_CONFIG  ?= pkg-config fontconfig
 
-BACKENDS  := gdi sdl2 mixer_sdl2 posix
+BACKENDS  := gdi sdl2 mixer_sdl2 mixer_sdl2_ggl posix
 OSTYPES   := amiga freebsd haiku linux mac mingw openbsd
 
 
@@ -136,6 +136,9 @@ ifdef OPTIMISE
 else
   CFLAGS += -Og
 endif
+
+#CFLAGS += -march=core2 -mfpmath=sse
+#CXXFLAGS += -march=core2 -mfpmath=sse
 
 ifneq ($(LTO),)
   CFLAGS += -flto
@@ -361,7 +364,6 @@ SOURCES += src/simutrans/descriptor/tunnel_desc.cc
 SOURCES += src/simutrans/descriptor/vehicle_desc.cc
 SOURCES += src/simutrans/descriptor/way_desc.cc
 SOURCES += src/simutrans/display/font.cc
-SOURCES += src/simutrans/display/simgraph$(COLOUR_DEPTH).cc
 SOURCES += src/simutrans/display/simview.cc
 SOURCES += src/simutrans/display/viewport.cc
 SOURCES += src/simutrans/freight_list_sorter.cc
@@ -646,6 +648,13 @@ SOURCES += src/squirrel/squirrel/sqstate.cc
 SOURCES += src/squirrel/squirrel/sqtable.cc
 SOURCES += src/squirrel/squirrel/sqvm.cc
 
+ifeq ($(BACKEND),mixer_sdl2_ggl)
+SOURCES += src/simutrans/display/simgraphgl.cc
+COLOUR_DEPTH=16
+else
+SOURCES += src/simutrans/display/simgraph$(COLOUR_DEPTH).cc
+endif
+
 ifeq ($(BACKEND),gdi)
   SOURCES += src/simutrans/sys/simsys_w.cc
   SOURCES += src/simutrans/sound/win32_sound_xa.cc
@@ -729,6 +738,31 @@ ifeq ($(BACKEND),mixer_sdl2)
   endif
   CFLAGS += $(SDL_CFLAGS)
   LIBS   += $(SDL_LDFLAGS)
+endif
+
+ifeq ($(BACKEND),mixer_sdl2_ggl)
+  SOURCES += src/simutrans/sys/simsys_s2g.cc
+#  CFLAGS  += -DUSE_16BIT_DIB
+  ifeq ($(SDL2_CONFIG),)
+    ifeq ($(OSTYPE),mac)
+      SDL_CFLAGS  := -I/Library/Frameworks/SDL2.framework/Headers
+      SDL_LDFLAGS := -framework SDL2
+    else
+      SDL_CFLAGS  := -I$(MINGDIR)/include/SDL2 -Dmain=SDL_main
+      SDL_LDFLAGS := -lSDL2main -lSDL2
+    endif
+  else
+    SOURCES += src/simutrans/sound/sdl_mixer_sound.cc
+    SOURCES += src/simutrans/music/sdl_midi.cc
+    SDL_CFLAGS    := $(shell $(SDL2_CONFIG) --cflags)
+    ifeq ($(shell expr $(STATIC) \>= 1), 1)
+      SDL_LDFLAGS := $(shell $(SDL2_CONFIG) --static-libs)
+    else
+      SDL_LDFLAGS := $(shell $(SDL2_CONFIG) --libs)
+    endif
+  endif
+  CFLAGS += $(SDL_CFLAGS)
+  LIBS   += $(SDL_LDFLAGS) -lSDL2_mixer -lGL -lGLEW
 endif
 
 ifeq ($(BACKEND),posix)
