@@ -61,6 +61,7 @@ extern const sint32 zoom_den[MAX_ZOOM_FACTOR + 1] = { 1, 2, 3, 1, 4, 8, 2, 8, 4,
 
 // currently just redrawing/rezooming
 static pthread_mutex_t recode_img_mutex;
+#error simgraphgl does not support MULTI_THREAD drawing
 #endif
 
 // to pass the extra clipnum when not needed use this
