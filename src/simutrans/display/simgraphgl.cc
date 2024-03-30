@@ -49,6 +49,7 @@
 
 // currently just redrawing/rezooming
 static pthread_mutex_t recode_img_mutex;
+#error simgraphgl does not support MULTI_THREAD drawing
 #endif
 
 // to pass the extra clipnum when not needed use this
