@@ -1519,16 +1519,13 @@ static unsigned int drawCommandsPos = 0;
 
 static bool makeDrawCommandCompatible(DrawCommand &cm, DrawCommand const &c2)
 {
-	//for now, check if the basic setup is identical.
-	//later, we should try and find a setup that can be used for
-	//the most number of commands
-	if(  cm.tex != c2.tex  ) {
+	if(  cm.tex != c2.tex && cm.uses_tex && c2.uses_tex  ) {
 		return false;
 	}
-	if(  cm.rgbmap_tex != c2.rgbmap_tex  ) {
+	if(  cm.rgbmap_tex != c2.rgbmap_tex && cm.uses_rgbmap_tex && c2.uses_rgbmap_tex  ) {
 		return false;
 	}
-	if(  cm.alphatex != c2.alphatex  ) {
+	if(  cm.alphatex != c2.alphatex && cm.uses_alphatex && c2.uses_alphatex  ) {
 		return false;
 	}
 	if(  cm.cr.number_of_clips != c2.cr.number_of_clips  ) {
@@ -1550,6 +1547,18 @@ static bool makeDrawCommandCompatible(DrawCommand &cm, DrawCommand const &c2)
 		}
 	}
 
+	if(  !cm.uses_tex && c2.uses_tex  ) {
+		cm.tex = c2.tex;
+		cm.uses_tex = 1;
+	}
+	if(  !cm.uses_rgbmap_tex && c2.uses_rgbmap_tex  ) {
+		cm.rgbmap_tex = c2.rgbmap_tex;
+		cm.uses_rgbmap_tex = 1;
+	}
+	if(  !cm.uses_alphatex && c2.uses_alphatex  ) {
+		cm.alphatex = c2.alphatex;
+		cm.uses_alphatex = 1;
+	}
 	if(  cm.min_x > c2.min_x  ) {
 		cm.min_x = c2.min_x;
 	}
