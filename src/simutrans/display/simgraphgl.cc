@@ -1537,13 +1537,14 @@ static void flushDrawCommands(std::vector<DrawCommand>::iterator begin,
 	int vertex_current = 0;
 
 	for(  auto it = begin; it != end;  ) {
+		DrawCommand cmd = *it;
 		int vertex_first = vertex_current;
 		int vertex_count = 4;
 		std::vector<DrawCommand>::iterator it2 = it;
 		it2++;
 		vertex_current += 6;
 		while(  it2 != end  ) {
-			if(  !makeDrawCommandCompatible( *it, *it2 )  ) {
+			if(  !makeDrawCommandCompatible( cmd, *it2 )  ) {
 				break;
 			}
 
@@ -1551,7 +1552,7 @@ static void flushDrawCommands(std::vector<DrawCommand>::iterator begin,
 			vertex_count += 6;
 			vertex_current += 6;
 		}
-		runDrawCommand( *it, vertex_first, vertex_count );
+		runDrawCommand( cmd, vertex_first, vertex_count );
 		it = it2;
 	}
 }
