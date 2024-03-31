@@ -2099,6 +2099,13 @@ static void flushDrawCommands()
 
 	unsigned int unordered_vertices = 0;
 	unsigned int ordered_vertices = 0;
+	unsigned int unordered_max_vertices = 0;
+	unsigned int ordered_max_vertices = 0;
+	unsigned int batches = 0;
+	unsigned int unordered_lists = 0;
+	unsigned int ordered_lists = 0;
+	unsigned int unordered_used_lists = 0;
+	unsigned int ordered_used_lists = 0;
 
 	for(  unsigned int batchno = 0;
 	                batchno <= drawCommandBatches.batchesPos  &&
@@ -2122,7 +2129,14 @@ static void flushDrawCommands()
 				                   batch_size );
 				vno += batch_size;
 			}
+			if(  unordered_max_vertices < vcount  ) {
+				unordered_max_vertices = vcount;
+			}
 			unordered_vertices += vcount;
+			if(  vcount > 0  ) {
+				unordered_used_lists++;
+			}
+			unordered_lists++;
 		}
 		glDepthMask( GL_FALSE );
 		for(  int i = 0;  i <= batch.ordered_list_pos;  i++  ) {
@@ -2140,8 +2154,16 @@ static void flushDrawCommands()
 				                   batch_size );
 				vno += batch_size;
 			}
+			if(  ordered_max_vertices < vcount  ) {
+				ordered_max_vertices = vcount;
+			}
 			ordered_vertices += vcount;
+			if(  vcount > 0  ) {
+				ordered_used_lists++;
+			}
+			ordered_lists++;
 		}
+		batches++;
 	}
 
 	disableCombinedShader();
@@ -2152,8 +2174,11 @@ static void flushDrawCommands()
 	glDisable( GL_TEXTURE_2D );
 	glActiveTextureARB( GL_TEXTURE0_ARB );
 
-	printf("flush complete, %d unordered, %d ordered vertices\n",
-	       unordered_vertices,ordered_vertices);
+	/*printf("flush complete, %d(max %d) unordered, %d(max %d) ordered vertices in %d(%d), %d(%d) lists in %d batches\n",
+	       unordered_vertices,unordered_max_vertices,
+	       ordered_vertices,ordered_max_vertices,
+	       unordered_used_lists, unordered_lists,
+	       ordered_used_lists,ordered_lists,batches);*/
 
 	drawCommandBatches.clear();
 }
