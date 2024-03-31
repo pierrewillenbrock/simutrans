@@ -1474,21 +1474,28 @@ static void disableShaders()
 static void runDrawCommand(DrawCommand const &cmd, GLint vertex_first, GLint vertex_count)
 {
 	if(  cmd.cr.number_of_clips > 0  ) {
+		disableShaders();
+
+		glUseProgram( 0 );
+
 		build_stencil( 0, 0, disp_width, disp_height, cmd.cr );
+
+		setupCombinedShader();
+
 		glEnable( GL_STENCIL_TEST );
 		glStencilOp( GL_KEEP, GL_KEEP, GL_KEEP );
 		glStencilFunc( GL_NOTEQUAL, 1, 1 );
 	}
 
-	if(cmd.uses_tex) {
+	if(  cmd.uses_tex  ) {
 		glActiveTextureARB( GL_TEXTURE0_ARB );
 		glBindTexture( GL_TEXTURE_2D, cmd.tex );
 	}
-	if( cmd.uses_rgbmap_tex ) {
+	if(  cmd.uses_rgbmap_tex  ) {
 		glActiveTextureARB( GL_TEXTURE1_ARB );
 		glBindTexture( GL_TEXTURE_2D, cmd.rgbmap_tex );
 	}
-	if( cmd.uses_alphatex ) {
+	if(  cmd.uses_alphatex  ) {
 		glActiveTextureARB( GL_TEXTURE2_ARB );
 		glBindTexture( GL_TEXTURE_2D, cmd.alphatex );
 	}
