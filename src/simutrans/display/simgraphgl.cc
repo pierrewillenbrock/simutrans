@@ -1480,16 +1480,22 @@ static void runDrawCommand(DrawCommand const &cmd, GLint vertex_first, GLint ver
 		glStencilFunc( GL_NOTEQUAL, 1, 1 );
 	}
 
-	glActiveTextureARB( GL_TEXTURE0_ARB );
-	glBindTexture( GL_TEXTURE_2D, cmd.tex );
-	glActiveTextureARB( GL_TEXTURE1_ARB );
-	glBindTexture( GL_TEXTURE_2D, cmd.rgbmap_tex );
-	glActiveTextureARB( GL_TEXTURE2_ARB );
-	glBindTexture( GL_TEXTURE_2D, cmd.alphatex );
+	if(cmd.uses_tex) {
+		glActiveTextureARB( GL_TEXTURE0_ARB );
+		glBindTexture( GL_TEXTURE_2D, cmd.tex );
+	}
+	if( cmd.uses_rgbmap_tex ) {
+		glActiveTextureARB( GL_TEXTURE1_ARB );
+		glBindTexture( GL_TEXTURE_2D, cmd.rgbmap_tex );
+	}
+	if( cmd.uses_alphatex ) {
+		glActiveTextureARB( GL_TEXTURE2_ARB );
+		glBindTexture( GL_TEXTURE_2D, cmd.alphatex );
+	}
 
 	glDrawElements( GL_TRIANGLE_STRIP, vertex_count, GL_UNSIGNED_SHORT, (void *)(uintptr_t)( vertex_first * sizeof(GLushort) ) );
 
-	if(  cmd.cr.number_of_clips > 0  ){
+	if(  cmd.cr.number_of_clips > 0  ) {
 		glDisable( GL_STENCIL_TEST );
 		glStencilFunc( GL_ALWAYS, 1, 1 );
 	}
