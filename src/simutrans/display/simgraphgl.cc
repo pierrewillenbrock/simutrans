@@ -1884,45 +1884,47 @@ struct DrawCommandList {
 			}
 		}
 
-		vertices[verticesPos * 4 + 0].alpha.glcolor = alpha;
-		vertices[verticesPos * 4 + 0].color.glcolor = color;
-		vertices[verticesPos * 4 + 0].texcoord.x = tx1;
-		vertices[verticesPos * 4 + 0].texcoord.y = ty1;
-		vertices[verticesPos * 4 + 0].alphacoord.x = ax1;
-		vertices[verticesPos * 4 + 0].alphacoord.y = ay1;
-		vertices[verticesPos * 4 + 0].vertex.x = vx1;
-		vertices[verticesPos * 4 + 0].vertex.y = vy1;
-		vertices[verticesPos * 4 + 0].vertex.z = vz;
+		CombinedVertex *v = vertices.data() + verticesPos * 4;
 
-		vertices[verticesPos * 4 + 1].alpha.glcolor = alpha;
-		vertices[verticesPos * 4 + 1].color.glcolor = color;
-		vertices[verticesPos * 4 + 1].texcoord.x = tx2;
-		vertices[verticesPos * 4 + 1].texcoord.y = ty1;
-		vertices[verticesPos * 4 + 1].alphacoord.x = ax2;
-		vertices[verticesPos * 4 + 1].alphacoord.y = ay1;
-		vertices[verticesPos * 4 + 1].vertex.x = vx2;
-		vertices[verticesPos * 4 + 1].vertex.y = vy1;
-		vertices[verticesPos * 4 + 1].vertex.z = vz;
+		v[0].alpha.glcolor = alpha;
+		v[0].color.glcolor = color;
+		v[0].texcoord.x = tx1;
+		v[0].texcoord.y = ty1;
+		v[0].alphacoord.x = ax1;
+		v[0].alphacoord.y = ay1;
+		v[0].vertex.x = vx1;
+		v[0].vertex.y = vy1;
+		v[0].vertex.z = vz;
 
-		vertices[verticesPos * 4 + 2].alpha.glcolor = alpha;
-		vertices[verticesPos * 4 + 2].color.glcolor = color;
-		vertices[verticesPos * 4 + 2].texcoord.x = tx1;
-		vertices[verticesPos * 4 + 2].texcoord.y = ty2;
-		vertices[verticesPos * 4 + 2].alphacoord.x = ax1;
-		vertices[verticesPos * 4 + 2].alphacoord.y = ay2;
-		vertices[verticesPos * 4 + 2].vertex.x = vx1;
-		vertices[verticesPos * 4 + 2].vertex.y = vy2;
-		vertices[verticesPos * 4 + 2].vertex.z = vz;
+		v[1].alpha.glcolor = alpha;
+		v[1].color.glcolor = color;
+		v[1].texcoord.x = tx2;
+		v[1].texcoord.y = ty1;
+		v[1].alphacoord.x = ax2;
+		v[1].alphacoord.y = ay1;
+		v[1].vertex.x = vx2;
+		v[1].vertex.y = vy1;
+		v[1].vertex.z = vz;
 
-		vertices[verticesPos * 4 + 3].alpha.glcolor = alpha;
-		vertices[verticesPos * 4 + 3].color.glcolor = color;
-		vertices[verticesPos * 4 + 3].texcoord.x = tx2;
-		vertices[verticesPos * 4 + 3].texcoord.y = ty2;
-		vertices[verticesPos * 4 + 3].alphacoord.x = ax2;
-		vertices[verticesPos * 4 + 3].alphacoord.y = ay2;
-		vertices[verticesPos * 4 + 3].vertex.x = vx2;
-		vertices[verticesPos * 4 + 3].vertex.y = vy2;
-		vertices[verticesPos * 4 + 3].vertex.z = vz;
+		v[2].alpha.glcolor = alpha;
+		v[2].color.glcolor = color;
+		v[2].texcoord.x = tx1;
+		v[2].texcoord.y = ty2;
+		v[2].alphacoord.x = ax1;
+		v[2].alphacoord.y = ay2;
+		v[2].vertex.x = vx1;
+		v[2].vertex.y = vy2;
+		v[2].vertex.z = vz;
+
+		v[3].alpha.glcolor = alpha;
+		v[3].color.glcolor = color;
+		v[3].texcoord.x = tx2;
+		v[3].texcoord.y = ty2;
+		v[3].alphacoord.x = ax2;
+		v[3].alphacoord.y = ay2;
+		v[3].vertex.x = vx2;
+		v[3].vertex.y = vy2;
+		v[3].vertex.z = vz;
 		verticesPos++;
 	}
 };
