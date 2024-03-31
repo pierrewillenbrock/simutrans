@@ -674,7 +674,15 @@ struct imd {
 	STORED_PIXVAL* base_data; // original image data, stored space
 
 	GLuint base_tex;
+	GLfloat base_x1;
+	GLfloat base_y1;
+	GLfloat base_tex_w;
+	GLfloat base_tex_h;
 	TextureAtlas_Texname index_tex;
+	GLfloat index_x1;
+	GLfloat index_y1;
+	GLfloat index_tex_w;
+	GLfloat index_tex_h;
 
 	sint32 zoom_num;
 	sint32 zoom_den;
