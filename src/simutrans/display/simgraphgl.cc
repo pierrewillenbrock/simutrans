@@ -2563,6 +2563,9 @@ static void display_img_pc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, 
 	scr_coord_val rw = w;
 	scr_coord_val rh = h;
 
+	GLfloat tex_xscale = ( x2 - x1 ) / float( rw );
+	GLfloat tex_yscale = ( y2 - y1 ) / float( rh );
+
 	const scr_coord_val xoff = clip_wh( &xp, &w, CR.clip_rect.x, CR.clip_rect.xx );
 	const scr_coord_val yoff = clip_wh( &yp, &h, CR.clip_rect.y, CR.clip_rect.yy );
 
@@ -2580,10 +2583,10 @@ static void display_img_pc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, 
 		                  yp,
 		                  xp + w,
 		                  yp + h,
-		                  x1 + xoff / float( rw ) * ( x2 - x1 ),
-		                  y1 + yoff / float( rh ) * ( y2 - y1 ),
-		                  x1 + ( xoff + w ) / float( rw ) * ( x2 - x1 ),
-		                  y1 + ( yoff + h ) / float( rh ) * ( y2 - y1 ),
+		                  x1 + xoff * tex_xscale,
+		                  y1 + yoff * tex_yscale,
+		                  x1 + ( xoff + w ) * tex_xscale,
+		                  y1 + ( yoff + h ) * tex_yscale,
 		                  0, 0, 0, 0,
 		                  makeColor( 0, 0, 0, 1 ),
 		                  makeColor( 0, 0, 0, 0 )
@@ -2994,6 +2997,10 @@ static void display_img_blend_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 {
 	scr_coord_val rw = w;
 	scr_coord_val rh = h;
+
+	GLfloat tex_xscale = ( x2 - x1 ) / float( rw );
+	GLfloat tex_yscale = ( y2 - y1 ) / float( rh );
+
 	const scr_coord_val xoff = clip_wh( &xp, &w, CR.clip_rect.x, CR.clip_rect.xx );
 	const scr_coord_val yoff = clip_wh( &yp, &h, CR.clip_rect.y, CR.clip_rect.yy );
 
@@ -3011,10 +3018,10 @@ static void display_img_blend_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 		                  yp,
 		                  xp + w,
 		                  yp + h,
-		                  x1 + xoff / float( rw ) * ( x2 - x1 ),
-		                  y1 + yoff / float( rh ) * ( y2 - y1 ),
-		                  x1 + ( xoff + w ) / float( rw ) * ( x2 - x1 ),
-		                  y1 + ( yoff + h ) / float( rh ) * ( y2 - y1 ),
+		                  x1 + xoff * tex_xscale,
+		                  y1 + yoff * tex_yscale,
+		                  x1 + ( xoff + w ) * tex_xscale,
+		                  y1 + ( yoff + h ) * tex_yscale,
 		                  0, 0, 0, 0,
 		                  makeColor( 0, 0, 0, alpha ),
 		                  makeColor( 0, 0, 0, 0 )
@@ -3026,6 +3033,10 @@ static void display_img_blend_wc_colour(scr_coord_val xp, scr_coord_val yp, scr_
 {
 	scr_coord_val rw = w;
 	scr_coord_val rh = h;
+
+	GLfloat tex_xscale = ( x2 - x1 ) / float( rw );
+	GLfloat tex_yscale = ( y2 - y1 ) / float( rh );
+
 	const scr_coord_val xoff = clip_wh( &xp, &w, CR.clip_rect.x, CR.clip_rect.xx );
 	const scr_coord_val yoff = clip_wh( &yp, &h, CR.clip_rect.y, CR.clip_rect.yy );
 
@@ -3043,10 +3054,10 @@ static void display_img_blend_wc_colour(scr_coord_val xp, scr_coord_val yp, scr_
 		                  yp,
 		                  xp + w,
 		                  yp + h,
-		                  x1 + xoff / float( rw ) * ( x2 - x1 ),
-		                  y1 + yoff / float( rh ) * ( y2 - y1 ),
-		                  x1 + ( xoff + w ) / float( rw ) * ( x2 - x1 ),
-		                  y1 + ( yoff + h ) / float( rh ) * ( y2 - y1 ),
+		                  x1 + xoff * tex_xscale,
+		                  y1 + yoff * tex_yscale,
+		                  x1 + ( xoff + w ) * tex_xscale,
+		                  y1 + ( yoff + h ) * tex_yscale,
 		                  0, 0, 0, 0,
 		                  makeColor( 0, 0, 0, alpha ),
 		                  makeColor( ( colour & 0xf800 ) / float( 0xf800 ),
@@ -3066,6 +3077,13 @@ static void display_img_alpha_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 
 	scr_coord_val rw = w;
 	scr_coord_val rh = h;
+
+	GLfloat txscale = ( tx2 - tx1 ) / float( rw );
+	GLfloat tyscale = ( ty2 - ty1 ) / float( rh );
+
+	GLfloat axscale = ( ax2 - ax1 ) / float( rw );
+	GLfloat ayscale = ( ay2 - ay1 ) / float( rh );
+
 	const scr_coord_val xoff = clip_wh( &xp, &w, CR.clip_rect.x, CR.clip_rect.xx );
 	const scr_coord_val yoff = clip_wh( &yp, &h, CR.clip_rect.y, CR.clip_rect.yy );
 
@@ -3084,14 +3102,14 @@ static void display_img_alpha_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 		                  yp,
 		                  xp + w,
 		                  yp + h,
-		                  tx1 + xoff / float( rw ) * ( tx2 - tx1 ),
-		                  ty1 + yoff / float( rh ) * ( ty2 - ty1 ),
-		                  tx1 + ( xoff + w ) / float( rw ) * ( tx2 - tx1 ),
-		                  ty1 + ( yoff + h ) / float( rh ) * ( ty2 - ty1 ),
-		                  ax1 + xoff / float( rw ) * ( ax2 - ax1 ),
-		                  ay1 + yoff / float( rh ) * ( ay2 - ay1 ),
-		                  ax1 + ( xoff + w ) / float( rw ) * ( ax2 - ax1 ),
-		                  ay1 + ( yoff + h ) / float( rh ) * ( ay2 - ay1 ),
+		                  tx1 + xoff * txscale,
+		                  ty1 + yoff * tyscale,
+		                  tx1 + ( xoff + w ) * txscale,
+		                  ty1 + ( yoff + h ) * tyscale,
+		                  ax1 + xoff * axscale,
+		                  ay1 + yoff * ayscale,
+		                  ax1 + ( xoff + w ) * axscale,
+		                  ay1 + ( yoff + h ) * ayscale,
 		                  makeColor( ( alpha_flags & ALPHA_RED ) ? 2.0 : 0.0,
 		                             ( alpha_flags & ALPHA_GREEN ) ? 2.0 : 0.0,
 		                             ( alpha_flags & ALPHA_BLUE ) ? 1.0 : 0.0,
