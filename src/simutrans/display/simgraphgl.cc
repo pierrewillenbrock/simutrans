@@ -591,6 +591,9 @@ struct DrawCommand
 	GLfloat ay2;
 	GLcolorf alpha;
 	GLcolorf color;
+	unsigned int uses_tex: 1;
+	unsigned int uses_rgbmap_tex: 1;
+	unsigned int uses_alphatex: 1;
 };
 
 struct Vertex
@@ -2797,6 +2800,9 @@ static void display_img_pc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, 
 		cmd.tex = tex;
 		cmd.rgbmap_tex = rgbmap_tex;
 		cmd.alphatex = invalidTexname();
+		cmd.uses_tex = 1;
+		cmd.uses_rgbmap_tex = 1;
+		cmd.uses_alphatex = 0;
 		queueDrawCommand( cmd,
 		                  xp,
 		                  yp,
@@ -3190,6 +3196,9 @@ static void simgraphgl_tint_rect(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 		cmd.tex = invalidTexname();
 		cmd.rgbmap_tex = 0;
 		cmd.alphatex = invalidTexname();
+		cmd.uses_tex = 1;
+		cmd.uses_rgbmap_tex = 0;
+		cmd.uses_alphatex = 0;
 		queueDrawCommand( cmd,
 		                  xp,
 		                  yp,
@@ -3223,6 +3232,9 @@ static void display_img_blend_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 		cmd.rgbmap_tex = rgbmap_tex;
 		cmd.alphatex = invalidTexname();
 		cmd.cr.number_of_clips = 0;
+		cmd.uses_tex = 1;
+		cmd.uses_rgbmap_tex = 1;
+		cmd.uses_alphatex = 0;
 		queueDrawCommand( cmd,
 		                  xp,
 		                  yp,
@@ -3252,6 +3264,9 @@ static void display_img_blend_wc_colour(scr_coord_val xp, scr_coord_val yp, scr_
 		cmd.rgbmap_tex = 0;
 		cmd.alphatex = invalidTexname();
 		cmd.cr.number_of_clips = 0;
+		cmd.uses_tex = 1;
+		cmd.uses_rgbmap_tex = 0;
+		cmd.uses_alphatex = 0;
 		queueDrawCommand( cmd,
 		                  xp,
 		                  yp,
@@ -3289,6 +3304,9 @@ static void display_img_alpha_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 		cmd.tex = tex;
 		cmd.rgbmap_tex = rgbmap_tex;
 		cmd.alphatex = alphatex;
+		cmd.uses_tex = 1;
+		cmd.uses_rgbmap_tex = 1;
+		cmd.uses_alphatex = 1;
 		//todo: someone please explain to me why there is 2.0 needed here
 		queueDrawCommand( cmd,
 		                  xp,
@@ -3540,6 +3558,9 @@ static void display_pixel(scr_coord_val x, scr_coord_val y, PIXVAL color)
 		cmd.tex = invalidTexname();
 		cmd.rgbmap_tex = 0;
 		cmd.alphatex = invalidTexname();
+		cmd.uses_tex = 1;
+		cmd.uses_rgbmap_tex = 0;
+		cmd.uses_alphatex = 0;
 		queueDrawCommand( cmd,
 		                  x,
 		                  y,
@@ -3568,6 +3589,9 @@ static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_va
 		cmd.tex = invalidTexname();
 		cmd.rgbmap_tex = 0;
 		cmd.alphatex = invalidTexname();
+		cmd.uses_tex = 1;
+		cmd.uses_rgbmap_tex = 0;
+		cmd.uses_alphatex = 0;
 		queueDrawCommand( cmd,
 		                  xp,
 		                  yp,
@@ -3618,6 +3642,9 @@ static void display_vl_internal(const scr_coord_val xp, scr_coord_val yp, scr_co
 		cmd.tex = invalidTexname();
 		cmd.rgbmap_tex = 0;
 		cmd.alphatex = invalidTexname();
+		cmd.uses_tex = 1;
+		cmd.uses_rgbmap_tex = 0;
+		cmd.uses_alphatex = 0;
 		queueDrawCommand( cmd,
 		                  xp,
 		                  yp,
@@ -3667,6 +3694,9 @@ static void simgraphgl_draw_array(scr_coord_val xp, scr_coord_val yp, scr_coord_
 		cmd.tex = texname;
 		cmd.rgbmap_tex = 0;
 		cmd.alphatex = invalidTexname();
+		cmd.uses_tex = 1;
+		cmd.uses_rgbmap_tex = 0;
+		cmd.uses_alphatex = 0;
 		queueDrawCommand( cmd,
 		                  xp,
 		                  yp,
@@ -3990,6 +4020,9 @@ static scr_coord_val simgraphgl_draw_text_clipped_n(scr_coord_val x, scr_coord_v
 				cmd.tex = texname;
 				cmd.rgbmap_tex = 0;
 				cmd.alphatex = invalidTexname();
+				cmd.uses_tex = 1;
+				cmd.uses_rgbmap_tex = 0;
+				cmd.uses_alphatex = 0;
 				queueDrawCommand( cmd,
 				                  sx,
 				                  sy,
