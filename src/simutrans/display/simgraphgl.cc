@@ -615,6 +615,14 @@ static GLcolorf makeColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a)
 	return c;
 }
 
+static GLcolorf makeColor_rgb(PIXVAL colval)
+{
+	return makeColor( ( colval & 0xf800 ) / float( 0x10000 ),
+	                  ( colval & 0x07e0 ) / float( 0x00800 ),
+	                  ( colval & 0x001f ) / float( 0x00020 ),
+	                  1 );
+}
+
 struct DrawCommandKey {
 	constant_clipping_info_t cr;
 	GLuint tex;
@@ -4274,10 +4282,7 @@ scr_coord_val display_text_proportional_len_clip_rgb(scr_coord_val x, scr_coord_
 				                  gly + ( ty + h ) / float( rh ) * glh,
 				                  0, 0, 0, 0,
 				                  makeColor( 0, 0, 0, 1 ),
-				                  makeColor( ( color & 0xf800 ) / float( 0xf800 ),
-				                             ( color & 0x07e0 ) / float( 0x07e0 ),
-				                             ( color & 0x001f ) / float( 0x001f ),
-				                             1 )
+				                  makeColor_rgb( color )
 				                  CLIP_NUM_PAR
 				                );
 			}
