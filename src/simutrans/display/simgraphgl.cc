@@ -1650,16 +1650,19 @@ static std::vector<CombinedVertex> drawVertices;
 
 static bool makeDrawCommandCompatible(DrawCommand &cm, DrawCommand const &c2)
 {
+	//these comparisons are ordered by computational effort and
+	//the probability of exiting early with them
+	if(  cm.cr.number_of_clips != c2.cr.number_of_clips  ) {
+		return false;
+	}
+	if(  cm.rgbmap_tex != c2.rgbmap_tex && cm.uses_rgbmap_tex &&
+	                c2.uses_rgbmap_tex  ) {
+		return false;
+	}
 	if(  cm.tex != c2.tex && cm.uses_tex && c2.uses_tex  ) {
 		return false;
 	}
-	if(  cm.rgbmap_tex != c2.rgbmap_tex && cm.uses_rgbmap_tex && c2.uses_rgbmap_tex  ) {
-		return false;
-	}
 	if(  cm.alphatex != c2.alphatex && cm.uses_alphatex && c2.uses_alphatex  ) {
-		return false;
-	}
-	if(  cm.cr.number_of_clips != c2.cr.number_of_clips  ) {
 		return false;
 	}
 	if(  cm.cr.number_of_clips != 0  ) {
