@@ -132,17 +132,28 @@ private:
 	// (not_convex) if y0>=y1 then clip along the path (x0,-inf)->(x0,y0)->(x1,y1)
 	// (not_convex) if y0<y1  then clip along the path (x0,y0)->(x1,y1)->(x1,+inf)
 	scr_coord_val x0, y0;
-	scr_coord_val x1, y1;
-	bool non_convex;
+	scr_coord_val x1, y1_nc;
+	//bottom most bit of y1 is non_convex bit. the original y1 is restored by
+	//integer division by 2(an arithmetic shift). since this structure is copied a lot,
+	//this optimization is worth it.
+	enum {
+		non_convex_mask = 1
+	};
 
 public:
 	bool operator ==(clip_line_t const &oth) const
 	{
-		return x0 == oth.x0 &&
-		       y0 == oth.y0 &&
-		       x1 == oth.x1 &&
-		       y1 == oth.y1 &&
-		       non_convex == oth.non_convex;
+		//clip_dimension is fully packed and multiples of 2*4 bytes so we use
+		//std::size_t sized chunks of the actual struct to compare
+		std::size_t const *ap = (std::size_t const *) & x0;
+		std::size_t const *bp = (std::size_t const *) & oth.x0;
+		for(  unsigned i = 0; i < sizeof(scr_coord_val) * 4 / sizeof(std::size_t); i++  ) {
+			if(  ap[i] != bp[i]  ) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 	bool operator !=(clip_line_t const &oth) const
 	{
@@ -154,14 +165,20 @@ public:
 		x0 = x0_;
 		x1 = x1_;
 		y0 = y0_;
-		y1 = y1_;
-		non_convex = non_convex_;
+		y1_nc = y1_ * 2;
+		if(  non_convex_  ) {
+			y1_nc |= non_convex_mask;
+		}
+		else {
+			y1_nc &= ~ non_convex_mask;
+		}
 	}
 
 	void build_stencil(std::vector<GLvec2s> &vertices,
 	                   scr_coord_val min_x, scr_coord_val min_y, scr_coord_val max_x, scr_coord_val max_y) const
 	{
-		if(  non_convex  ) {
+		scr_coord_val y1 = (y1_nc & ~non_convex_mask) / 2;
+		if(  y1_nc & non_convex_mask  ) {
 			if(  y1 < y0  ) {
 				build_stencil_for( vertices,
 				                   x0, y0,
