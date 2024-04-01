@@ -2275,7 +2275,8 @@ struct DrawCommandBatches
 	                    GLfloat tx2, GLfloat ty2,
 	                    GLfloat ax1, GLfloat ay1,
 	                    GLfloat ax2, GLfloat ay2,
-	                    GLcolorf alpha, GLcolorf color)
+	                    GLcolorf alpha, GLcolorf color
+	                    CLIP_NUM_DEF)
 	{
 		if(  batches.size() <= batchesPos  ) {
 			batches.resize( batchesPos + 1 );
@@ -2445,7 +2446,8 @@ static void queueDrawCommand(DrawCommand &&cmd,
                              GLfloat ax2,
                              GLfloat ay2,
                              GLcolorf alpha,
-                             GLcolorf color)
+                             GLcolorf color
+                             CLIP_NUM_DEF )
 {
 	cmd.min_x = vx1;
 	cmd.min_y = vy1;
@@ -2456,7 +2458,8 @@ static void queueDrawCommand(DrawCommand &&cmd,
 	                                   vx1, vy1, vx2, vy2,
 	                                   tx1, ty1, tx2, ty2,
 	                                   ax1, ay1, ax2, ay2,
-	                                   alpha, color );
+	                                   alpha, color
+	                                   CLIP_NUM_PAR );
 }
 
 static void updateRGBMap(GLuint &tex, PIXVAL *rgbmap, uint64_t code)
@@ -3304,6 +3307,7 @@ static void display_img_pc(const image_id n,
 		                  0, 0, 0, 0,
 		                  makeColor( 0, 0, 0, 1 ),
 		                  makeColor( 0, 0, 0, 0 )
+		                  CLIP_NUM_PAR
 		                );
 	}
 }
@@ -3649,6 +3653,7 @@ static void simgraphgl_tint_rect(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 		                             ( colval & 0x07e0 ) / float( 0x07e0 ),
 		                             ( colval & 0x001f ) / float( 0x001f ),
 		                             1.0 )
+		                  CLIP_NUM_DEFAULT
 		                );
 	}
 }
@@ -3692,6 +3697,7 @@ static void display_img_blend_wc(const image_id n,
 		                  0, 0, 0, 0,
 		                  makeColor( 0, 0, 0, alpha ),
 		                  makeColor( 0, 0, 0, 0 )
+		                  CLIP_NUM_PAR
 		                );
 	}
 }
@@ -3737,6 +3743,7 @@ static void display_img_blend_wc_colour(const image_id n,
 		                             ( colour & 0x07e0 ) / float( 0x07e0 ),
 		                             ( colour & 0x001f ) / float( 0x001f ),
 		                             1.0 )
+		                  CLIP_NUM_PAR
 		                );
 	}
 }
@@ -3801,6 +3808,7 @@ static void display_img_alpha_wc(const image_id n, const image_id alpha_n,
 		                             ( alpha_flags & ALPHA_BLUE ) ? 1.0 : 0.0,
 		                             0 ),
 		                  makeColor( 0, 0, 0, 0 )
+		                  CLIP_NUM_PAR
 		                );
 	}
 }
@@ -4039,6 +4047,7 @@ static void display_pixel(scr_coord_val x, scr_coord_val y, PIXVAL color)
 		                             ( color & 0x07e0 ) / float( 0x00800 ),
 		                             ( color & 0x001f ) / float( 0x00020 ),
 		                             1 )
+		                  CLIP_NUM_DEFAULT
 		                );
 	}
 }
@@ -4070,6 +4079,7 @@ static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_va
 		                             ( colval & 0x07e0 ) / float( 0x07e0 ),
 		                             ( colval & 0x001f ) / float( 0x001f ),
 		                             1 )
+		                  CLIP_NUM_DEFAULT
 		                );
 	}
 }
@@ -4144,6 +4154,7 @@ static void display_vl_internal(const scr_coord_val xp, scr_coord_val yp, scr_co
 		                             ( colval & 0x07e0 ) / float( 0x07e0 ),
 		                             ( colval & 0x001f ) / float( 0x001f ),
 		                             1 )
+		                  CLIP_NUM_DEFAULT
 		                );
 	}
 }
@@ -4196,6 +4207,7 @@ static void simgraphgl_draw_array(scr_coord_val xp, scr_coord_val yp, scr_coord_
 		                  0, 0, 0, 0,
 		                  makeColor( 0, 0, 0, 1 ),
 		                  makeColor( 0, 0, 0, 0.5 )
+		                  CLIP_NUM_DEFAULT
 		                );
 	}
 }
@@ -4525,6 +4537,7 @@ static scr_coord_val simgraphgl_draw_text_clipped_n(scr_coord_val x, scr_coord_v
 				                             ( color & 0x07e0 ) / float( 0x07e0 ),
 				                             ( color & 0x001f ) / float( 0x001f ),
 				                             1 )
+				                  CLIP_NUM_PAR
 				                );
 			}
 		}
