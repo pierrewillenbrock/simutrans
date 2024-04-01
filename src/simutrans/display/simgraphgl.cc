@@ -2097,6 +2097,9 @@ static void flushDrawCommands()
 
 	glClearDepthf( 0.f );
 
+	unsigned int unordered_vertices = 0;
+	unsigned int ordered_vertices = 0;
+
 	for(  unsigned int batchno = 0;
 	                batchno <= drawCommandBatches.batchesPos  &&
 	                batchno < drawCommandBatches.batches.size();
@@ -2119,6 +2122,7 @@ static void flushDrawCommands()
 				                   batch_size );
 				vno += batch_size;
 			}
+			unordered_vertices += vcount;
 		}
 		glDepthMask( GL_FALSE );
 		for(  int i = 0;  i <= batch.ordered_list_pos;  i++  ) {
@@ -2136,6 +2140,7 @@ static void flushDrawCommands()
 				                   batch_size );
 				vno += batch_size;
 			}
+			ordered_vertices += vcount;
 		}
 	}
 
@@ -2146,6 +2151,9 @@ static void flushDrawCommands()
 	glActiveTextureARB( GL_TEXTURE1_ARB );
 	glDisable( GL_TEXTURE_2D );
 	glActiveTextureARB( GL_TEXTURE0_ARB );
+
+	printf("flush complete, %d unordered, %d ordered vertices\n",
+	       unordered_vertices,ordered_vertices);
 
 	drawCommandBatches.clear();
 }
