@@ -3824,7 +3824,7 @@ static void display_pixel(scr_coord_val x, scr_coord_val y, PIXVAL color)
 /**
  * Draw filled rectangle
  */
-static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL colval, bool /*dirty*/, scr_coord_val cL, scr_coord_val cR, scr_coord_val cT, scr_coord_val cB)
+static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL colval, scr_coord_val cL, scr_coord_val cR, scr_coord_val cT, scr_coord_val cB )
 {
 	if(  clip_lr( &xp, &w, cL, cR ) && clip_lr( &yp, &h, cT, cB )  ) {
 		DrawCommandKey cmdkey;
@@ -3853,15 +3853,15 @@ static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_va
 }
 
 
-void display_fillbox_wh_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL color, bool dirty)
+void display_fillbox_wh_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL color, bool /*dirty*/)
 {
-	display_fb_internal( xp, yp, w, h, color, dirty, 0, disp_width, 0, disp_height );
+	display_fb_internal( xp, yp, w, h, color, 0, disp_width, 0, disp_height );
 }
 
 
-void display_fillbox_wh_clip_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL color, bool dirty  CLIP_NUM_DEF)
+void display_fillbox_wh_clip_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL color, bool /*dirty*/  CLIP_NUM_DEF)
 {
-	display_fb_internal( xp, yp, w, h, color, dirty, CR.clip_rect.x, CR.clip_rect.xx, CR.clip_rect.y, CR.clip_rect.yy );
+	display_fb_internal( xp, yp, w, h, color, CR.clip_rect.x, CR.clip_rect.xx, CR.clip_rect.y, CR.clip_rect.yy );
 }
 
 
@@ -4594,7 +4594,7 @@ void display_filled_circle_rgb(scr_coord_val x0, scr_coord_val  y0, int radius, 
 	int x = 0;
 	int y = radius;
 
-	display_fb_internal( x0 - radius, y0, radius + radius + 1, 1, colval, false, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
+	display_fb_internal( x0 - radius, y0, radius + radius + 1, 1, colval, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
 	display_pixel( x0, y0 + radius, colval );
 	display_pixel( x0, y0 - radius, colval );
 	display_pixel( x0 + radius, y0, colval );
@@ -4613,11 +4613,11 @@ void display_filled_circle_rgb(scr_coord_val x0, scr_coord_val  y0, int radius, 
 		x++;
 		ddF_x += 2;
 		f += ddF_x;
-		display_fb_internal( x0 - x, y0 + y, x + x, 1, colval, false, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
-		display_fb_internal( x0 - x, y0 - y, x + x, 1, colval, false, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
+		display_fb_internal( x0 - x, y0 + y, x + x, 1, colval, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
+		display_fb_internal( x0 - x, y0 - y, x + x, 1, colval, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
 
-		display_fb_internal( x0 - y, y0 + x, y + y, 1, colval, false, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
-		display_fb_internal( x0 - y, y0 - x, y + y, 1, colval, false, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
+		display_fb_internal( x0 - y, y0 + x, y + y, 1, colval, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
+		display_fb_internal( x0 - y, y0 - x, y + y, 1, colval, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
 	}
 //	mark_rect_dirty_wc( x0-radius, y0-radius, x0+radius+1, y0+radius+1 );
 }
