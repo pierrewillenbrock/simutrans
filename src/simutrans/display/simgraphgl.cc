@@ -4062,7 +4062,7 @@ static void display_pixel(scr_coord_val x, scr_coord_val y, PIXVAL color)
 /**
  * Draw filled rectangle
  */
-static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL colval, bool /*dirty*/, scr_coord_val cL, scr_coord_val cR, scr_coord_val cT, scr_coord_val cB)
+static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL colval, scr_coord_val cL, scr_coord_val cR, scr_coord_val cT, scr_coord_val cB )
 {
 	if(  clip_lr( &xp, &w, cL, cR ) && clip_lr( &yp, &h, cT, cB )  ) {
 		DrawCommandKey cmdkey;
@@ -4091,15 +4091,15 @@ static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_va
 }
 
 
-static void simgraphgl_draw_rect(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL color, bool dirty)
+static void simgraphgl_draw_rect(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL color, bool /*dirty*/)
 {
-	display_fb_internal( xp, yp, w, h, color, dirty, 0, disp_width, 0, disp_height );
+	display_fb_internal( xp, yp, w, h, color, 0, disp_width, 0, disp_height );
 }
 
 
-static void simgraphgl_draw_rect_clipped(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL color, bool dirty  CLIP_NUM_DEF)
+static void simgraphgl_draw_rect_clipped(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL color, bool /*dirty*/  CLIP_NUM_DEF)
 {
-	display_fb_internal( xp, yp, w, h, color, dirty, CR.clip_rect.x, CR.clip_rect.xx, CR.clip_rect.y, CR.clip_rect.yy );
+	display_fb_internal( xp, yp, w, h, color, CR.clip_rect.x, CR.clip_rect.xx, CR.clip_rect.y, CR.clip_rect.yy );
 }
 
 
@@ -4109,7 +4109,7 @@ static void simgraphgl_draw_rect_colors_clipped(scr_coord_val xp, scr_coord_val 
 		scr_coord_val last_w = 0;
 		for (scr_coord_val i = 0; i < num_colors; i++) {
 			scr_coord_val next_w = (w * (1 + i)) / num_colors;
-			display_fb_internal(xp+last_w, yp, next_w-last_w, h, colors[i], dirty, CR.clip_rect.x, CR.clip_rect.xx, CR.clip_rect.y, CR.clip_rect.yy);
+			display_fb_internal(xp+last_w, yp, next_w-last_w, h, colors[i], CR.clip_rect.x, CR.clip_rect.xx, CR.clip_rect.y, CR.clip_rect.yy);
 			last_w = next_w;
 		}
 	}
@@ -4117,7 +4117,7 @@ static void simgraphgl_draw_rect_colors_clipped(scr_coord_val xp, scr_coord_val 
 		scr_coord_val last_h = 0;
 		for (scr_coord_val i = 0; i < num_colors; i++) {
 			scr_coord_val next_h = (h * (1 + i)) / num_colors;
-			display_fb_internal(xp, yp+last_h, w, next_h-last_h, colors[i], dirty, CR.clip_rect.x, CR.clip_rect.xx, CR.clip_rect.y, CR.clip_rect.yy);
+			display_fb_internal(xp, yp+last_h, w, next_h-last_h, colors[i], CR.clip_rect.x, CR.clip_rect.xx, CR.clip_rect.y, CR.clip_rect.yy);
 			last_h = next_h;
 		}
 	}
@@ -4857,7 +4857,7 @@ static void simgraphgl_draw_filled_circle(scr_coord_val x0, scr_coord_val y0, in
 	int x = 0;
 	int y = radius;
 
-	display_fb_internal( x0 - radius, y0, radius + radius + 1, 1, colval, false, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
+	display_fb_internal( x0 - radius, y0, radius + radius + 1, 1, colval, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
 	display_pixel( x0, y0 + radius, colval );
 	display_pixel( x0, y0 - radius, colval );
 	display_pixel( x0 + radius, y0, colval );
@@ -4876,11 +4876,11 @@ static void simgraphgl_draw_filled_circle(scr_coord_val x0, scr_coord_val y0, in
 		x++;
 		ddF_x += 2;
 		f += ddF_x;
-		display_fb_internal( x0 - x, y0 + y, x + x, 1, colval, false, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
-		display_fb_internal( x0 - x, y0 - y, x + x, 1, colval, false, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
+		display_fb_internal( x0 - x, y0 + y, x + x, 1, colval, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
+		display_fb_internal( x0 - x, y0 - y, x + x, 1, colval, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
 
-		display_fb_internal( x0 - y, y0 + x, y + y, 1, colval, false, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
-		display_fb_internal( x0 - y, y0 - x, y + y, 1, colval, false, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
+		display_fb_internal( x0 - y, y0 + x, y + y, 1, colval, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
+		display_fb_internal( x0 - y, y0 - x, y + y, 1, colval, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
 	}
 //	mark_rect_dirty_wc( x0-radius, y0-radius, x0+radius+1, y0+radius+1 );
 }
