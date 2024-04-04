@@ -3878,7 +3878,7 @@ void display_filled_roundbox_clip(scr_coord_val xp, scr_coord_val yp, scr_coord_
 /**
  * Draw vertical line
  */
-static void display_vl_internal(const scr_coord_val xp, scr_coord_val yp, scr_coord_val h, const PIXVAL colval, int /*dirty*/, scr_coord_val cL, scr_coord_val cR, scr_coord_val cT, scr_coord_val cB)
+static void display_vl_internal(const scr_coord_val xp, scr_coord_val yp, scr_coord_val h, const PIXVAL colval, scr_coord_val cL, scr_coord_val cR, scr_coord_val cT, scr_coord_val cB)
 {
 	if(  xp >= cL && xp < cR && clip_lr( &yp, &h, cT, cB )  ) {
 		DrawCommandKey cmdkey;
@@ -3907,15 +3907,15 @@ static void display_vl_internal(const scr_coord_val xp, scr_coord_val yp, scr_co
 }
 
 
-void display_vline_wh_rgb(const scr_coord_val xp, scr_coord_val yp, scr_coord_val h, const PIXVAL color, bool dirty)
+void display_vline_wh_rgb(const scr_coord_val xp, scr_coord_val yp, scr_coord_val h, const PIXVAL color, bool /*dirty*/)
 {
-	display_vl_internal( xp, yp, h, color, dirty, 0, disp_width, 0, disp_height );
+	display_vl_internal( xp, yp, h, color, 0, disp_width, 0, disp_height );
 }
 
 
-void display_vline_wh_clip_rgb(const scr_coord_val xp, scr_coord_val yp, scr_coord_val h, const PIXVAL color, bool dirty  CLIP_NUM_DEF)
+void display_vline_wh_clip_rgb(const scr_coord_val xp, scr_coord_val yp, scr_coord_val h, const PIXVAL color, bool /*dirty*/  CLIP_NUM_DEF)
 {
-	display_vl_internal( xp, yp, h, color, dirty, CR.clip_rect.x, CR.clip_rect.xx, CR.clip_rect.y, CR.clip_rect.yy );
+	display_vl_internal( xp, yp, h, color, CR.clip_rect.x, CR.clip_rect.xx, CR.clip_rect.y, CR.clip_rect.yy );
 }
 
 
