@@ -2433,7 +2433,7 @@ static void scrollDrawCommands(scr_coord_val /*start_y*/, scr_coord_val /*x_offs
 	flushDrawCommands();
 }
 
-static void queueDrawCommand(DrawCommand &&cmd,
+static void queueDrawCommand(DrawCommandKey const &key,
                              scr_coord_val vx1,
                              scr_coord_val vy1,
                              scr_coord_val vx2,
@@ -2450,12 +2450,7 @@ static void queueDrawCommand(DrawCommand &&cmd,
                              GLcolorf color
                              CLIP_NUM_DEF )
 {
-	cmd.min_x = vx1;
-	cmd.min_y = vy1;
-	cmd.max_x = vx2;
-	cmd.max_y = vy2;
-
-	drawCommandBatches.addDrawCommand( cmd.key,
+	drawCommandBatches.addDrawCommand( key,
 	                                   vx1, vy1, vx2, vy2,
 	                                   tx1, ty1, tx2, ty2,
 	                                   ax1, ay1, ax2, ay2,
@@ -3288,15 +3283,15 @@ static void display_img_pc(const image_id n,
 		// colors for 2nd company color
 		activate_player_color( player_nr, daynight );
 
-		DrawCommand cmd;
-		cmd.key.cr = CR;
-		cmd.key.tex = tex;
-		cmd.key.rgbmap_tex = rgbmap_tex;
-		cmd.key.alphatex = invalidTexname();
-		cmd.key.uses_tex = 1;
-		cmd.key.uses_rgbmap_tex = 1;
-		cmd.key.uses_alphatex = 0;
-		queueDrawCommand( std::move( cmd ),
+		DrawCommandKey cmdkey;
+		cmdkey.cr = CR;
+		cmdkey.tex = tex;
+		cmdkey.rgbmap_tex = rgbmap_tex;
+		cmdkey.alphatex = invalidTexname();
+		cmdkey.uses_tex = 1;
+		cmdkey.uses_rgbmap_tex = 1;
+		cmdkey.uses_alphatex = 0;
+		queueDrawCommand( cmdkey,
 		                  xp,
 		                  yp,
 		                  xp + w,
@@ -3631,15 +3626,15 @@ static void simgraphgl_tint_rect(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 
 		const float alpha = percent_blend / 100.0;
 
-		DrawCommand cmd;
-		cmd.key.cr.poly_active = 0;
-		cmd.key.tex = invalidTexname();
-		cmd.key.rgbmap_tex = 0;
-		cmd.key.alphatex = invalidTexname();
-		cmd.key.uses_tex = 1;
-		cmd.key.uses_rgbmap_tex = 0;
-		cmd.key.uses_alphatex = 0;
-		queueDrawCommand( std::move( cmd ),
+		DrawCommandKey cmdkey;
+		cmdkey.cr.poly_active = 0;
+		cmdkey.tex = invalidTexname();
+		cmdkey.rgbmap_tex = 0;
+		cmdkey.alphatex = invalidTexname();
+		cmdkey.uses_tex = 1;
+		cmdkey.uses_rgbmap_tex = 0;
+		cmdkey.uses_alphatex = 0;
+		queueDrawCommand( cmdkey,
 		                  xp,
 		                  yp,
 		                  xp + w,
@@ -3678,15 +3673,15 @@ static void display_img_blend_wc(const image_id n,
 	const scr_coord_val yoff = clip_wh( &yp, &h, CR.clip_rect.y, CR.clip_rect.yy );
 
 	if(  w > 0 && h > 0  ) {
-		DrawCommand cmd;
-		cmd.key.cr.poly_active = 0;
-		cmd.key.tex = tex;
-		cmd.key.rgbmap_tex = rgbmap_tex;
-		cmd.key.alphatex = invalidTexname();
-		cmd.key.uses_tex = 1;
-		cmd.key.uses_rgbmap_tex = 1;
-		cmd.key.uses_alphatex = 0;
-		queueDrawCommand( std::move( cmd ),
+		DrawCommandKey cmdkey;
+		cmdkey.cr.poly_active = 0;
+		cmdkey.tex = tex;
+		cmdkey.rgbmap_tex = rgbmap_tex;
+		cmdkey.alphatex = invalidTexname();
+		cmdkey.uses_tex = 1;
+		cmdkey.uses_rgbmap_tex = 1;
+		cmdkey.uses_alphatex = 0;
+		queueDrawCommand( cmdkey,
 		                  xp,
 		                  yp,
 		                  xp + w,
@@ -3721,15 +3716,15 @@ static void display_img_blend_wc_colour(const image_id n,
 	const scr_coord_val yoff = clip_wh( &yp, &h, CR.clip_rect.y, CR.clip_rect.yy );
 
 	if(  w > 0 && h > 0  ) {
-		DrawCommand cmd;
-		cmd.key.cr.poly_active = 0;
-		cmd.key.tex = tex;
-		cmd.key.rgbmap_tex = 0;
-		cmd.key.alphatex = invalidTexname();
-		cmd.key.uses_tex = 1;
-		cmd.key.uses_rgbmap_tex = 0;
-		cmd.key.uses_alphatex = 0;
-		queueDrawCommand( std::move( cmd ),
+		DrawCommandKey cmdkey;
+		cmdkey.cr.poly_active = 0;
+		cmdkey.tex = tex;
+		cmdkey.rgbmap_tex = 0;
+		cmdkey.alphatex = invalidTexname();
+		cmdkey.uses_tex = 1;
+		cmdkey.uses_rgbmap_tex = 0;
+		cmdkey.uses_alphatex = 0;
+		queueDrawCommand( cmdkey,
 		                  xp,
 		                  yp,
 		                  xp + w,
@@ -3782,16 +3777,16 @@ static void display_img_alpha_wc(const image_id n, const image_id alpha_n,
 	const scr_coord_val yoff = clip_wh( &yp, &h, CR.clip_rect.y, CR.clip_rect.yy );
 
 	if(  w > 0 && h > 0  ) {
-		DrawCommand cmd;
-		cmd.key.cr.poly_active = 0;
-		cmd.key.tex = tex;
-		cmd.key.rgbmap_tex = rgbmap_tex;
-		cmd.key.alphatex = alphatex;
-		cmd.key.uses_tex = 1;
-		cmd.key.uses_rgbmap_tex = 1;
-		cmd.key.uses_alphatex = 1;
+		DrawCommandKey cmdkey;
+		cmdkey.cr.poly_active = 0;
+		cmdkey.tex = tex;
+		cmdkey.rgbmap_tex = rgbmap_tex;
+		cmdkey.alphatex = alphatex;
+		cmdkey.uses_tex = 1;
+		cmdkey.uses_rgbmap_tex = 1;
+		cmdkey.uses_alphatex = 1;
 		//todo: someone please explain to me why there is 2.0 in alpha is needed here
-		queueDrawCommand( std::move( cmd ),
+		queueDrawCommand( cmdkey,
 		                  xp,
 		                  yp,
 		                  xp + w,
@@ -4027,15 +4022,15 @@ static void simgraphgl_move_scroll_band(scr_coord_val start_y, scr_coord_val x_o
 static void display_pixel(scr_coord_val x, scr_coord_val y, PIXVAL color)
 {
 	if(  x >= CR0.clip_rect.x && x < CR0.clip_rect.xx && y >= CR0.clip_rect.y && y < CR0.clip_rect.yy  ) {
-		DrawCommand cmd;
-		cmd.key.cr.poly_active = 0;
-		cmd.key.tex = invalidTexname();
-		cmd.key.rgbmap_tex = 0;
-		cmd.key.alphatex = invalidTexname();
-		cmd.key.uses_tex = 1;
-		cmd.key.uses_rgbmap_tex = 0;
-		cmd.key.uses_alphatex = 0;
-		queueDrawCommand( std::move( cmd ),
+		DrawCommandKey cmdkey;
+		cmdkey.cr.poly_active = 0;
+		cmdkey.tex = invalidTexname();
+		cmdkey.rgbmap_tex = 0;
+		cmdkey.alphatex = invalidTexname();
+		cmdkey.uses_tex = 1;
+		cmdkey.uses_rgbmap_tex = 0;
+		cmdkey.uses_alphatex = 0;
+		queueDrawCommand( cmdkey,
 		                  x,
 		                  y,
 		                  x + 1,
@@ -4059,15 +4054,15 @@ static void display_pixel(scr_coord_val x, scr_coord_val y, PIXVAL color)
 static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL colval, bool /*dirty*/, scr_coord_val cL, scr_coord_val cR, scr_coord_val cT, scr_coord_val cB)
 {
 	if(  clip_lr( &xp, &w, cL, cR ) && clip_lr( &yp, &h, cT, cB )  ) {
-		DrawCommand cmd;
-		cmd.key.cr.poly_active = 0;
-		cmd.key.tex = invalidTexname();
-		cmd.key.rgbmap_tex = 0;
-		cmd.key.alphatex = invalidTexname();
-		cmd.key.uses_tex = 1;
-		cmd.key.uses_rgbmap_tex = 0;
-		cmd.key.uses_alphatex = 0;
-		queueDrawCommand( std::move( cmd ),
+		DrawCommandKey cmdkey;
+		cmdkey.cr.poly_active = 0;
+		cmdkey.tex = invalidTexname();
+		cmdkey.rgbmap_tex = 0;
+		cmdkey.alphatex = invalidTexname();
+		cmdkey.uses_tex = 1;
+		cmdkey.uses_rgbmap_tex = 0;
+		cmdkey.uses_alphatex = 0;
+		queueDrawCommand( cmdkey,
 		                  xp,
 		                  yp,
 		                  xp + w,
@@ -4113,15 +4108,15 @@ static void simgraphgl_draw_rounded_rect_clipped(scr_coord_val xp, scr_coord_val
 static void display_vl_internal(const scr_coord_val xp, scr_coord_val yp, scr_coord_val h, const PIXVAL colval, int /*dirty*/, scr_coord_val cL, scr_coord_val cR, scr_coord_val cT, scr_coord_val cB)
 {
 	if(  xp >= cL && xp < cR && clip_lr( &yp, &h, cT, cB )  ) {
-		DrawCommand cmd;
-		cmd.key.cr.poly_active = 0;
-		cmd.key.tex = invalidTexname();
-		cmd.key.rgbmap_tex = 0;
-		cmd.key.alphatex = invalidTexname();
-		cmd.key.uses_tex = 1;
-		cmd.key.uses_rgbmap_tex = 0;
-		cmd.key.uses_alphatex = 0;
-		queueDrawCommand( std::move( cmd ),
+		DrawCommandKey cmdkey;
+		cmdkey.cr.poly_active = 0;
+		cmdkey.tex = invalidTexname();
+		cmdkey.rgbmap_tex = 0;
+		cmdkey.alphatex = invalidTexname();
+		cmdkey.uses_tex = 1;
+		cmdkey.uses_rgbmap_tex = 0;
+		cmdkey.uses_alphatex = 0;
+		queueDrawCommand( cmdkey,
 		                  xp,
 		                  yp,
 		                  xp + 1,
@@ -4165,16 +4160,16 @@ static void simgraphgl_draw_array(scr_coord_val xp, scr_coord_val yp, scr_coord_
 	if(  w > 0 && h > 0  ) {
 		GLfloat tcx = 0, tcy = 0, tcw = 1, tch = 1;
 		TextureAtlas_Texname texname = getArrayTex( arr, arr_w, arr_h,
-		                              tcx, tcy, tcw, tch );
-		DrawCommand cmd;
-		cmd.key.cr.poly_active = 0;
-		cmd.key.tex = texname;
-		cmd.key.rgbmap_tex = 0;
-		cmd.key.alphatex = invalidTexname();
-		cmd.key.uses_tex = 1;
-		cmd.key.uses_rgbmap_tex = 0;
-		cmd.key.uses_alphatex = 0;
-		queueDrawCommand( std::move( cmd ),
+		                               tcx, tcy, tcw, tch );
+		DrawCommandKey cmdkey;
+		cmdkey.cr.poly_active = 0;
+		cmdkey.tex = texname;
+		cmdkey.rgbmap_tex = 0;
+		cmdkey.alphatex = invalidTexname();
+		cmdkey.uses_tex = 1;
+		cmdkey.uses_rgbmap_tex = 0;
+		cmdkey.uses_alphatex = 0;
+		queueDrawCommand( cmdkey,
 		                  xp,
 		                  yp,
 		                  xp + w,
@@ -4493,15 +4488,15 @@ static scr_coord_val simgraphgl_draw_text_clipped_n(scr_coord_val x, scr_coord_v
 				                               glx, gly,
 				                               glw, glh );
 
-				DrawCommand cmd;
-				cmd.key.cr.poly_active = 0;
-				cmd.key.tex = texname;
-				cmd.key.rgbmap_tex = 0;
-				cmd.key.alphatex = invalidTexname();
-				cmd.key.uses_tex = 1;
-				cmd.key.uses_rgbmap_tex = 0;
-				cmd.key.uses_alphatex = 0;
-				queueDrawCommand( std::move( cmd ),
+				DrawCommandKey cmdkey;
+				cmdkey.cr.poly_active = 0;
+				cmdkey.tex = texname;
+				cmdkey.rgbmap_tex = 0;
+				cmdkey.alphatex = invalidTexname();
+				cmdkey.uses_tex = 1;
+				cmdkey.uses_rgbmap_tex = 0;
+				cmdkey.uses_alphatex = 0;
+				queueDrawCommand( cmdkey,
 				                  sx,
 				                  sy,
 				                  sx + w,
