@@ -1489,6 +1489,44 @@ static void runDrawCommand(DrawCommand const &cmd, GLint vertex_first, GLint ver
 static std::vector<DrawCommand> drawCommands;
 static unsigned int drawCommandsPos = 0;
 
+
+static bool makeDrawCommandCompatible(DrawCommand &cm, DrawCommand const &c2)
+{
+	//for now, check if the basic setup is identical.
+	//later, we should try and find a setup that can be used for
+	//the most number of commands
+	if(  cm.tex != c2.tex  ) {
+		return false;
+	}
+	if(  cm.rgbmap_tex != c2.rgbmap_tex  ) {
+		return false;
+	}
+	if(  cm.alphatex != c2.alphatex  ) {
+		return false;
+	}
+	if(  cm.cr.number_of_clips != c2.cr.number_of_clips  ) {
+		return false;
+	}
+	if(  cm.cr.number_of_clips != 0  ) {
+		for(  int i = 0; i < cm.cr.number_of_clips; i++  ) {
+			if(  ( cm.cr.clip_ribi[i] & cm.cr.active_ribi ) == 0 &&
+			                ( c2.cr.clip_ribi[i] & c2.cr.active_ribi ) == 0  ) {
+				continue;
+			}
+			if(  !( ( cm.cr.clip_ribi[i] & cm.cr.active_ribi ) != 0 &&
+			                ( c2.cr.clip_ribi[i] & c2.cr.active_ribi ) != 0 )  ) {
+				return false;
+			}
+			if(  cm.cr.poly_clips[i] != c2.cr.poly_clips[i]  ) {
+				return false;
+			}
+		}
+	}
+
+	return true;
+}
+
+
 static void flushDrawCommands(std::vector<DrawCommand>::iterator begin,
                               std::vector<DrawCommand>::iterator end,
                               Vertex *vertices, size_t vertices_count)
@@ -1505,40 +1543,8 @@ static void flushDrawCommands(std::vector<DrawCommand>::iterator begin,
 		it2++;
 		vertex_current += 6;
 		while(  it2 != end  ) {
-			//for now, check if the basic setup is identical.
-			//later, we should try and find a setup that can be used for
-			//the most number of commands
-			if(  it2->tex != it->tex  ) {
+			if(  !makeDrawCommandCompatible( *it, *it2 )  ) {
 				break;
-			}
-			if(  it2->rgbmap_tex != it->rgbmap_tex  ) {
-				break;
-			}
-			if(  it2->alphatex != it->alphatex  ) {
-				break;
-			}
-			if(  it2->cr.number_of_clips != it->cr.number_of_clips  ) {
-				break;
-			}
-			if(  it->cr.number_of_clips != 0  ) {
-				bool differ = false;
-				for(  int i = 0; i < it->cr.number_of_clips; i++  ) {
-					if(  ( it2->cr.clip_ribi[i] & it2->cr.active_ribi ) == 0 &&
-					                ( it->cr.clip_ribi[i] & it->cr.active_ribi ) == 0  ) {
-						continue;
-					}
-					if(  !( ( it2->cr.clip_ribi[i] & it2->cr.active_ribi ) != 0 && ( it->cr.clip_ribi[i] & it->cr.active_ribi ) != 0 )  ) {
-						differ = true;
-						break;
-					}
-					if(  it2->cr.poly_clips[i] != it->cr.poly_clips[i]  ) {
-						differ = true;
-						break;
-					}
-				}
-				if(  differ  ) {
-					break;
-				}
 			}
 
 			it2++;
