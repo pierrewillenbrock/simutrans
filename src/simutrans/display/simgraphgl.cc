@@ -2647,23 +2647,42 @@ static GLuint getGlyphTex(uint32_t c, const font_t *fnt,
 
 
 static void display_img_pc(const image_id n,
-                           scr_coord_val xp, scr_coord_val yp,
-                           scr_coord_val w, scr_coord_val h,
-                           GLuint rgbmap_tex  CLIP_NUM_DEF)
+                           scr_coord_val xp, scr_coord_val yp, float zoom,
+                           GLuint rgbmap_tex,
+                           sint8 player_nr, bool daynight
+                           CLIP_NUM_DEF)
 {
-	GLuint tex = images[n].index_tex;
-	GLfloat x1 = images[n].index_x1;
-	GLfloat y1 = images[n].index_y1;
-	GLfloat tex_w = images[n].index_tex_w;
-	GLfloat tex_h = images[n].index_tex_h;
-
-	GLfloat tex_xscale = tex_w / w;
-	GLfloat tex_yscale = tex_h / h;
+	//the compiler takes only the bits it needs from this copy, but
+	//avoids extra memory accesses
+	const struct imd image = images[n];
+	scr_coord_val w = ceil( image.base_w * zoom );
+	scr_coord_val h = ceil( image.base_h * zoom );
+	scr_coord_val rw = w;
+	scr_coord_val rh = h;
+	xp += floor( image.base_x * zoom );
+	yp += floor( image.base_y * zoom );
 
 	const scr_coord_val xoff = clip_wh( &xp, &w, CR.clip_rect.x, CR.clip_rect.xx );
 	const scr_coord_val yoff = clip_wh( &yp, &h, CR.clip_rect.y, CR.clip_rect.yy );
 
 	if(  w > 0 && h > 0  ) {
+		if(  images[n].index_tex == 0  ) {
+			createIndexImgTex( n );
+		}
+		//same as above
+		const struct imd image = images[n];
+		GLuint tex = image.index_tex;
+		GLfloat x1 = image.index_x1;
+		GLfloat y1 = image.index_y1;
+		GLfloat tex_w = image.index_tex_w;
+		GLfloat tex_h = image.index_tex_h;
+
+		GLfloat tex_xscale = tex_w / rw;
+		GLfloat tex_yscale = tex_h / rh;
+
+		// colors for 2nd company color
+		activate_player_color( player_nr, daynight );
+
 		DrawCommand cmd;
 		cmd.cr = CR;
 		cmd.tex = tex;
@@ -2732,22 +2751,15 @@ void display_img_aux(const image_id n, scr_coord_val xp, scr_coord_val yp, const
 		// need to go to nightmode and or re-zoomed?
 
 		rezoom_img( n );
-		if(  images[n].index_tex == 0  ) {
-			createIndexImgTex( n );
-		}
 
-		activate_player_color( use_player, true );
 		// now, since zooming may have change this image
 		float zoom = get_img_zoom( n );
 
-		yp += floor( images[n].base_y * zoom );
-		xp += floor( images[n].base_x * zoom );
-
 		display_img_pc( n,
-		                xp, yp,
-		                ceil( images[n].base_w * zoom ),
-		                ceil( images[n].base_h * zoom ),
-		                rgbmap_day_night_tex  CLIP_NUM_PAR );
+		                xp, yp, zoom,
+		                rgbmap_day_night_tex,
+		                use_player, true
+		                CLIP_NUM_PAR );
 	}
 }
 
@@ -2930,32 +2942,12 @@ void display_color_img(const image_id n, scr_coord_val xp, scr_coord_val yp, sin
 		else {
 			// do player colour substitution but not daynight - can't use cached images. Do NOT call multithreaded.
 			// now test if visible and clipping needed
-			const scr_coord_val x = images[n].base_x + xp;
-			const scr_coord_val y = images[n].base_y + yp;
-			const scr_coord_val w = images[n].base_w;
-			const scr_coord_val h = images[n].base_h;
-			if(  h <= 0 || x >= CR.clip_rect.xx || y >= CR.clip_rect.yy || x + w <= CR.clip_rect.x || y + h <= CR.clip_rect.y  ) {
-				// not visible => we are done
-				// happens quite often ...
-				return;
-			}
-
-			// colors for 2nd company color
-			if(  player_nr >= 0  ) {
-				activate_player_color( player_nr, daynight );
-			}
-			else {
-				// no player
-				activate_player_color( 0, daynight );
-			}
 			// color replacement needs the original data => sp points to non-cached data
-			if(  images[n].index_tex == 0  ) {
-				createIndexImgTex(n);
-			}
 			display_img_pc( n,
-			                x, y,
-			                images[n].base_w, images[n].base_h,
-			                rgbmap_current_tex  CLIP_NUM_PAR );
+			                xp, yp, 1.0f,
+			                rgbmap_current_tex,
+			                player_nr >= 0 ? player_nr : 0, daynight
+			                CLIP_NUM_PAR );
 		}
 	} // number ok
 }
@@ -2971,35 +2963,12 @@ void display_base_img(const image_id n, scr_coord_val xp, scr_coord_val yp, cons
 		display_color_img( n, xp, yp, player_nr, daynight, dirty  CLIP_NUM_PAR );
 	}
 	else if(  n < images.size()  ) {
-		// now test if visible and clipping needed
-		const scr_coord_val x = images[n].base_x + xp;
-		const scr_coord_val y = images[n].base_y + yp;
-		const scr_coord_val w = images[n].base_w;
-		const scr_coord_val h = images[n].base_h;
-
-		if(  h <= 0 || x >= CR.clip_rect.xx || y >= CR.clip_rect.yy || x + w <= CR.clip_rect.x || y + h <= CR.clip_rect.y  ) {
-			// not visible => we are done
-			// happens quite often ...
-			return;
-		}
-
-		// colors for 2nd company color
-		if(  player_nr >= 0  ) {
-			activate_player_color( player_nr, daynight );
-		}
-		else {
-			// no player
-			activate_player_color( 0, daynight );
-		}
-
 		// color replacement needs the original data => sp points to non-cached data
-
-		if(  images[n].index_tex == 0  ) {
-			createIndexImgTex(n);
-		}
 		display_img_pc( n,
-		                x, y, images[n].base_w, images[n].base_h,
-		                rgbmap_current_tex  CLIP_NUM_PAR );
+		                xp, yp, 1.0f,
+		                rgbmap_current_tex,
+		                player_nr >= 0 ? player_nr : 0, daynight
+		                CLIP_NUM_PAR );
 	} // number ok
 }
 
