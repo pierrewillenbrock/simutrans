@@ -485,7 +485,6 @@ struct DrawCommand
 	GLfloat ty2;
 	GLcolorf alpha;
 	GLcolorf color;
-	bool use_stencil;
 };
 
 }
@@ -738,36 +737,49 @@ signed short current_tile_raster_width = 0;
 // combined shader
 // note about gl_Color.a: selects between indexed color(0.0),
 // texture color(0.5) and gl_Color.rgb(1.0)
+// gl_Color.a      rgb
+// 0.0             indexedrgb
+// 0.5             index.rgb
+// 1.0             gl_Color.rgb
+// if v_alphaMask.rgb is all 0, the alpha texture is unused
+// if v_alphaMask.a is 0, index.a is unused
+// usage of textures:
+// s_texAlpha: if v_alphaMask.rgb != 0,0,0
+// s_texColor: if gl_Color.a != 1.0 || v_alphaMask.a != 0
+// s_texRGBMap: if gl_Color.a == 0.0
 static char const combined_fragmentShaderText[] =
-	"uniform sampler2D texColor,texAlpha,texRGBMap;\n"
-	"uniform vec4 alphaMask;\n"
+	"uniform sampler2D s_texColor,s_texAlpha,s_texRGBMap;\n"
+	"varying vec4 v_alphaMask;\n"
 	"void main () {\n"
-	"   vec4 alpha = texture2D(texAlpha,gl_TexCoord[0].st);\n"
-	"   vec4 index = texture2D(texColor,gl_TexCoord[0].st);\n"
-	"   vec3 indexedrgb = texture2D(texRGBMap,index.st).rgb;\n"
+	"   vec4 alpha = texture2D(s_texAlpha,gl_TexCoord[0].st);\n"
+	"   vec4 index = texture2D(s_texColor,gl_TexCoord[0].st);\n"
+	"   vec3 indexedrgb = texture2D(s_texRGBMap,index.st).rgb;\n"
 	"   vec3 rgb = indexedrgb;\n"
 	"   rgb = mix(rgb,gl_Color.rgb,gl_Color.a);\n" //handle gl_Color.a = 0 and 1
 	"   rgb = mix(index.rgb,rgb,abs(2.0*gl_Color.a-1.0));\n" //handle gl_Color.a = 0.5
 	"   gl_FragColor.rgb = rgb;\n"
-	"   gl_FragColor.a = clamp(alpha.r * alphaMask.r +\n"
-	"                          alpha.g * alphaMask.g +\n"
-	"                          alpha.b * alphaMask.b +\n"
-	"                          index.a * alphaMask.a, 0.0, 1.0);\n"
+	"   gl_FragColor.a = clamp(alpha.r * v_alphaMask.r +\n"
+	"                          alpha.g * v_alphaMask.g +\n"
+	"                          alpha.b * v_alphaMask.b +\n"
+	"                          index.a * v_alphaMask.a, 0.0, 1.0);\n"
 	"}\n";
 
 //vertex shader
 static char const vertexShaderText[] =
+	"attribute vec4 a_alphaMask;\n"
+	"varying vec4 v_alphaMask;\n"
 	"void main () {\n"
 	"   gl_Position = ftransform();\n"
 	"   gl_TexCoord[0] = gl_TextureMatrix[0] * gl_MultiTexCoord0;\n"
 	"   gl_FrontColor = gl_Color;\n"
+	"   v_alphaMask = a_alphaMask;\n"
 	"}\n";
 
 static GLuint combined_program;
-static GLuint combined_texColor_Location;
-static GLuint combined_texRGBMap_Location;
-static GLuint combined_texAlpha_Location;
-static GLuint combined_alphaMask_Location;
+static GLuint combined_s_texColor_Location;
+static GLuint combined_s_texRGBMap_Location;
+static GLuint combined_s_texAlpha_Location;
+static GLuint combined_a_alphaMask_Location;
 
 static inline rgb888_t pixval_to_rgb888(PIXVAL colour)
 {
@@ -1323,7 +1335,7 @@ int zoom_factor_down()
 
 static void runDrawCommand(DrawCommand const &cmd)
 {
-	if(  cmd.cr.number_of_clips > 0 && cmd.use_stencil  ) {
+	if(  cmd.cr.number_of_clips > 0  ) {
 		build_stencil( 0, 0, disp_width, disp_height, cmd.cr );
 		glEnable( GL_STENCIL_TEST );
 		glStencilOp( GL_KEEP, GL_KEEP, GL_KEEP );
@@ -1342,12 +1354,17 @@ static void runDrawCommand(DrawCommand const &cmd)
 
 	glUseProgram( combined_program );
 
-	glUniform1i( combined_texColor_Location, 0 );
-	glUniform1i( combined_texRGBMap_Location, 1 );
-	glUniform1i( combined_texAlpha_Location, 2 );
+	//this tells opengl which texture object to use
+	//these cannot be moved into vertex attributes until
+	//bindless textures are available
+	glUniform1i( combined_s_texColor_Location, 0 );
+	glUniform1i( combined_s_texRGBMap_Location, 1 );
+	glUniform1i( combined_s_texAlpha_Location, 2 );
 
-	glUniform4f( combined_alphaMask_Location,
-	             cmd.alpha.r, cmd.alpha.g, cmd.alpha.b, cmd.alpha.a );
+	//the rest should be vertex attributes.
+
+	glVertexAttrib4f( combined_a_alphaMask_Location,
+	                  cmd.alpha.r, cmd.alpha.g, cmd.alpha.b, cmd.alpha.a );
 	glColor4f( cmd.color.r, cmd.color.g, cmd.color.b, cmd.color.a );
 
 	glEnable( GL_BLEND );
@@ -1371,7 +1388,7 @@ static void runDrawCommand(DrawCommand const &cmd)
 	glDisable( GL_TEXTURE_2D );
 	glActiveTextureARB( GL_TEXTURE0_ARB );
 
-	if(  cmd.cr.number_of_clips > 0 && cmd.use_stencil  ) {
+	if(  cmd.cr.number_of_clips > 0  ) {
 		glDisable( GL_STENCIL_TEST );
 		glStencilFunc( GL_ALWAYS, 1, 1 );
 	}
@@ -2157,7 +2174,6 @@ static void display_img_pc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, 
 		cmd.ty1 = yoff / float( rh );
 		cmd.tx2 = ( xoff + w ) / float( rw );
 		cmd.ty2 = ( yoff + h ) / float( rh );
-		cmd.use_stencil = true;
 		cmd.tex = tex;
 		cmd.rgbmap_tex = rgbmap_tex;
 		cmd.alphatex = 0;
@@ -2539,7 +2555,7 @@ void display_blend_wh_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, s
 		const float alpha = percent_blend / 100.0;
 
 		DrawCommand cmd;
-		cmd.cr = CR0;
+		cmd.cr.number_of_clips = 0;
 		cmd.tex = 0;
 		cmd.rgbmap_tex = 0;
 		cmd.alphatex = 0;
@@ -2551,7 +2567,6 @@ void display_blend_wh_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, s
 		cmd.vy1 = yp;
 		cmd.vx2 = xp + w;
 		cmd.vy2 = yp + h;
-		cmd.use_stencil = false;
 		cmd.alpha.r = 0;
 		cmd.alpha.g = 0;
 		cmd.alpha.b = 0;
@@ -2585,7 +2600,7 @@ static void display_img_blend_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 		cmd.color.g = 0;
 		cmd.color.b = 0;
 		cmd.color.a = 0;
-		cmd.cr = CR;
+		cmd.cr.number_of_clips = 0;
 		cmd.tx1 = xoff / float( rw );
 		cmd.ty1 = yoff / float( rh );
 		cmd.tx2 = ( xoff + w ) / float( rw );
@@ -2594,7 +2609,7 @@ static void display_img_blend_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 		cmd.vy1 = yp;
 		cmd.vx2 = xp + w;
 		cmd.vy2 = yp + h;
-		cmd.use_stencil = false;
+
 		queueDrawCommand( cmd );
 	}
 }
@@ -2608,7 +2623,6 @@ static void display_img_blend_wc_colour(scr_coord_val xp, scr_coord_val yp, scr_
 
 	if(  w > 0 && h > 0  ) {
 		DrawCommand cmd;
-		cmd.use_stencil = false;
 		cmd.tex = tex;
 		cmd.rgbmap_tex = 0;
 		cmd.alphatex = 0;
@@ -2620,7 +2634,7 @@ static void display_img_blend_wc_colour(scr_coord_val xp, scr_coord_val yp, scr_
 		cmd.color.g = ( colour & 0x07e0 ) / float( 0x07e0 );
 		cmd.color.b = ( colour & 0x001f ) / float( 0x001f );
 		cmd.color.a = 1.0;
-		cmd.cr = CR;
+		cmd.cr.number_of_clips = 0;
 		cmd.tx1 = xoff / float( rw );
 		cmd.ty1 = yoff / float( rh );
 		cmd.tx2 = ( xoff + w ) / float( rw );
@@ -2629,6 +2643,7 @@ static void display_img_blend_wc_colour(scr_coord_val xp, scr_coord_val yp, scr_
 		cmd.vy1 = yp;
 		cmd.vx2 = xp + w;
 		cmd.vy2 = yp + h;
+
 		queueDrawCommand( cmd );
 	}
 }
@@ -2647,11 +2662,10 @@ static void display_img_alpha_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 
 	if(  w > 0 && h > 0  ) {
 		DrawCommand cmd;
-		cmd.cr = CR;
+		cmd.cr.number_of_clips = 0;
 		cmd.tex = tex;
 		cmd.rgbmap_tex = rgbmap_tex;
 		cmd.alphatex = alphatex;
-		cmd.use_stencil = false;
 		//todo: someone please explain to me why there is 2.0 needed here
 		cmd.alpha.r = ( alpha_flags & ALPHA_RED ) ? 2.0 : 0.0;
 		cmd.alpha.g = ( alpha_flags & ALPHA_GREEN ) ? 2.0 : 0.0;
@@ -2874,11 +2888,10 @@ static void display_pixel(scr_coord_val x, scr_coord_val y, PIXVAL color)
 {
 	if(  x >= CR0.clip_rect.x && x < CR0.clip_rect.xx && y >= CR0.clip_rect.y && y < CR0.clip_rect.yy  ) {
 		DrawCommand cmd;
-		cmd.cr = CR0;
+		cmd.cr.number_of_clips = 0;
 		cmd.tex = 0;
 		cmd.rgbmap_tex = 0;
 		cmd.alphatex = 0;
-		cmd.use_stencil = false;
 		cmd.alpha.r = 0;
 		cmd.alpha.g = 0;
 		cmd.alpha.b = 0;
@@ -2907,11 +2920,10 @@ static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_va
 {
 	if(  clip_lr( &xp, &w, cL, cR ) && clip_lr( &yp, &h, cT, cB )  ) {
 		DrawCommand cmd;
-		cmd.cr = CR0;
+		cmd.cr.number_of_clips = 0;
 		cmd.tex = 0;
 		cmd.rgbmap_tex = 0;
 		cmd.alphatex = 0;
-		cmd.use_stencil = false;
 		cmd.alpha.r = 0;
 		cmd.alpha.g = 0;
 		cmd.alpha.b = 0;
@@ -2962,11 +2974,10 @@ static void display_vl_internal(const scr_coord_val xp, scr_coord_val yp, scr_co
 {
 	if(  xp >= cL && xp < cR && clip_lr( &yp, &h, cT, cB )  ) {
 		DrawCommand cmd;
-		cmd.cr = CR0;
+		cmd.cr.number_of_clips = 0;
 		cmd.tex = 0;
 		cmd.rgbmap_tex = 0;
 		cmd.alphatex = 0;
-		cmd.use_stencil = false;
 		cmd.alpha.r = 0;
 		cmd.alpha.g = 0;
 		cmd.alpha.b = 0;
@@ -3014,11 +3025,10 @@ void display_array_wh(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_c
 	if(  w > 0 && h > 0  ) {
 		GLuint texname = getArrayTex( arr, arr_w, arr_h );
 		DrawCommand cmd;
-		cmd.cr = CR0;
+		cmd.cr.number_of_clips = 0;
 		cmd.tex = texname;
 		cmd.rgbmap_tex = 0;
 		cmd.alphatex = 0;
-		cmd.use_stencil = false;
 		cmd.alpha.r = 0;
 		cmd.alpha.g = 0;
 		cmd.alpha.b = 0;
@@ -3339,11 +3349,10 @@ scr_coord_val display_text_proportional_len_clip_rgb(scr_coord_val x, scr_coord_
 				                              glw, glh );
 
 				DrawCommand cmd;
-				cmd.cr = CR0;
+				cmd.cr.number_of_clips = 0;
 				cmd.tex = texname;
 				cmd.rgbmap_tex = 0;
 				cmd.alphatex = 0;
-				cmd.use_stencil = false;
 				cmd.alpha.r = 0;
 				cmd.alpha.g = 0;
 				cmd.alpha.b = 0;
@@ -4035,11 +4044,10 @@ bool simgraph_init(scr_size window_size, sint16 full_screen)
 	glDeleteShader( combined_fragmentShader );
 	glDeleteShader( vertexShader );
 
-	combined_texColor_Location = glGetUniformLocation( combined_program, "texColor" );
-	combined_texRGBMap_Location = glGetUniformLocation( combined_program, "texRGBMap" );
-	combined_texAlpha_Location = glGetUniformLocation( combined_program, "texAlpha" );
-	combined_alphaMask_Location = glGetUniformLocation( combined_program, "alphaMask" );
-
+	combined_s_texColor_Location = glGetUniformLocation( combined_program, "s_texColor" );
+	combined_s_texRGBMap_Location = glGetUniformLocation( combined_program, "s_texRGBMap" );
+	combined_s_texAlpha_Location = glGetUniformLocation( combined_program, "s_texAlpha" );
+	combined_a_alphaMask_Location = glGetAttribLocation( combined_program, "a_alphaMask" );
 
 	return true;
 }
