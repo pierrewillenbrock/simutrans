@@ -2834,15 +2834,19 @@ static TextureAtlas_Texname getGlyphTex(uint32_t c, const font_t *fnt,
 }
 
 
-static void display_img_pc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h,
-                           TextureAtlas_Texname tex, GLuint rgbmap_tex,
-                           GLfloat x1, GLfloat y1, GLfloat x2, GLfloat y2 CLIP_NUM_DEF)
+static void display_img_pc(const image_id n,
+                           scr_coord_val xp, scr_coord_val yp,
+                           scr_coord_val w, scr_coord_val h,
+                           GLuint rgbmap_tex  CLIP_NUM_DEF)
 {
-	scr_coord_val rw = w;
-	scr_coord_val rh = h;
+	TextureAtlas_Texname tex = images[n].index_tex;
+	GLfloat x1 = images[n].index_x1;
+	GLfloat y1 = images[n].index_y1;
+	GLfloat tex_w = images[n].index_tex_w;
+	GLfloat tex_h = images[n].index_tex_h;
 
-	GLfloat tex_xscale = ( x2 - x1 ) / float( rw );
-	GLfloat tex_yscale = ( y2 - y1 ) / float( rh );
+	GLfloat tex_xscale = tex_w / w;
+	GLfloat tex_yscale = tex_h / h;
 
 	const scr_coord_val xoff = clip_wh( &xp, &w, CR.clip_rect.x, CR.clip_rect.xx );
 	const scr_coord_val yoff = clip_wh( &yp, &h, CR.clip_rect.y, CR.clip_rect.yy );
@@ -2929,11 +2933,11 @@ static void simgraphgl_draw_img_aux(const image_id n, scr_coord_val xp, scr_coor
 		yp += floor( images[n].base_y * zoom );
 		xp += floor( images[n].base_x * zoom );
 
-		display_img_pc( xp, yp,
+		display_img_pc( n,
+		                xp, yp,
 		                ceil( images[n].base_w * zoom ),
 		                ceil( images[n].base_h * zoom ),
-		                tex, rgbmap_day_night_tex,
-		                x1, y1, x2, y2  CLIP_NUM_PAR );
+		                rgbmap_day_night_tex  CLIP_NUM_PAR );
 	}
 }
 
@@ -3140,11 +3144,10 @@ void simgraphgl_draw_color_img(const image_id n, scr_coord_val xp, scr_coord_val
 			TextureAtlas_Texname tex = getIndexImgTex( n, x1, y1, tcw, tch );
 			x2 = x1 + tcw;
 			y2 = y1 + tch;
-			display_img_pc( x, y,
-			                images[n].base_w,
-			                images[n].base_h,
-			                tex, rgbmap_current_tex,
-			                x1, y1, x2, y2  CLIP_NUM_PAR );
+			display_img_pc( n,
+			                x, y,
+			                images[n].base_w, images[n].base_h,
+			                rgbmap_current_tex  CLIP_NUM_PAR );
 		}
 	} // number ok
 }
@@ -3185,10 +3188,9 @@ static void simgraphgl_draw_base_img(const image_id n, scr_coord_val xp, scr_coo
 		TextureAtlas_Texname tex = getIndexImgTex( n, x1, y1, tcw, tch );
 		x2 = x1 + tcw;
 		y2 = y1 + tch;
-		display_img_pc( x, y,
-		                images[n].base_w, images[n].base_h,
-		                tex, rgbmap_current_tex,
-		                x1, y1, x2, y2  CLIP_NUM_PAR );
+		display_img_pc( n,
+		                x, y, images[n].base_w, images[n].base_h,
+		                rgbmap_current_tex  CLIP_NUM_PAR );
 	} // number ok
 }
 
@@ -3272,13 +3274,19 @@ static void simgraphgl_tint_rect(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 }
 
 
-static void display_img_blend_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, TextureAtlas_Texname tex, GLuint rgbmap_tex, float alpha, GLfloat x1, GLfloat y1, GLfloat x2, GLfloat y2  CLIP_NUM_DEF)
+static void display_img_blend_wc(const image_id n,
+                                 scr_coord_val xp, scr_coord_val yp,
+                                 scr_coord_val w, scr_coord_val h,
+                                 GLuint rgbmap_tex, float alpha  CLIP_NUM_DEF)
 {
-	scr_coord_val rw = w;
-	scr_coord_val rh = h;
+	TextureAtlas_Texname tex = images[n].index_tex;
+	GLfloat x1 = images[n].index_x1;
+	GLfloat y1 = images[n].index_y1;
+	GLfloat tex_w = images[n].index_tex_w;
+	GLfloat tex_h = images[n].index_tex_h;
 
-	GLfloat tex_xscale = ( x2 - x1 ) / float( rw );
-	GLfloat tex_yscale = ( y2 - y1 ) / float( rh );
+	GLfloat tex_xscale = tex_w / w;
+	GLfloat tex_yscale = tex_h / h;
 
 	const scr_coord_val xoff = clip_wh( &xp, &w, CR.clip_rect.x, CR.clip_rect.xx );
 	const scr_coord_val yoff = clip_wh( &yp, &h, CR.clip_rect.y, CR.clip_rect.yy );
@@ -3308,13 +3316,19 @@ static void display_img_blend_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 	}
 }
 
-static void display_img_blend_wc_colour(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, TextureAtlas_Texname tex, PIXVAL colour, float alpha, GLfloat x1, GLfloat y1, GLfloat x2, GLfloat y2  CLIP_NUM_DEF)
+static void display_img_blend_wc_colour(const image_id n,
+                                        scr_coord_val xp, scr_coord_val yp,
+                                        scr_coord_val w, scr_coord_val h,
+                                        PIXVAL colour, float alpha  CLIP_NUM_DEF)
 {
-	scr_coord_val rw = w;
-	scr_coord_val rh = h;
+	TextureAtlas_Texname tex = images[n].index_tex;
+	GLfloat x1 = images[n].index_x1;
+	GLfloat y1 = images[n].index_y1;
+	GLfloat tex_w = images[n].index_tex_w;
+	GLfloat tex_h = images[n].index_tex_h;
 
-	GLfloat tex_xscale = ( x2 - x1 ) / float( rw );
-	GLfloat tex_yscale = ( y2 - y1 ) / float( rh );
+	GLfloat tex_xscale = tex_w / w;
+	GLfloat tex_yscale = tex_h / h;
 
 	const scr_coord_val xoff = clip_wh( &xp, &w, CR.clip_rect.x, CR.clip_rect.xx );
 	const scr_coord_val yoff = clip_wh( &yp, &h, CR.clip_rect.y, CR.clip_rect.yy );
@@ -3349,19 +3363,32 @@ static void display_img_blend_wc_colour(scr_coord_val xp, scr_coord_val yp, scr_
 
 /* from here code for transparent images */
 
-static void display_img_alpha_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, TextureAtlas_Texname tex, GLuint rgbmap_tex, TextureAtlas_Texname alphatex, const uint8 alpha_flags, PIXVAL, GLfloat tx1, GLfloat ty1, GLfloat tx2, GLfloat ty2, GLfloat ax1, GLfloat ay1, GLfloat ax2, GLfloat ay2  CLIP_NUM_DEF )
+static void display_img_alpha_wc(const image_id n, const image_id alpha_n,
+                                 scr_coord_val xp, scr_coord_val yp,
+                                 scr_coord_val w, scr_coord_val h,
+                                 GLuint rgbmap_tex, const uint8 alpha_flags,
+                                 PIXVAL  CLIP_NUM_DEF)
 {
 	//more exact: r/g/b channel from alphatex is selected by alpha_flags
 	//to be the alpha channel for this blt.
 
-	scr_coord_val rw = w;
-	scr_coord_val rh = h;
+	TextureAtlas_Texname tex = images[n].index_tex;
+	GLfloat tx1 = images[n].index_x1;
+	GLfloat ty1 = images[n].index_y1;
+	GLfloat tw = images[n].index_tex_w;
+	GLfloat th = images[n].index_tex_h;
 
-	GLfloat txscale = ( tx2 - tx1 ) / float( rw );
-	GLfloat tyscale = ( ty2 - ty1 ) / float( rh );
+	GLfloat txscale = tw / w;
+	GLfloat tyscale = th / h;
 
-	GLfloat axscale = ( ax2 - ax1 ) / float( rw );
-	GLfloat ayscale = ( ay2 - ay1 ) / float( rh );
+	TextureAtlas_Texname alphatex = images[alpha_n].base_tex;
+	GLfloat ax1 = images[alpha_n].base_x1;
+	GLfloat ay1 = images[alpha_n].base_y1;
+	GLfloat aw = images[alpha_n].base_tex_w;
+	GLfloat ah = images[alpha_n].base_tex_h;
+
+	GLfloat axscale = aw / w;
+	GLfloat ayscale = ah / h;
 
 	const scr_coord_val xoff = clip_wh( &xp, &w, CR.clip_rect.x, CR.clip_rect.xx );
 	const scr_coord_val yoff = clip_wh( &yp, &h, CR.clip_rect.y, CR.clip_rect.yy );
@@ -3423,22 +3450,24 @@ static void simgraphgl_draw_rezoomed_img_blend(const image_id n, scr_coord_val x
 			TextureAtlas_Texname tex = getIndexImgTex( n, x1, y1, tcw, tch );
 			x2 = x1 + tcw;
 			y2 = y1 + tch;
-			display_img_blend_wc_colour( xp, yp,
+			display_img_blend_wc_colour( n,
+			                             xp, yp,
 			                             ceil( images[n].base_w * zoom ),
 			                             ceil( images[n].base_h * zoom ),
-			                             tex, color, alpha,
-			                             x1, y1, x2, y2 CLIP_NUM_PAR );
+			                             color, alpha
+			                             CLIP_NUM_PAR );
 		}
 		else {
 			GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
 			TextureAtlas_Texname tex = getIndexImgTex( n, x1, y1, tcw, tch );
 			x2 = x1 + tcw;
 			y2 = y1 + tch;
-			display_img_blend_wc( xp, yp,
+			display_img_blend_wc( n,
+			                      xp, yp,
 			                      ceil( images[n].base_w * zoom ),
 			                      ceil( images[n].base_h * zoom ),
-			                      tex, rgbmap_day_night_tex, alpha,
-			                      x1, y1, x2, y2  CLIP_NUM_PAR );
+			                      rgbmap_day_night_tex, alpha
+			                      CLIP_NUM_PAR );
 		}
 	}
 }
@@ -3468,14 +3497,12 @@ static void simgraphgl_draw_rezoomed_img_alpha(const image_id n, const image_id 
 		TextureAtlas_Texname alphatex = getBaseImgTex( alpha_n,  ax1, ay1, aw, ah );
 		ax2 = ax1 + aw;
 		ay2 = ay1 + ah;
-		display_img_alpha_wc( xp, yp,
+		display_img_alpha_wc( n, alpha_n,
+		                      xp, yp,
 		                      ceil( images[n].base_w * zoom ),
 		                      ceil( images[n].base_h * zoom ),
-		                      tex, rgbmap_day_night_tex,
-		                      alphatex, alpha_flags,
-		                      color,
-		                      tx1, ty1, tx2, ty2,
-		                      ax1, ay1, ax2, ay2  CLIP_NUM_PAR );
+		                      rgbmap_day_night_tex, alpha_flags,
+		                      color  CLIP_NUM_PAR );
 	}
 }
 
@@ -3520,21 +3547,24 @@ static void simgraphgl_draw_base_img_blend(const image_id n, scr_coord_val xp, s
 				tex = getIndexImgTex( n, x1, y1, tcw, tch );
 				x2 = x1 + tcw;
 				y2 = y1 + tch;
-				display_img_blend_wc( x, y,
-				                      images[n].base_w, images[n].base_h,
-				                      tex, rgbmap_current_tex, alpha,
-				                      x1, y1, x2, y2 CLIP_NUM_PAR );
+				display_img_blend_wc( n,
+				                      x, y,
+				                      images[n].base_w,
+				                      images[n].base_h,
+				                      rgbmap_current_tex, alpha
+				                      CLIP_NUM_PAR );
 			}
 			else {
 				GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
 				tex = getIndexImgTex( n, x1, y1, tcw, tch );
 				x2 = x1 + tcw;
 				y2 = y1 + tch;
-				display_img_blend_wc_colour( x, y,
-				                             images[n].base_w, images[n].base_h,
-				                             tex,
-				                             color, alpha,
-				                             x1, y1, x2, y2 CLIP_NUM_PAR );
+				display_img_blend_wc_colour( n,
+				                             x, y,
+				                             images[n].base_w,
+				                             images[n].base_h,
+				                             color, alpha
+				                             CLIP_NUM_PAR );
 			}
 		}
 	} // number ok
@@ -3580,13 +3610,11 @@ static void simgraphgl_draw_base_img_alpha(const image_id n, const image_id alph
 			ax2 = ax1 + aw;
 			ay2 = ay1 + ah;
 
-			display_img_alpha_wc( x, y,
+			display_img_alpha_wc( n, alpha_n,
+			                      x, y,
 			                      images[n].base_w, images[n].base_h,
-			                      tex, rgbmap_current_tex,
-			                      alphatex, alpha_flags,
-			                      color,
-			                      tx1, ty1, tx2, ty2,
-			                      ax1, ay1, ax2, ay2  CLIP_NUM_PAR );
+			                      rgbmap_current_tex, alpha_flags,
+			                      color  CLIP_NUM_PAR );
 		}
 	} // number ok
 }
