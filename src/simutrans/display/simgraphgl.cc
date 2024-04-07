@@ -1286,7 +1286,13 @@ static void build_stencil(int min_x, int min_y, int max_x, int max_y, clipping_i
 	glStencilFunc( GL_ALWAYS, 0, 1 );
 	glStencilOp( GL_KEEP, GL_KEEP, GL_REPLACE );
 
-	glClear( GL_STENCIL_BUFFER_BIT );
+//	glClear(GL_STENCIL_BUFFER_BIT);
+	glBegin( GL_QUADS );
+	glVertex2i( min_x, min_y );
+	glVertex2i( max_x, min_y );
+	glVertex2i( max_x, max_y );
+	glVertex2i( min_x, max_y );
+	glEnd();
 
 	glStencilFunc( GL_ALWAYS, 1, 1 );
 	for(  uint8 i = 0; i < cr.number_of_clips; i++  ) {
