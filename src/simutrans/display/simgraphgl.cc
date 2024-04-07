@@ -516,6 +516,11 @@ struct ArrayInfo
 	int use_ctr;
 };
 
+static GLcolorf makeColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a)
+{
+	GLcolorf c = { r, g, b, a };
+	return c;
+}
 
 struct DrawCommand
 {
@@ -1623,8 +1628,37 @@ static void scrollDrawCommands(scr_coord_val /*start_y*/, scr_coord_val /*x_offs
 	flushDrawCommands();
 }
 
-static void queueDrawCommand(DrawCommand const &cmd)
+static void queueDrawCommand(DrawCommand cmd,
+                             scr_coord_val vx1,
+                             scr_coord_val vy1,
+                             scr_coord_val vx2,
+                             scr_coord_val vy2,
+                             GLfloat tx1,
+                             GLfloat ty1,
+                             GLfloat tx2,
+                             GLfloat ty2,
+                             GLfloat ax1,
+                             GLfloat ay1,
+                             GLfloat ax2,
+                             GLfloat ay2,
+                             GLcolorf alpha,
+                             GLcolorf color)
 {
+	cmd.vx1 = vx1;
+	cmd.vy1 = vy1;
+	cmd.vx2 = vx2;
+	cmd.vy2 = vy2;
+	cmd.tx1 = tx1;
+	cmd.ty1 = ty1;
+	cmd.tx2 = tx2;
+	cmd.ty2 = ty2;
+	cmd.ax1 = ax1;
+	cmd.ay1 = ay1;
+	cmd.ax2 = ax2;
+	cmd.ay2 = ay2;
+	cmd.alpha = alpha;
+	cmd.color = color;
+
 	if(drawCommands.size() <= drawCommandsPos)
 		drawCommands.resize(drawCommandsPos+1);
 
@@ -2476,30 +2510,22 @@ static void display_img_pc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, 
 	if(  w > 0 && h > 0  ) {
 		DrawCommand cmd;
 		cmd.cr = CR;
-		cmd.vx1 = xp;
-		cmd.vy1 = yp;
-		cmd.vx2 = xp + w;
-		cmd.vy2 = yp + h;
-		cmd.tx1 = x1 + xoff / float( rw ) * ( x2 - x1 );
-		cmd.ty1 = y1 + yoff / float( rh ) * ( y2 - y1 );
-		cmd.tx2 = x1 + ( xoff + w ) / float( rw ) * ( x2 - x1 );
-		cmd.ty2 = y1 + ( yoff + h ) / float( rh ) * ( y2 - y1 );
-		cmd.ax1 = 0;
-		cmd.ay1 = 0;
-		cmd.ax2 = 0;
-		cmd.ay2 = 0;
 		cmd.tex = tex;
 		cmd.rgbmap_tex = rgbmap_tex;
 		cmd.alphatex = 0;
-		cmd.alpha.r = 0;
-		cmd.alpha.g = 0;
-		cmd.alpha.b = 0;
-		cmd.alpha.a = 1;
-		cmd.color.r = 0;
-		cmd.color.g = 0;
-		cmd.color.b = 0;
-		cmd.color.a = 0;
-		queueDrawCommand( cmd );
+		queueDrawCommand( cmd,
+		                  xp,
+		                  yp,
+		                  xp + w,
+		                  yp + h,
+		                  x1 + xoff / float( rw ) * ( x2 - x1 ),
+		                  y1 + yoff / float( rh ) * ( y2 - y1 ),
+		                  x1 + ( xoff + w ) / float( rw ) * ( x2 - x1 ),
+		                  y1 + ( yoff + h ) / float( rh ) * ( y2 - y1 ),
+		                  0, 0, 0, 0,
+		                  makeColor( 0, 0, 0, 1 ),
+		                  makeColor( 0, 0, 0, 0 )
+		                );
 	}
 }
 
@@ -2879,27 +2905,22 @@ void display_blend_wh_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, s
 		cmd.tex = 0;
 		cmd.rgbmap_tex = 0;
 		cmd.alphatex = 0;
-		cmd.tx1 = xoff / float( rw );
-		cmd.ty1 = yoff / float( rh );
-		cmd.tx2 = ( xoff + w ) / float( rw );
-		cmd.ty2 = ( yoff + h ) / float( rh );
-		cmd.ax1 = 0;
-		cmd.ay1 = 0;
-		cmd.ax2 = 0;
-		cmd.ay2 = 0;
-		cmd.vx1 = xp;
-		cmd.vy1 = yp;
-		cmd.vx2 = xp + w;
-		cmd.vy2 = yp + h;
-		cmd.alpha.r = 0;
-		cmd.alpha.g = 0;
-		cmd.alpha.b = 0;
-		cmd.alpha.a = alpha;
-		cmd.color.r = ( colval & 0xf800 ) / float( 0xf800 );
-		cmd.color.g = ( colval & 0x07e0 ) / float( 0x07e0 );
-		cmd.color.b = ( colval & 0x001f ) / float( 0x001f );
-		cmd.color.a = 1.0;
-		queueDrawCommand( cmd );
+		queueDrawCommand( cmd,
+		                  xp,
+		                  yp,
+		                  xp + w,
+		                  yp + h,
+		                  xoff / float( rw ),
+		                  yoff / float( rh ),
+		                  ( xoff + w ) / float( rw ),
+		                  ( yoff + h ) / float( rh ),
+		                  0, 0, 0, 0,
+		                  makeColor( 0, 0, 0, alpha ),
+		                  makeColor( ( colval & 0xf800 ) / float( 0xf800 ),
+		                             ( colval & 0x07e0 ) / float( 0x07e0 ),
+		                             ( colval & 0x001f ) / float( 0x001f ),
+		                             1.0 )
+		                );
 	}
 }
 
@@ -2916,29 +2937,20 @@ static void display_img_blend_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 		cmd.tex = tex;
 		cmd.rgbmap_tex = rgbmap_tex;
 		cmd.alphatex = 0;
-		cmd.alpha.r = 0;
-		cmd.alpha.g = 0;
-		cmd.alpha.b = 0;
-		cmd.alpha.a = alpha;
-		cmd.color.r = 0;
-		cmd.color.g = 0;
-		cmd.color.b = 0;
-		cmd.color.a = 0;
 		cmd.cr.number_of_clips = 0;
-		cmd.tx1 = x1 + xoff / float( rw ) * ( x2 - x1 );
-		cmd.ty1 = y1 + yoff / float( rh ) * ( y2 - y1 );
-		cmd.tx2 = x1 + ( xoff + w ) / float( rw ) * ( x2 - x1 );
-		cmd.ty2 = y1 + ( yoff + h ) / float( rh ) * ( y2 - y1 );
-		cmd.ax1 = 0;
-		cmd.ay1 = 0;
-		cmd.ax2 = 0;
-		cmd.ay2 = 0;
-		cmd.vx1 = xp;
-		cmd.vy1 = yp;
-		cmd.vx2 = xp + w;
-		cmd.vy2 = yp + h;
-
-		queueDrawCommand( cmd );
+		queueDrawCommand( cmd,
+		                  xp,
+		                  yp,
+		                  xp + w,
+		                  yp + h,
+		                  x1 + xoff / float( rw ) * ( x2 - x1 ),
+		                  y1 + yoff / float( rh ) * ( y2 - y1 ),
+		                  x1 + ( xoff + w ) / float( rw ) * ( x2 - x1 ),
+		                  y1 + ( yoff + h ) / float( rh ) * ( y2 - y1 ),
+		                  0, 0, 0, 0,
+		                  makeColor( 0, 0, 0, alpha ),
+		                  makeColor( 0, 0, 0, 0 )
+		                );
 	}
 }
 
@@ -2954,29 +2966,23 @@ static void display_img_blend_wc_colour(scr_coord_val xp, scr_coord_val yp, scr_
 		cmd.tex = tex;
 		cmd.rgbmap_tex = 0;
 		cmd.alphatex = 0;
-		cmd.alpha.r = 0;
-		cmd.alpha.g = 0;
-		cmd.alpha.b = 0;
-		cmd.alpha.a = alpha;
-		cmd.color.r = ( colour & 0xf800 ) / float( 0xf800 );
-		cmd.color.g = ( colour & 0x07e0 ) / float( 0x07e0 );
-		cmd.color.b = ( colour & 0x001f ) / float( 0x001f );
-		cmd.color.a = 1.0;
 		cmd.cr.number_of_clips = 0;
-		cmd.tx1 = x1 + xoff / float( rw ) * ( x2 - x1 );
-		cmd.ty1 = y1 + yoff / float( rh ) * ( y2 - y1 );
-		cmd.tx2 = x1 + ( xoff + w ) / float( rw ) * ( x2 - x1 );
-		cmd.ty2 = y1 + ( yoff + h ) / float( rh ) * ( y2 - y1 );
-		cmd.ax1 = 0;
-		cmd.ay1 = 0;
-		cmd.ax2 = 0;
-		cmd.ay2 = 0;
-		cmd.vx1 = xp;
-		cmd.vy1 = yp;
-		cmd.vx2 = xp + w;
-		cmd.vy2 = yp + h;
-
-		queueDrawCommand( cmd );
+		queueDrawCommand( cmd,
+		                  xp,
+		                  yp,
+		                  xp + w,
+		                  yp + h,
+		                  x1 + xoff / float( rw ) * ( x2 - x1 ),
+		                  y1 + yoff / float( rh ) * ( y2 - y1 ),
+		                  x1 + ( xoff + w ) / float( rw ) * ( x2 - x1 ),
+		                  y1 + ( yoff + h ) / float( rh ) * ( y2 - y1 ),
+		                  0, 0, 0, 0,
+		                  makeColor( 0, 0, 0, alpha ),
+		                  makeColor( ( colour & 0xf800 ) / float( 0xf800 ),
+		                             ( colour & 0x07e0 ) / float( 0x07e0 ),
+		                             ( colour & 0x001f ) / float( 0x001f ),
+		                             1.0 )
+		                );
 	}
 }
 
@@ -2999,27 +3005,25 @@ static void display_img_alpha_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 		cmd.rgbmap_tex = rgbmap_tex;
 		cmd.alphatex = alphatex;
 		//todo: someone please explain to me why there is 2.0 needed here
-		cmd.alpha.r = ( alpha_flags & ALPHA_RED ) ? 2.0 : 0.0;
-		cmd.alpha.g = ( alpha_flags & ALPHA_GREEN ) ? 2.0 : 0.0;
-		cmd.alpha.b = ( alpha_flags & ALPHA_BLUE ) ? 1.0 : 0.0;
-		cmd.alpha.a = 0;
-		cmd.color.r = 0;
-		cmd.color.g = 0;
-		cmd.color.b = 0;
-		cmd.color.a = 0;
-		cmd.tx1 = tx1 + xoff / float( rw ) * ( tx2 - tx1 );
-		cmd.ty1 = ty1 + yoff / float( rh ) * ( ty2 - ty1 );
-		cmd.tx2 = tx1 + ( xoff + w ) / float( rw ) * ( tx2 - tx1 );
-		cmd.ty2 = ty1 + ( yoff + h ) / float( rh ) * ( ty2 - ty1 );
-		cmd.ax1 = ax1 + xoff / float( rw ) * ( ax2 - ax1 );
-		cmd.ay1 = ay1 + yoff / float( rh ) * ( ay2 - ay1 );
-		cmd.ax2 = ax1 + ( xoff + w ) / float( rw ) * ( ax2 - ax1 );
-		cmd.ay2 = ay1 + ( yoff + h ) / float( rh ) * ( ay2 - ay1 );
-		cmd.vx1 = xp;
-		cmd.vy1 = yp;
-		cmd.vx2 = xp + w;
-		cmd.vy2 = yp + h;
-		queueDrawCommand( cmd );
+		queueDrawCommand( cmd,
+		                  xp,
+		                  yp,
+		                  xp + w,
+		                  yp + h,
+		                  tx1 + xoff / float( rw ) * ( tx2 - tx1 ),
+		                  ty1 + yoff / float( rh ) * ( ty2 - ty1 ),
+		                  tx1 + ( xoff + w ) / float( rw ) * ( tx2 - tx1 ),
+		                  ty1 + ( yoff + h ) / float( rh ) * ( ty2 - ty1 ),
+		                  ax1 + xoff / float( rw ) * ( ax2 - ax1 ),
+		                  ay1 + yoff / float( rh ) * ( ay2 - ay1 ),
+		                  ax1 + ( xoff + w ) / float( rw ) * ( ax2 - ax1 ),
+		                  ay1 + ( yoff + h ) / float( rh ) * ( ay2 - ay1 ),
+		                  makeColor( ( alpha_flags & ALPHA_RED ) ? 2.0 : 0.0,
+		                             ( alpha_flags & ALPHA_GREEN ) ? 2.0 : 0.0,
+		                             ( alpha_flags & ALPHA_BLUE ) ? 1.0 : 0.0,
+		                             0 ),
+		                  makeColor( 0, 0, 0, 0 )
+		                );
 	}
 }
 
@@ -3251,27 +3255,19 @@ static void display_pixel(scr_coord_val x, scr_coord_val y, PIXVAL color)
 		cmd.tex = 0;
 		cmd.rgbmap_tex = 0;
 		cmd.alphatex = 0;
-		cmd.alpha.r = 0;
-		cmd.alpha.g = 0;
-		cmd.alpha.b = 0;
-		cmd.alpha.a = 1;
-		cmd.color.r = ( color & 0xf800 ) / float( 0x10000 );
-		cmd.color.g = ( color & 0x07e0 ) / float( 0x00800 );
-		cmd.color.b = ( color & 0x001f ) / float( 0x00020 );
-		cmd.color.a = 1;
-		cmd.tx1 = 0;
-		cmd.ty1 = 0;
-		cmd.tx2 = 0;
-		cmd.ty2 = 0;
-		cmd.ax1 = 0;
-		cmd.ay1 = 0;
-		cmd.ax2 = 0;
-		cmd.ay2 = 0;
-		cmd.vx1 = x;
-		cmd.vy1 = y;
-		cmd.vx2 = x + 1;
-		cmd.vy2 = y + 1;
-		queueDrawCommand( cmd );
+		queueDrawCommand( cmd,
+		                  x,
+		                  y,
+		                  x + 1,
+		                  y + 1,
+		                  0, 0, 0, 0,
+		                  0, 0, 0, 0,
+		                  makeColor( 0, 0, 0, 1 ),
+		                  makeColor( ( color & 0xf800 ) / float( 0x10000 ),
+		                             ( color & 0x07e0 ) / float( 0x00800 ),
+		                             ( color & 0x001f ) / float( 0x00020 ),
+		                             1 )
+		                );
 	}
 }
 
@@ -3287,27 +3283,19 @@ static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_va
 		cmd.tex = 0;
 		cmd.rgbmap_tex = 0;
 		cmd.alphatex = 0;
-		cmd.alpha.r = 0;
-		cmd.alpha.g = 0;
-		cmd.alpha.b = 0;
-		cmd.alpha.a = 1;
-		cmd.color.r = ( colval & 0xf800 ) / float( 0xf800 );
-		cmd.color.g = ( colval & 0x07e0 ) / float( 0x07e0 );
-		cmd.color.b = ( colval & 0x001f ) / float( 0x001f );
-		cmd.color.a = 1;
-		cmd.tx1 = 0;
-		cmd.ty1 = 0;
-		cmd.tx2 = 0;
-		cmd.ty2 = 0;
-		cmd.ax1 = 0;
-		cmd.ay1 = 0;
-		cmd.ax2 = 0;
-		cmd.ay2 = 0;
-		cmd.vx1 = xp;
-		cmd.vy1 = yp;
-		cmd.vx2 = xp + w;
-		cmd.vy2 = yp + h;
-		queueDrawCommand( cmd );
+		queueDrawCommand( cmd,
+		                  xp,
+		                  yp,
+		                  xp + w,
+		                  yp + h,
+		                  0, 0, 0, 0,
+		                  0, 0, 0, 0,
+		                  makeColor( 0, 0, 0, 1 ),
+		                  makeColor( ( colval & 0xf800 ) / float( 0xf800 ),
+		                             ( colval & 0x07e0 ) / float( 0x07e0 ),
+		                             ( colval & 0x001f ) / float( 0x001f ),
+		                             1 )
+		                );
 	}
 }
 
@@ -3345,27 +3333,19 @@ static void display_vl_internal(const scr_coord_val xp, scr_coord_val yp, scr_co
 		cmd.tex = 0;
 		cmd.rgbmap_tex = 0;
 		cmd.alphatex = 0;
-		cmd.alpha.r = 0;
-		cmd.alpha.g = 0;
-		cmd.alpha.b = 0;
-		cmd.alpha.a = 1;
-		cmd.color.r = ( colval & 0xf800 ) / float( 0xf800 );
-		cmd.color.g = ( colval & 0x07e0 ) / float( 0x07e0 );
-		cmd.color.b = ( colval & 0x001f ) / float( 0x001f );
-		cmd.color.a = 1;
-		cmd.tx1 = 0;
-		cmd.ty1 = 0;
-		cmd.tx2 = 0;
-		cmd.ty2 = 0;
-		cmd.ax1 = 0;
-		cmd.ay1 = 0;
-		cmd.ax2 = 0;
-		cmd.ay2 = 0;
-		cmd.vx1 = xp;
-		cmd.vy1 = yp;
-		cmd.vx2 = xp + 1;
-		cmd.vy2 = yp + h;
-		queueDrawCommand( cmd );
+		queueDrawCommand( cmd,
+		                  xp,
+		                  yp,
+		                  xp + 1,
+		                  yp + h,
+		                  0, 0, 0, 0,
+		                  0, 0, 0, 0,
+		                  makeColor( 0, 0, 0, 1 ),
+		                  makeColor( ( colval & 0xf800 ) / float( 0xf800 ),
+		                             ( colval & 0x07e0 ) / float( 0x07e0 ),
+		                             ( colval & 0x001f ) / float( 0x001f ),
+		                             1 )
+		                );
 	}
 }
 
@@ -3402,27 +3382,19 @@ void display_array_wh(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_c
 		cmd.tex = texname;
 		cmd.rgbmap_tex = 0;
 		cmd.alphatex = 0;
-		cmd.alpha.r = 0;
-		cmd.alpha.g = 0;
-		cmd.alpha.b = 0;
-		cmd.alpha.a = 1;
-		cmd.color.r = 0;
-		cmd.color.g = 0;
-		cmd.color.b = 0;
-		cmd.color.a = 0.5;
-		cmd.tx1 = tcx + xoff / float( arr_w ) * tcw;
-		cmd.ty1 = tcy + yoff / float( arr_h ) * tch;
-		cmd.tx2 = tcx + ( xoff + w ) / float( arr_w ) * tcw;
-		cmd.ty2 = tcy + ( yoff + h ) / float( arr_h ) * tch;
-		cmd.ax1 = 0;
-		cmd.ay1 = 0;
-		cmd.ax2 = 0;
-		cmd.ay2 = 0;
-		cmd.vx1 = xp;
-		cmd.vy1 = yp;
-		cmd.vx2 = xp + w;
-		cmd.vy2 = yp + h;
-		queueDrawCommand( cmd );
+		queueDrawCommand( cmd,
+		                  xp,
+		                  yp,
+		                  xp + w,
+		                  yp + h,
+		                  tcx + xoff / float( arr_w ) * tcw,
+		                  tcy + yoff / float( arr_h ) * tch,
+		                  tcx + ( xoff + w ) / float( arr_w ) * tcw,
+		                  tcy + ( yoff + h ) / float( arr_h ) * tch,
+		                  0, 0, 0, 0,
+		                  makeColor( 0, 0, 0, 1 ),
+		                  makeColor( 0, 0, 0, 0.5 )
+		                );
 	}
 }
 
@@ -3730,27 +3702,22 @@ scr_coord_val display_text_proportional_len_clip_rgb(scr_coord_val x, scr_coord_
 				cmd.tex = texname;
 				cmd.rgbmap_tex = 0;
 				cmd.alphatex = 0;
-				cmd.alpha.r = 0;
-				cmd.alpha.g = 0;
-				cmd.alpha.b = 0;
-				cmd.alpha.a = 1;
-				cmd.color.r = ( color & 0xf800 ) / float( 0xf800 );
-				cmd.color.g = ( color & 0x07e0 ) / float( 0x07e0 );
-				cmd.color.b = ( color & 0x001f ) / float( 0x001f );
-				cmd.color.a = 1;
-				cmd.tx1 = glx + tx / float( rw ) * glw;
-				cmd.ty1 = gly + ty / float( rh ) * glh;
-				cmd.tx2 = glx + ( tx + w ) / float( rw ) * glw;
-				cmd.ty2 = gly + ( ty + h ) / float( rh ) * glh;
-				cmd.ax1 = 0;
-				cmd.ay1 = 0;
-				cmd.ax2 = 0;
-				cmd.ay2 = 0;
-				cmd.vx1 = sx;
-				cmd.vy1 = sy;
-				cmd.vx2 = sx + w;
-				cmd.vy2 = sy + h;
-				queueDrawCommand( cmd );
+				queueDrawCommand( cmd,
+				                  sx,
+				                  sy,
+				                  sx + w,
+				                  sy + h,
+				                  glx + tx / float( rw ) * glw,
+				                  gly + ty / float( rh ) * glh,
+				                  glx + ( tx + w ) / float( rw ) * glw,
+				                  gly + ( ty + h ) / float( rh ) * glh,
+				                  0, 0, 0, 0,
+				                  makeColor( 0, 0, 0, 1 ),
+				                  makeColor( ( color & 0xf800 ) / float( 0xf800 ),
+				                             ( color & 0x07e0 ) / float( 0x07e0 ),
+				                             ( color & 0x001f ) / float( 0x001f ),
+				                             1 )
+				                );
 			}
 		}
 
