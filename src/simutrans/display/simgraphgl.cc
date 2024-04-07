@@ -1630,6 +1630,40 @@ static int simgraphgl_zoom_factor_down()
 	return false;
 }
 
+static void setupCombinedShader()
+{
+	glUseProgram( combined_program );
+
+	//this tells opengl which texture object to use
+	//these cannot be moved into vertex attributes until
+	//bindless textures are available
+	glUniform1i( combined_s_texColor_Location, 0 );
+	glUniform1i( combined_s_texRGBMap_Location, 1 );
+	glUniform1i( combined_s_texAlpha_Location, 2 );
+
+	//the rest should be vertex attributes.
+
+	glEnable( GL_BLEND );
+	glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+
+	glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, gl_indices_buffer_name );
+	glBindBuffer( GL_ARRAY_BUFFER, gl_vertices_buffer_name );
+
+	glEnableClientState( GL_VERTEX_ARRAY );
+	glVertexPointer( 2, GL_SHORT, sizeof(Vertex), (void *)offsetof( Vertex, vertex ) );
+	glClientActiveTexture( GL_TEXTURE0 );
+	glEnableClientState( GL_TEXTURE_COORD_ARRAY );
+	glTexCoordPointer( 2, GL_FLOAT, sizeof(Vertex), (void *)offsetof( Vertex, texcoord ) );
+	glClientActiveTexture( GL_TEXTURE1 );
+	glEnableClientState( GL_TEXTURE_COORD_ARRAY );
+	glTexCoordPointer( 2, GL_FLOAT, sizeof(Vertex), (void *)offsetof( Vertex, alphacoord ) );
+	glEnableClientState( GL_COLOR_ARRAY );
+	glColorPointer( 4, GL_FLOAT, sizeof(Vertex), (void *)offsetof( Vertex, color ) );
+
+	glEnableVertexAttribArray( combined_a_alphaMask_Location );
+	glVertexAttribPointer( combined_a_alphaMask_Location, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof( Vertex, alpha ) );
+}
+
 static void setupCopyShader()
 {
 
@@ -1646,6 +1680,19 @@ static void setupCopyShader()
 	glVertexAttribPointer( copy_a_position_Location, 2, GL_FLOAT, GL_FALSE, sizeof(CopyVertex), (void *)offsetof( CopyVertex, vx1 ) );
 	glEnableVertexAttribArray( copy_a_color_coord_Location );
 	glVertexAttribPointer( copy_a_color_coord_Location, 2, GL_FLOAT, GL_FALSE, sizeof(CopyVertex), (void *)offsetof( CopyVertex, tx1 ) );
+}
+
+static void disableShaders()
+{
+	glDisableClientState( GL_VERTEX_ARRAY );
+	glClientActiveTexture( GL_TEXTURE1 );
+	glDisableClientState( GL_TEXTURE_COORD_ARRAY );
+	glClientActiveTexture( GL_TEXTURE0 );
+	glDisableClientState( GL_TEXTURE_COORD_ARRAY );
+	glDisableClientState( GL_COLOR_ARRAY );
+	glDisableVertexAttribArray( combined_a_alphaMask_Location );
+
+	glUseProgram( 0 );
 }
 
 static void disableCopyShader()
@@ -1749,23 +1796,6 @@ static void flushDrawCommands()
 		return;
 	}
 
-	glUseProgram( combined_program );
-
-	//this tells opengl which texture object to use
-	//these cannot be moved into vertex attributes until
-	//bindless textures are available
-	glUniform1i( combined_s_texColor_Location, 0 );
-	glUniform1i( combined_s_texRGBMap_Location, 1 );
-	glUniform1i( combined_s_texAlpha_Location, 2 );
-
-	//the rest should be vertex attributes.
-
-	glEnable( GL_BLEND );
-	glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-
-	glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, gl_indices_buffer_name );
-	glBindBuffer( GL_ARRAY_BUFFER, gl_vertices_buffer_name );
-
 	std::vector<Vertex> vertices;
 	vertices.reserve( drawCommands.size() * 4 );
 
@@ -1806,19 +1836,7 @@ static void flushDrawCommands()
 		vertices.emplace_back( v );
 	}
 
-	glEnableClientState( GL_VERTEX_ARRAY );
-	glVertexPointer( 2, GL_SHORT, sizeof(Vertex), (void *)offsetof( Vertex, vertex ) );
-	glClientActiveTexture( GL_TEXTURE0 );
-	glEnableClientState( GL_TEXTURE_COORD_ARRAY );
-	glTexCoordPointer( 2, GL_FLOAT, sizeof(Vertex), (void *)offsetof( Vertex, texcoord ) );
-	glClientActiveTexture( GL_TEXTURE1 );
-	glEnableClientState( GL_TEXTURE_COORD_ARRAY );
-	glTexCoordPointer( 2, GL_FLOAT, sizeof(Vertex), (void *)offsetof( Vertex, alphacoord ) );
-	glEnableClientState( GL_COLOR_ARRAY );
-	glColorPointer( 4, GL_FLOAT, sizeof(Vertex), (void *)offsetof( Vertex, color ) );
-
-	glEnableVertexAttribArray( combined_a_alphaMask_Location );
-	glVertexAttribPointer( combined_a_alphaMask_Location, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof( Vertex, alpha ) );
+	setupCombinedShader();
 
 	auto b = drawCommands.begin();
 	auto e = b;
@@ -1834,15 +1852,7 @@ static void flushDrawCommands()
 
 	drawCommands.clear();
 
-	glDisableClientState( GL_VERTEX_ARRAY );
-	glClientActiveTexture( GL_TEXTURE1 );
-	glDisableClientState( GL_TEXTURE_COORD_ARRAY );
-	glClientActiveTexture( GL_TEXTURE0 );
-	glDisableClientState( GL_TEXTURE_COORD_ARRAY );
-	glDisableClientState( GL_COLOR_ARRAY );
-	glDisableVertexAttribArray( combined_a_alphaMask_Location );
-
-	glUseProgram( 0 );
+	disableShaders();
 
 	glActiveTextureARB( GL_TEXTURE2_ARB );
 	glDisable( GL_TEXTURE_2D );
