@@ -1428,6 +1428,7 @@ static void runDrawCommand(DrawCommand const &cmd, GLint vertex_first, GLint ver
 }
 
 static std::vector<DrawCommand> drawCommands;
+static unsigned int drawCommandsPos = 0;
 
 static void flushDrawCommands(std::vector<DrawCommand>::iterator begin,
                               std::vector<DrawCommand>::iterator end,
@@ -1492,7 +1493,7 @@ static void flushDrawCommands(std::vector<DrawCommand>::iterator begin,
 
 static void flushDrawCommands()
 {
-	if(  drawCommands.empty()  ) {
+	if(  drawCommandsPos == 0  ) {
 		return;
 	}
 
@@ -1571,8 +1572,8 @@ static void flushDrawCommands()
 	auto e = b;
 	unsigned int bno = 0;
 	unsigned int eno = bno;
-	while(  b != drawCommands.end()  ) {
-		for(  unsigned int i = 0; e != drawCommands.end() && i < gl_max_commands; i++, e++, eno++  ) {
+	while(  b != drawCommands.end() && bno < drawCommandsPos  ) {
+		for(  unsigned int i = 0; e != drawCommands.end() && i < gl_max_commands && eno < drawCommandsPos; i++, e++, eno++  ) {
 		}
 		flushDrawCommands( b, e,
 		                   vertices.data() + bno * 4, ( eno - bno ) * 4 );
@@ -1580,7 +1581,7 @@ static void flushDrawCommands()
 		bno = eno;
 	}
 
-	drawCommands.clear();
+	drawCommandsPos = 0;
 
 	glDisableClientState( GL_VERTEX_ARRAY );
 	glClientActiveTexture( GL_TEXTURE1 );
@@ -1607,7 +1608,11 @@ static void scrollDrawCommands(scr_coord_val /*start_y*/, scr_coord_val /*x_offs
 
 static void queueDrawCommand(DrawCommand const &cmd)
 {
-	drawCommands.push_back( cmd );
+	if(drawCommands.size() <= drawCommandsPos)
+		drawCommands.resize(drawCommandsPos+1);
+
+	drawCommands[drawCommandsPos] = cmd;
+	drawCommandsPos++;
 }
 
 static void updateRGBMap(GLuint &tex, PIXVAL *rgbmap, uint64_t code)
@@ -4413,6 +4418,8 @@ bool simgraph_init(scr_size window_size, sint16 full_screen)
 	glBufferData( GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLushort), indices.data(), GL_STATIC_DRAW );
 
 	glGenBuffers( 1, &gl_vertices_buffer_name );
+
+	drawCommandsPos = 0;
 
 	dbg->message( "simgraph_init", "Init done." );
 	fflush( NULL );
