@@ -701,6 +701,13 @@ static uint8 player_day=0xFF;
 static int light_level = 0;
 static int night_shift = -1;
 
+/*
+ * gl buffers
+ */
+static int const gl_max_commands = 16384;
+static GLuint gl_indices_buffer_name;
+static GLuint gl_vertices_buffer_name;
+
 
 /*
  * special colors during daytime
@@ -1424,65 +1431,10 @@ static std::vector<DrawCommand> drawCommands;
 
 static void flushDrawCommands(std::vector<DrawCommand>::iterator begin,
                               std::vector<DrawCommand>::iterator end,
-                              std::vector<Vertex> &vertices,
-                              std::vector<GLushort> &indices)
+                              Vertex *vertices, size_t vertices_count)
 {
-	vertices.clear();
-	indices.clear();
-	for(  auto it = begin; it != end; it++  ) {
-		if(  it != begin  ) {
-			//readd the previous vertices to make the triangles invalid
-			//this results in the last valid tri being -3,-2,-1
-			//then follow -2,-1,-1; -1,-1,0; -1,0,0; 0,0,1
-			//then the first valid tri again: 0,1,2
-
-			indices.push_back( vertices.size() - 1 );
-			indices.push_back( vertices.size() );
-		}
-
-		Vertex v;
-		v.alpha.glcolor = it->alpha;
-		v.color.glcolor = it->color;
-		v.texcoord.x = it->tx1;
-		v.texcoord.y = it->ty1;
-		v.alphacoord.x = it->ax1;
-		v.alphacoord.y = it->ay1;
-		v.vertex.x = it->vx1;
-		v.vertex.y = it->vy1;
-		indices.push_back( vertices.size() );
-		vertices.push_back( v );
-
-		v.texcoord.x = it->tx2;
-		v.texcoord.y = it->ty1;
-		v.alphacoord.x = it->ax2;
-		v.alphacoord.y = it->ay1;
-		v.vertex.x = it->vx2;
-		v.vertex.y = it->vy1;
-		indices.push_back( vertices.size() );
-		vertices.push_back( v );
-
-		v.texcoord.x = it->tx1;
-		v.texcoord.y = it->ty2;
-		v.alphacoord.x = it->ax1;
-		v.alphacoord.y = it->ay2;
-		v.vertex.x = it->vx1;
-		v.vertex.y = it->vy2;
-		indices.push_back( vertices.size() );
-		vertices.push_back( v );
-
-		v.texcoord.x = it->tx2;
-		v.texcoord.y = it->ty2;
-		v.alphacoord.x = it->ax2;
-		v.alphacoord.y = it->ay2;
-		v.vertex.x = it->vx2;
-		v.vertex.y = it->vy2;
-		indices.push_back( vertices.size() );
-		vertices.push_back( v );
-	}
 	//when keeping the buffer around, we want GL_DYNAMIC_DRAW.
-	glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_DYNAMIC_DRAW );
-
-	glBufferData( GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLushort), indices.data(), GL_DYNAMIC_DRAW );
+	glBufferData( GL_ARRAY_BUFFER, vertices_count * sizeof(Vertex), vertices, GL_DYNAMIC_DRAW );
 
 	int vertex_current = 0;
 
@@ -1558,24 +1510,47 @@ static void flushDrawCommands()
 	glEnable( GL_BLEND );
 	glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
 
-	GLuint vertices_name;
-	GLuint indices_name;
-
-	glGenBuffers( 1, &vertices_name );
-	glGenBuffers( 1, &indices_name );
-	glBindBuffer( GL_ARRAY_BUFFER, vertices_name );
-	glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, indices_name );
+	glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, gl_indices_buffer_name );
+	glBindBuffer( GL_ARRAY_BUFFER, gl_vertices_buffer_name );
 
 	std::vector<Vertex> vertices;
-	std::vector<GLushort> indices;
-	int const max_commands = 16384;
-	if(  drawCommands.size() > max_commands  ) {
-		vertices.reserve( max_commands * 4 );
-		indices.reserve( max_commands * 6 - 2 );
-	}
-	else {
-		vertices.reserve( drawCommands.size() * 4 );
-		indices.reserve( drawCommands.size() * 6 - 2 );
+	vertices.reserve( drawCommands.size() * 4 );
+
+	for(  auto it = drawCommands.begin(); it != drawCommands.end(); it++  ) {
+		Vertex v;
+		v.alpha.glcolor = it->alpha;
+		v.color.glcolor = it->color;
+		v.texcoord.x = it->tx1;
+		v.texcoord.y = it->ty1;
+		v.alphacoord.x = it->ax1;
+		v.alphacoord.y = it->ay1;
+		v.vertex.x = it->vx1;
+		v.vertex.y = it->vy1;
+		vertices.push_back( v );
+
+		v.texcoord.x = it->tx2;
+		v.texcoord.y = it->ty1;
+		v.alphacoord.x = it->ax2;
+		v.alphacoord.y = it->ay1;
+		v.vertex.x = it->vx2;
+		v.vertex.y = it->vy1;
+		vertices.push_back( v );
+
+		v.texcoord.x = it->tx1;
+		v.texcoord.y = it->ty2;
+		v.alphacoord.x = it->ax1;
+		v.alphacoord.y = it->ay2;
+		v.vertex.x = it->vx1;
+		v.vertex.y = it->vy2;
+		vertices.push_back( v );
+
+		v.texcoord.x = it->tx2;
+		v.texcoord.y = it->ty2;
+		v.alphacoord.x = it->ax2;
+		v.alphacoord.y = it->ay2;
+		v.vertex.x = it->vx2;
+		v.vertex.y = it->vy2;
+		vertices.push_back( v );
 	}
 
 	glEnableClientState( GL_VERTEX_ARRAY );
@@ -1594,12 +1569,15 @@ static void flushDrawCommands()
 
 	auto b = drawCommands.begin();
 	auto e = b;
+	unsigned int bno = 0;
+	unsigned int eno = bno;
 	while(  b != drawCommands.end()  ) {
-		for(  unsigned int i = 0; e != drawCommands.end() && i < max_commands; i++, e++  ) {
+		for(  unsigned int i = 0; e != drawCommands.end() && i < gl_max_commands; i++, e++, eno++  ) {
 		}
 		flushDrawCommands( b, e,
-		                   vertices, indices );
+		                   vertices.data() + bno * 4, ( eno - bno ) * 4 );
 		b = e;
+		bno = eno;
 	}
 
 	drawCommands.clear();
@@ -1611,9 +1589,6 @@ static void flushDrawCommands()
 	glDisableClientState( GL_TEXTURE_COORD_ARRAY );
 	glDisableClientState( GL_COLOR_ARRAY );
 	glDisableVertexAttribArray( combined_a_alphaMask_Location );
-
-	glDeleteBuffers( 1, &vertices_name );
-	glDeleteBuffers( 1, &indices_name );
 
 	glUseProgram( 0 );
 
@@ -1632,7 +1607,7 @@ static void scrollDrawCommands(scr_coord_val /*start_y*/, scr_coord_val /*x_offs
 
 static void queueDrawCommand(DrawCommand const &cmd)
 {
-	drawCommands.push_back(cmd);
+	drawCommands.push_back( cmd );
 }
 
 static void updateRGBMap(GLuint &tex, PIXVAL *rgbmap, uint64_t code)
@@ -2300,7 +2275,8 @@ static GLuint getArrayTex(const PIXVAL *arr, scr_coord_val w, scr_coord_val h,
 			uint64_t hash = tex_hash( arr, byte_size );
 			if(  hash == it->second.hash  ) {
 				it->second.use_ctr++;
-				return rgbaatlas.getTexture( (uintptr_t)arr, tcx, tcy, tcw, tch );
+				GLuint tex = rgbaatlas.getTexture( (uintptr_t)arr, tcx, tcy, tcw, tch );
+				return tex;
 			}
 			else {
 				it->second.hash = hash;
@@ -2414,12 +2390,12 @@ static GLuint getGlyphTex(uint32_t c, const font_t *fnt,
 			alpha = 0xff;
 		}
 		else {
-			alpha = ( alpha * 0x21 ) / 4;
+			alpha = (alpha * 0x21) / 4;
 		}
 		*p++ = alpha;
 	}
 
-	glTexSubImage2D( GL_TEXTURE_2D, 0,
+	glTexSubImage2D( GL_TEXTURE_2D,0,
 	                 tex_x, tex_y,
 	                 glyph_width, glyph_height, GL_ALPHA, GL_UNSIGNED_BYTE,
 	                 tmp );
@@ -3044,7 +3020,7 @@ void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_va
 
 void display_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const unsigned alpha_flags, scr_coord_val xp, scr_coord_val yp, const sint8 /*player_nr*/, const FLAGGED_PIXVAL color_index, const bool /*daynight*/, const bool /*dirty*/  CLIP_NUM_DEF)
 {
-	if(  n < images.size() && alpha_n < images.size()  ) {
+	if(  n < images.size()  &&  alpha_n < images.size()  ) {
 		// need to go to nightmode and or rezoomed?
 		rezoom_img( n );
 		rezoom_img( alpha_n );
@@ -4357,33 +4333,6 @@ bool simgraph_init(scr_size window_size, sint16 full_screen)
 	dr_textur_init();
 	inited = true;
 
-	// init, load, and check fonts
-	if(  !display_load_font( env_t::fontname.c_str() )  ) {
-		env_t::fontname = dr_get_system_font();
-		if(  !display_load_font( env_t::fontname.c_str() )  ) {
-			env_t::fontname = FONT_PATH_X "cyr.bdf";
-			if(  !display_load_font( env_t::fontname.c_str() )  ) {
-				dr_fatal_notify( "No fonts found!" );
-				return false;
-			}
-		}
-	}
-
-	// init player colors
-	for(  int i = 0; i < MAX_PLAYER_COUNT; i++  ) {
-		player_offsets[i][0] = i * 8;
-		player_offsets[i][1] = i * 8 + 24;
-	}
-
-	display_set_clip_wh( 0, 0, disp_width, disp_height );
-
-	// Calculate daylight rgbmap and save it for unshaded tile drawing
-	player_day = 0;
-	display_day_night_shift( 0 );
-	memcpy( specialcolormap_all_day, specialcolormap_day_night, 256 * sizeof(PIXVAL) );
-	memcpy( rgbmap_all_day, rgbmap_day_night, RGBMAPSIZE * sizeof(PIXVAL) );
-	updateRGBMap( rgbmap_all_day_tex, rgbmap_all_day, 0 );
-
 	GLuint combined_fragmentShader;
 	GLuint vertexShader;
 
@@ -4411,6 +4360,63 @@ bool simgraph_init(scr_size window_size, sint16 full_screen)
 	combined_s_texAlpha_Location = glGetUniformLocation( combined_program, "s_texAlpha" );
 	combined_a_alphaMask_Location = glGetAttribLocation( combined_program, "a_alphaMask" );
 
+	// init, load, and check fonts
+	if(  !display_load_font( env_t::fontname.c_str() )  ) {
+		env_t::fontname = dr_get_system_font();
+		if(  !display_load_font( env_t::fontname.c_str() )  ) {
+			env_t::fontname = FONT_PATH_X "cyr.bdf";
+			if(  !display_load_font( env_t::fontname.c_str() )  ) {
+				dr_fatal_notify( "No fonts found!" );
+				return false;
+			}
+		}
+	}
+
+	// init player colors
+	for(  int i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
+		player_offsets[i][0] = i * 8;
+		player_offsets[i][1] = i * 8 + 24;
+	}
+
+	display_set_clip_wh( 0, 0, disp_width, disp_height );
+
+	// Calculate daylight rgbmap and save it for unshaded tile drawing
+	player_day = 0;
+	display_day_night_shift( 0 );
+	memcpy( specialcolormap_all_day, specialcolormap_day_night, 256 * sizeof(PIXVAL) );
+	memcpy( rgbmap_all_day, rgbmap_day_night, RGBMAPSIZE * sizeof(PIXVAL) );
+	updateRGBMap( rgbmap_all_day_tex, rgbmap_all_day, 0 );
+
+	glGenBuffers( 1, &gl_indices_buffer_name );
+	glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, gl_indices_buffer_name );
+
+	std::vector<GLushort> indices;
+
+	indices.reserve( gl_max_commands * 6 - 2 );
+
+	for(  unsigned int i = 0; i < gl_max_commands; i++  ) {
+		if(  i != 0  ) {
+			//readd the previous vertices to make the triangles invalid
+			//this results in the last valid tri being -3,-2,-1
+			//then follow -2,-1,-1; -1,-1,0; -1,0,0; 0,0,1
+			//then the first valid tri again: 0,1,2
+
+			indices.push_back( i * 4 - 1 );
+			indices.push_back( i * 4 );
+		}
+
+		indices.push_back( i * 4 );
+		indices.push_back( i * 4 + 1 );
+		indices.push_back( i * 4 + 2 );
+		indices.push_back( i * 4 + 3 );
+	}
+	glBufferData( GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLushort), indices.data(), GL_STATIC_DRAW );
+
+	glGenBuffers( 1, &gl_vertices_buffer_name );
+
+	dbg->message( "simgraph_init", "Init done." );
+	fflush( NULL );
+
 	return true;
 }
 
@@ -4429,8 +4435,15 @@ bool is_display_init()
  */
 void simgraph_exit()
 {
+	rgbaatlas.clear();
+	charatlas.clear();
+
 	display_free_all_images_above( 0 );
 	images.clear();
+
+	glDeleteBuffers( 1, &gl_indices_buffer_name );
+	glDeleteBuffers( 1, &gl_vertices_buffer_name );
+	glDeleteProgram( combined_program );
 
 	dr_os_close();
 }
