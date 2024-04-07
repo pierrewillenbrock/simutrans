@@ -1626,7 +1626,8 @@ void display_mark_img_dirty(image_id image, scr_coord_val xp, scr_coord_val yp)
 	(void)image;
 	(void)xp;
 	(void)yp;
-	//TODO can we use this to determine if we need to reupload to texture?
+	//this is used to notify where the screen space needs to be updated
+	//after something else was removed that drew on top.
 }
 
 
@@ -1876,6 +1877,8 @@ struct DrawCommandList {
 	{
 		verticesPos = 0;
 	}
+	//assumes vx1<vx2,vy1<vy1.
+	//[vta][xy][12] define corners of rectangles.
 	void addDrawCommand(scr_coord_val vx1, scr_coord_val vy1,
 	                    scr_coord_val vx2, scr_coord_val vy2,
 	                    scr_coord_val vz,
@@ -1953,6 +1956,133 @@ struct DrawCommandList {
 		v[3].vertex.z = vz;
 		verticesPos++;
 	}
+	//the same as the above, but less performant due to less
+	//assumptions. allows to independently define each of the
+	//quads corners position. if you need a tri, make
+	//v[xy]4 = v[xy]2 and fill [vta][xy][123] to your liking.
+	//(you can also make v[xy]3 = v[xy]1 and fill [vta][xy][234]
+	//if you roll that way)
+	//the coordinates of the first tri (123) are clockwise
+	//in the x left to right, y top to bottom coordinate system
+	//used by simutrans. the second tri (234) coordinates are ccw.
+	void addDrawCommand(scr_coord_val vx1, scr_coord_val vy1,
+	                    scr_coord_val vx2, scr_coord_val vy2,
+	                    scr_coord_val vx3, scr_coord_val vy3,
+	                    scr_coord_val vx4, scr_coord_val vy4,
+	                    scr_coord_val vz,
+	                    GLfloat tx1, GLfloat ty1,
+	                    GLfloat tx2, GLfloat ty2,
+	                    GLfloat tx3, GLfloat ty3,
+	                    GLfloat tx4, GLfloat ty4,
+	                    GLfloat ax1, GLfloat ay1,
+	                    GLfloat ax2, GLfloat ay2,
+	                    GLfloat ax3, GLfloat ay3,
+	                    GLfloat ax4, GLfloat ay4,
+	                    GLcolorf alpha, GLcolorf color)
+	{
+		if(  vertices.size() < verticesPos * 4 + 4  ) {
+			vertices.resize( verticesPos * 4 + 4 );
+		}
+
+		if(  verticesPos == 0  ) {
+			max_x = vx2;
+			max_y = vy2;
+			min_x = vx1;
+			min_y = vy1;
+		}
+
+		if(  max_x < vx1  ) {
+			max_x = vx1;
+		}
+		if(  max_x < vx2  ) {
+			max_x = vx2;
+		}
+		if(  max_x < vx3  ) {
+			max_x = vx3;
+		}
+		if(  max_x < vx4  ) {
+			max_x = vx4;
+		}
+		if(  max_y < vy1  ) {
+			max_y = vy1;
+		}
+		if(  max_y < vy2  ) {
+			max_y = vy2;
+		}
+		if(  max_y < vy3  ) {
+			max_y = vy3;
+		}
+		if(  max_y < vy4  ) {
+			max_y = vy4;
+		}
+		if(  min_x > vx1  ) {
+			min_x = vx1;
+		}
+		if(  min_x > vx2  ) {
+			min_x = vx2;
+		}
+		if(  min_x > vx3  ) {
+			min_x = vx3;
+		}
+		if(  min_x > vx4  ) {
+			min_x = vx4;
+		}
+		if(  min_y > vy1  ) {
+			min_y = vy1;
+		}
+		if(  min_y > vy2  ) {
+			min_y = vy2;
+		}
+		if(  min_y > vy3  ) {
+			min_y = vy3;
+		}
+		if(  min_y > vy4  ) {
+			min_y = vy4;
+		}
+
+		CombinedVertex *v = vertices.data() + verticesPos * 4;
+
+		v[0].alpha.glcolor = alpha;
+		v[0].color.glcolor = color;
+		v[0].texcoord.x = tx1;
+		v[0].texcoord.y = ty1;
+		v[0].alphacoord.x = ax1;
+		v[0].alphacoord.y = ay1;
+		v[0].vertex.x = vx1;
+		v[0].vertex.y = vy1;
+		v[0].vertex.z = vz;
+
+		v[1].alpha.glcolor = alpha;
+		v[1].color.glcolor = color;
+		v[1].texcoord.x = tx2;
+		v[1].texcoord.y = ty2;
+		v[1].alphacoord.x = ax2;
+		v[1].alphacoord.y = ay2;
+		v[1].vertex.x = vx2;
+		v[1].vertex.y = vy2;
+		v[1].vertex.z = vz;
+
+		v[2].alpha.glcolor = alpha;
+		v[2].color.glcolor = color;
+		v[2].texcoord.x = tx3;
+		v[2].texcoord.y = ty3;
+		v[2].alphacoord.x = ax3;
+		v[2].alphacoord.y = ay3;
+		v[2].vertex.x = vx3;
+		v[2].vertex.y = vy3;
+		v[2].vertex.z = vz;
+
+		v[3].alpha.glcolor = alpha;
+		v[3].color.glcolor = color;
+		v[3].texcoord.x = tx4;
+		v[3].texcoord.y = ty4;
+		v[3].alphacoord.x = ax4;
+		v[3].alphacoord.y = ay4;
+		v[3].vertex.x = vx4;
+		v[3].vertex.y = vy4;
+		v[3].vertex.z = vz;
+		verticesPos++;
+	}
 };
 
 struct DrawCommandBatch
@@ -2018,6 +2148,63 @@ struct DrawCommandBatch
 			                                alpha, color );
 		}
 	}
+	void addDrawCommand(DrawCommandKey const &key,
+	                    scr_coord_val vx1, scr_coord_val vy1,
+	                    scr_coord_val vx2, scr_coord_val vy2,
+	                    scr_coord_val vx3, scr_coord_val vy3,
+	                    scr_coord_val vx4, scr_coord_val vy4,
+	                    scr_coord_val vz,
+	                    GLfloat tx1, GLfloat ty1,
+	                    GLfloat tx2, GLfloat ty2,
+	                    GLfloat tx3, GLfloat ty3,
+	                    GLfloat tx4, GLfloat ty4,
+	                    GLfloat ax1, GLfloat ay1,
+	                    GLfloat ax2, GLfloat ay2,
+	                    GLfloat ax3, GLfloat ay3,
+	                    GLfloat ax4, GLfloat ay4,
+	                    GLcolorf alpha, GLcolorf color)
+	{
+		//non-binary alpha may be produced when:
+		//alpha.a is not zero or alpha.a is not 1
+		//alpha.rgb is non-zero
+		if(  ( alpha.r == 0 || alpha.r == 1 ) &&
+		                ( alpha.g == 0 || alpha.g == 1 ) &&
+		                ( alpha.b == 0 || alpha.b == 1 ) &&
+		                ( alpha.a == 0 || alpha.a == 1 )  ) {
+			auto it = unused_unordered_list.find( key );
+			if(  it != unused_unordered_list.end()  ) {
+				unordered_list[key] = std::move( it->second );
+				unused_unordered_list.erase( it );
+			}
+			unordered_list[key].addDrawCommand( vx1, vy1, vx2, vy2,
+			                                    vx3, vy3, vx4, vy4,
+			                                    vz,
+			                                    tx1, ty1, tx2, ty2,
+			                                    tx3, ty3, tx4, ty4,
+			                                    ax1, ay1, ax2, ay2,
+			                                    ax3, ay3, ax4, ay4,
+			                                    alpha, color );
+		}
+		else {
+			if(  ordered_list_pos == -1 ||
+				ordered_list[ordered_list_pos].first != key  ) {
+				ordered_list_pos++;
+				if(  (int)ordered_list.size() <= ordered_list_pos  ) {
+					ordered_list.resize( ordered_list_pos + 1 );
+				}
+				ordered_list[ordered_list_pos].first = key;
+			}
+			ordered_list[ordered_list_pos].second.addDrawCommand(
+			                                vx1, vy1, vx2, vy2,
+			                                vx3, vy3, vx4, vy4,
+			                                vz,
+			                                tx1, ty1, tx2, ty2,
+			                                tx3, ty3, tx4, ty4,
+			                                ax1, ay1, ax2, ay2,
+			                                ax3, ay3, ax4, ay4,
+			                                alpha, color );
+		}
+	}
 };
 
 struct DrawCommandBatches
@@ -2051,6 +2238,43 @@ struct DrawCommandBatches
 		                                    zpos,
 		                                    tx1, ty1, tx2, ty2,
 		                                    ax1, ay1, ax2, ay2,
+		                                    alpha, color
+		                                  );
+		if(  zpos >= 32767  ) {
+			zpos = -32767;
+			batchesPos++;
+		}
+		else {
+			zpos++;
+		}
+	}
+	void addDrawCommand(DrawCommandKey const &key,
+	                    scr_coord_val vx1, scr_coord_val vy1,
+	                    scr_coord_val vx2, scr_coord_val vy2,
+	                    scr_coord_val vx3, scr_coord_val vy3,
+	                    scr_coord_val vx4, scr_coord_val vy4,
+	                    GLfloat tx1, GLfloat ty1,
+	                    GLfloat tx2, GLfloat ty2,
+	                    GLfloat tx3, GLfloat ty3,
+	                    GLfloat tx4, GLfloat ty4,
+	                    GLfloat ax1, GLfloat ay1,
+	                    GLfloat ax2, GLfloat ay2,
+	                    GLfloat ax3, GLfloat ay3,
+	                    GLfloat ax4, GLfloat ay4,
+	                    GLcolorf alpha, GLcolorf color
+	                    CLIP_NUM_DEF)
+	{
+		if(  batches.size() <= batchesPos  ) {
+			batches.resize( batchesPos + 1 );
+		}
+		batches[batchesPos].addDrawCommand( key,
+		                                    vx1, vy1, vx2, vy2,
+		                                    vx3, vy3, vx4, vy4,
+		                                    zpos,
+		                                    tx1, ty1, tx2, ty2,
+		                                    tx3, ty3, tx4, ty4,
+		                                    ax1, ay1, ax2, ay2,
+		                                    ax3, ay3, ax4, ay4,
 		                                    alpha, color
 		                                  );
 		if(  zpos >= 32767  ) {
@@ -2218,6 +2442,43 @@ static void queueDrawCommand(DrawCommandKey const &key,
 	                                   vx1, vy1, vx2, vy2,
 	                                   tx1, ty1, tx2, ty2,
 	                                   ax1, ay1, ax2, ay2,
+	                                   alpha, color
+	                                   CLIP_NUM_PAR );
+}
+
+static void queueDrawCommand(DrawCommandKey const &key,
+                             scr_coord_val vx1,
+                             scr_coord_val vy1,
+                             scr_coord_val vx2,
+                             scr_coord_val vy2,
+                             scr_coord_val vx3,
+                             scr_coord_val vy3,
+                             scr_coord_val vx4,
+                             scr_coord_val vy4,
+                             GLfloat tx1,
+                             GLfloat ty1,
+                             GLfloat tx2,
+                             GLfloat ty2,
+                             GLfloat tx3,
+                             GLfloat ty3,
+                             GLfloat tx4,
+                             GLfloat ty4,
+                             GLfloat ax1,
+                             GLfloat ay1,
+                             GLfloat ax2,
+                             GLfloat ay2,
+                             GLfloat ax3,
+                             GLfloat ay3,
+                             GLfloat ax4,
+                             GLfloat ay4,
+                             GLcolorf alpha,
+                             GLcolorf color
+                             CLIP_NUM_DEF )
+{
+	drawCommandBatches.addDrawCommand( key,
+	                                   vx1, vy1, vx2, vy2, vx3, vy3, vx4, vy4,
+	                                   tx1, ty1, tx2, ty2, tx3, ty3, tx4, ty4,
+	                                   ax1, ay1, ax2, ay2, ax3, ay3, ax4, ay4,
 	                                   alpha, color
 	                                   CLIP_NUM_PAR );
 }
@@ -3788,39 +4049,6 @@ void display_scroll_band(scr_coord_val start_y, scr_coord_val x_offset, scr_coor
 	}
 }
 
-
-/**
- * Draw one Pixel
- */
-static void display_pixel(scr_coord_val x, scr_coord_val y, PIXVAL color)
-{
-	if(  x >= CR0.clip_rect.x && x < CR0.clip_rect.xx && y >= CR0.clip_rect.y && y < CR0.clip_rect.yy  ) {
-		DrawCommandKey cmdkey;
-		cmdkey.cr.poly_active = 0;
-		cmdkey.tex = 0;
-		cmdkey.rgbmap_tex = 0;
-		cmdkey.alphatex = 0;
-		cmdkey.uses_tex = 1;
-		cmdkey.uses_rgbmap_tex = 0;
-		cmdkey.uses_alphatex = 0;
-		queueDrawCommand( cmdkey,
-		                  x,
-		                  y,
-		                  x + 1,
-		                  y + 1,
-		                  0, 0, 0, 0,
-		                  0, 0, 0, 0,
-		                  makeColor( 0, 0, 0, 1 ),
-		                  makeColor( ( color & 0xf800 ) / float( 0x10000 ),
-		                             ( color & 0x07e0 ) / float( 0x00800 ),
-		                             ( color & 0x001f ) / float( 0x00020 ),
-		                             1 )
-		                  CLIP_NUM_DEFAULT
-		                );
-	}
-}
-
-
 /**
  * Draw filled rectangle
  */
@@ -4465,34 +4693,293 @@ scr_coord_val display_multiline_text_rgb(scr_coord_val x, scr_coord_val y, const
 }
 
 
+static bool line_intersecth(float xa1, float ya1, float xa2, float ya2,
+                            float xb1, float xb2, float yb, float &t,
+                            bool b_is_bounded = true)
+{
+	//oa+va*t=ob+vb*s
+
+	float oax = xa1;
+	float oay = ya1;
+	float obx = xb1;
+	float oby = yb;
+	float vax = xa2 - xa1;
+	float vay = ya2 - ya1;
+	float vbx = xb2 - xb1;
+
+	float d = vay * vbx;
+
+	if(  d == 0.0f  ) {
+		return false;
+	}
+
+	t = ( oby - oay ) * vbx;
+	float s = -( obx - oax ) * vay + ( oby - oay ) * vax;
+
+	t /= d;
+	s /= d;
+	if(  t < 0.0f || t > 1.0f  ) {
+		return false;
+	}
+	if(  !b_is_bounded  ) {
+		return true;
+	}
+	else {
+		return s >= 0.0f && s <= 1.0f;
+	}
+}
+
+static bool line_intersectv(float xa1, float ya1, float xa2, float ya2,
+                            float xb, float yb1, float yb2, float &t,
+                            bool b_is_bounded = true)
+{
+	//oa+va*t=ob+vb*s
+
+	float oax = xa1;
+	float oay = ya1;
+	float obx = xb;
+	float oby = yb1;
+	float vax = xa2 - xa1;
+	float vay = ya2 - ya1;
+	float vby = yb2 - yb1;
+
+	float d = -vax * vby;
+
+	if(  d == 0.0f  ) {
+		return false;
+	}
+
+	t = -obx * vby + oax * vby;
+	float s = -obx * vay + oax * vay + ( oby - oay ) * vax;
+
+	t /= d;
+	s /= d;
+	if(  t < 0.0f || t > 1.0f  ) {
+		return false;
+	}
+	if(  !b_is_bounded  ) {
+		return true;
+	}
+	else {
+		return s >= 0.0f && s <= 1.0f;
+	}
+}
+
+bool clip_line_to_rect(scr_coord_val &line_x1, scr_coord_val &line_y,
+                       scr_coord_val &line_x2, scr_coord_val &line_yy,
+                       clip_dimension const &rect)
+{
+	//return false if all of the line has been clipped. line_y <= line_yy.
+
+	//fully enclosed by rect?
+	if(  line_x1 >= rect.x && line_x1 < rect.xx &&
+	                line_x2 >= rect.x && line_x2 < rect.xx &&
+	                line_y >= rect.y && line_yy < rect.yy  ) {
+		return true;
+	}
+
+	bool intersected = false;
+
+	//now we need to check if the line intersects any of the edges
+	//of the clipping rectangle
+	float t;
+	if(  line_intersectv( line_x1, line_y, line_x2, line_yy,
+	                     rect.x, rect.y, rect.yy, t )  ) {
+		if(  line_x1 < rect.x  ) {
+			//known: line_x1 + (line_x2 - line_x1) * t = rect.x;
+			//goal: adjust line_x1,line_y1 so line_x1 == rect.x
+			line_y = line_y + ( line_yy - line_y ) * t;
+			line_x1 = rect.x;
+		}
+		else {
+			line_yy = line_y + ( line_yy - line_y ) * t;
+			line_x2 = rect.x;
+		}
+		intersected = true;
+	}
+	if(  line_intersectv( line_x1, line_y, line_x2, line_yy,
+	                     rect.xx, rect.y, rect.yy, t )  ) {
+		if (  line_x1 >= rect.xx  ) {
+			//known: line_x1 + (line_x2 - line_x1) * t = rect.x;
+			//goal: adjust line_x1,line_y1 so line_x1 == rect.x
+			line_y = line_y + ( line_yy - line_y ) * t;
+			line_x1 = rect.xx;
+		}
+		else {
+			line_yy = line_y + ( line_yy - line_y ) * t;
+			line_x2 = rect.xx;
+		}
+		intersected = true;
+	}
+
+	if(  line_intersecth( line_x1, line_y, line_x2, line_yy,
+	                     rect.x, rect.xx, rect.y, t )  ) {
+		line_x1 = line_x1 + ( line_x2 - line_x1 ) * t;
+		line_y = rect.y;
+		intersected = true;
+	}
+	if(  line_intersecth( line_x1, line_y, line_x2, line_yy,
+	                     rect.x, rect.xx, rect.yy, t )  ) {
+		line_x2 = line_x1 + ( line_x2 - line_x1 ) * t;
+		line_yy = rect.yy;
+		intersected = true;
+	}
+	return intersected;
+}
+
 /**
  * draw line from x,y to xx,yy
  **/
 void display_direct_line_rgb(const scr_coord_val x, const scr_coord_val y, const scr_coord_val xx, const scr_coord_val yy, const PIXVAL colval)
 {
-	//todo: make GL do this
-	int i, steps;
-	sint64 xp, yp;
-	sint64 xs, ys;
+	int dx = xx - x;
+	int dy = yy - y;
 
-	const int dx = xx - x;
-	const int dy = yy - y;
 
-	steps = ( abs( dx ) > abs( dy ) ? abs( dx ) : abs( dy ) );
-	if(  steps == 0  ) {
-		steps = 1;
+	DrawCommandKey cmdkey;
+	cmdkey.cr.poly_active = 0;
+	cmdkey.tex = 0;
+	cmdkey.rgbmap_tex = 0;
+	cmdkey.alphatex = 0;
+	cmdkey.uses_tex = 1;
+	cmdkey.uses_rgbmap_tex = 0;
+	cmdkey.uses_alphatex = 0;
+
+	//simple case first: the line is aligned with one of the coordinates
+	//creating a rectangle.
+	if(  dx == 0 || dy == 0  ) {
+		scr_coord_val x1 = x < xx ? x : xx;
+		scr_coord_val x2 = x < xx ? xx : x;
+		scr_coord_val y1 = y < yy ? y : yy;
+		scr_coord_val y2 = y < yy ? yy : y;
+		if(  x2 >= CR0.clip_rect.x && x1 < CR0.clip_rect.xx && y2 >= CR0.clip_rect.y && y1 < CR0.clip_rect.yy  ) {
+			if(  x1 < CR0.clip_rect.x  ) {
+				x1 = CR0.clip_rect.x;
+			}
+			if(  y1 < CR0.clip_rect.y  ) {
+				y1 = CR0.clip_rect.y;
+			}
+			if(  x2 >= CR0.clip_rect.xx  ) {
+				x2 = CR0.clip_rect.xx - 1;
+			}
+			if(  y2 >= CR0.clip_rect.yy  ) {
+				y2 = CR0.clip_rect.yy - 1;
+			}
+			queueDrawCommand( cmdkey,
+			                  x1,
+			                  y1,
+			                  x2 + 1,
+			                  y2 + 1,
+			                  0, 0, 0, 0,
+			                  0, 0, 0, 0,
+			                  makeColor( 0, 0, 0, 1 ),
+			                  makeColor_rgb( colval & 0xf800 )
+			                  CLIP_NUM_DEFAULT
+			                );
+		}
+		return;
 	}
 
-	xs = ( (sint64)dx << 16 ) / steps;
-	ys = ( (sint64)dy << 16 ) / steps;
+	scr_coord_val x1 = y < yy ? x : xx;
+	scr_coord_val x2 = y < yy ? xx : x;
+	scr_coord_val y1 = y < yy ? y : yy;
+	scr_coord_val y2 = y < yy ? yy : y;
+	if(  dy < 0  ) {
+		dx = -dx;
+		dy = -dy;
+	}
 
-	xp = (sint64)x << 16;
-	yp = (sint64)y << 16;
+	/*
+	 * we can implement a blocky algorithm and use the above for
+	 * outputting line segments(with the performance ramifications that
+	 * carries) or issue a small number of quads that result in lines
+	 * up to sqrt(2) in width, but possibly antialised.
+	 *
+	 * tris:
+	 * 1      2
+	 * +------+a
+	 * |    _-|\
+	 * |  _-  | \
+	 * |_-    |  \
+	 *3+      |   \
+	 *  \     |    \
+	 *   \    |     \b
+	 *    \   |      +
+	 *     \  |    _-|
+	 *      \ |  _-  |
+	 *       \|_-    |
+	 *     4 c+------+d
+	 *
+	 *       3+------+ 1
+	 *       / -_    |
+	 *      /    -_  |
+	 *     /       -_|
+	 *    /       __-+ 2
+	 *   /    __--  / a
+	 *4 / __--     /
+	 *c+--        /
+	 * |-_       /
+	 * |  -_    /
+	 * |    -_ /
+	 *d+------+ b
+	 */
 
-	for(  i = 0; i <= steps; i++  ) {
-		display_pixel( xp >> 16, yp >> 16, colval );
-		xp += xs;
-		yp += ys;
+	//first, test if any part of the line is inside clip rect.
+	//for that, see if both end points are outside of the clip rect(otherwise,
+	//there is some part inside)
+	if(  !clip_line_to_rect( x1, y1, x2, y2, CR0.clip_rect )  ) {
+		return;
+	}
+
+	if(  dx > 0 && dy > 0  ) {
+		queueDrawCommand( cmdkey,
+		                  x1, y1,
+		                  x1 + 1, y1,
+		                  x1, y1 + 1,
+		                  x2, y2 + 1,
+		                  0, 0, 0, 0, 0, 0, 0, 0,
+		                  0, 0, 0, 0, 0, 0, 0, 0,
+		                  makeColor( 0, 0, 0, 1 ),
+		                  makeColor_rgb( colval )
+		                  CLIP_NUM_DEFAULT
+		                );
+		queueDrawCommand( cmdkey,
+		                  x1 + 1, y1,
+		                  x2 + 1, y2,
+		                  x2, y2 + 1,
+		                  x2 + 1, y2 + 1,
+		                  0, 0, 0, 0, 0, 0, 0, 0,
+		                  0, 0, 0, 0, 0, 0, 0, 0,
+		                  makeColor( 0, 0, 0, 1 ),
+		                  makeColor_rgb( colval )
+		                  CLIP_NUM_DEFAULT
+		                );
+
+	}
+	if(  dx < 0 && dy > 0  ) {
+		queueDrawCommand( cmdkey,
+		                  x1 + 1, y1,
+		                  x1 + 1, y1 + 1,
+		                  x1, y1,
+		                  x2, y2,
+		                  0, 0, 0, 0, 0, 0, 0, 0,
+		                  0, 0, 0, 0, 0, 0, 0, 0,
+		                  makeColor( 0, 0, 0, 1 ),
+		                  makeColor_rgb( colval )
+		                  CLIP_NUM_DEFAULT
+		                );
+		queueDrawCommand( cmdkey,
+		                  x1 + 1, y1 + 1,
+		                  x2 + 1, y2 + 1,
+		                  x2, y2,
+		                  x2, y2 + 1,
+		                  0, 0, 0, 0, 0, 0, 0, 0,
+		                  0, 0, 0, 0, 0, 0, 0, 0,
+		                  makeColor( 0, 0, 0, 1 ),
+		                  makeColor_rgb( colval )
+		                  CLIP_NUM_DEFAULT
+		                );
+
 	}
 }
 
@@ -4500,126 +4987,478 @@ void display_direct_line_rgb(const scr_coord_val x, const scr_coord_val y, const
 //taken from function display_direct_line() above, to draw a dotted line: draw=pixels drawn, dontDraw=pixels skipped
 void display_direct_line_dotted_rgb(const scr_coord_val x, const scr_coord_val y, const scr_coord_val xx, const scr_coord_val yy, const scr_coord_val draw, const scr_coord_val dontDraw, const PIXVAL colval)
 {
-	//todo: make GL do this
-	int i, steps;
-	sint64 xp, yp;
-	sint64 xs, ys;
-	int counter = 0;
-	bool mustDraw = true;
+	float dx = xx - x;
+	float dy = yy - y;
+	float len = sqrt( dx * dx + dy * dy );
+	float fract_len_draw = draw / len;
+	float fract_len_seg = ( draw + dontDraw ) / len;
+	float xp = x;
+	float yp = y;
 
-	const int dx = xx - x;
-	const int dy = yy - y;
-
-	steps = ( abs( dx ) > abs( dy ) ? abs( dx ) : abs( dy ) );
-	if(  steps == 0  ) {
-		steps = 1;
-	}
-
-	xs = ( (sint64)dx << 16 ) / steps;
-	ys = ( (sint64)dy << 16 ) / steps;
-
-	xp = (sint64)x << 16;
-	yp = (sint64)y << 16;
-
-	for(  i = 0; i <= steps; i++  ) {
-		counter ++;
-		if(  mustDraw  ) {
-			if(  counter == draw  ) {
-				mustDraw = !mustDraw;
-				counter = 0;
-			}
+	float p = 0.0f;
+	while(  p <= 1.0f  ) {
+		float fd = fract_len_draw;
+		if(  fd + p > 1.0f  ) {
+			fd = 1.0f - p;
 		}
-		if(  !mustDraw  ) {
-			if(  counter == dontDraw  ) {
-				mustDraw = !mustDraw;
-				counter = 0;
-			}
-		}
+		display_direct_line_rgb( xp, yp,
+		                         xp + dx * fd,
+		                         yp + dy * fd,
+		                         colval );
 
-		if(  mustDraw  ) {
-			display_pixel( xp >> 16, yp >> 16, colval );
-		}
-		xp += xs;
-		yp += ys;
+		xp += dx * fract_len_seg;
+		yp += dy * fract_len_seg;
+		p += fract_len_seg;
 	}
 }
 
-
-// bresenham circle (from wikipedia ...)
 void display_circle_rgb(scr_coord_val x0, scr_coord_val  y0, int radius, const PIXVAL colval)
 {
-	int f = 1 - radius;
-	int ddF_x = 1;
-	int ddF_y = -2 * radius;
-	int x = 0;
-	int y = radius;
+	/*
+	 * xo=0,yo=radius
+	 * xo+xd,yo+yd
+	 *
+	 * xd²+yd²=seglen²
+	 * (xo+xd)²+(yo+yd)²=radius²
+	 *
+	 * r² = (xo+xd/2)²+(yo+yd/2)²
+	 * err = radius-r
+	 *
+	 * r² = radius²-seglen²/4
+	 *
+	 * err = radius-sqrt(radius²-(seglen/2)²)
+	 *
+	 * max_err = 1
+	 *
+	 * seglen <= sqrt(radius²-(radius-max_err)²)*2
+	 *
+	 */
 
-	display_pixel( x0, y0 + radius, colval );
-	display_pixel( x0, y0 - radius, colval );
-	display_pixel( x0 + radius, y0, colval );
-	display_pixel( x0 - radius, y0, colval );
+	//bail early when we can be sure none is visible
+	if(  x0 + radius < CR0.clip_rect.x || x0 - radius >= CR0.clip_rect.xx ||
+	                y0 + radius < CR0.clip_rect.y || y0 - radius >= CR0.clip_rect.yy  ) {
+		return;
+	}
 
-	while(  x < y  ) {
-		// ddF_x == 2 * x + 1;
-		// ddF_y == -2 * y;
-		// f == x*x + y*y - radius*radius + 2*x - y + 1;
-		if(  f >= 0  ) {
-			y--;
-			ddF_y += 2;
-			f += ddF_y;
-		}
+	float max_err = 0.5f;//pixels
+	//segments per octant
+	int num_segments = ceil( M_PI / sqrt( 2 * radius * max_err - max_err * max_err ) / 8.0f );
+	if(  num_segments < 1  ) {
+		num_segments = 1;
+	}
 
-		x++;
-		ddF_x += 2;
-		f += ddF_x;
+	scr_coord_val xp = 0, yp = radius;
+	float angle = 0.0f;
+	for(  int i = 0; i < num_segments; i++  ) {
+		angle += M_PI * 2 / 8 / num_segments;
+		scr_coord_val x2 = sin( angle ) * radius;
+		scr_coord_val y2 = cos( angle ) * radius;
+		display_direct_line_rgb( x0 + xp, y0 + yp,
+		                         x0 + x2, y0 + y2, colval );
+		display_direct_line_rgb( x0 + xp, y0 - yp,
+		                         x0 + x2, y0 - y2, colval );
+		display_direct_line_rgb( x0 - xp, y0 + yp,
+		                         x0 - x2, y0 + y2, colval );
+		display_direct_line_rgb( x0 - xp, y0 - yp,
+		                         x0 - x2, y0 - y2, colval );
+		display_direct_line_rgb( x0 + yp, y0 + xp,
+		                         x0 + y2, y0 + x2, colval );
+		display_direct_line_rgb( x0 + yp, y0 - xp,
+		                         x0 + y2, y0 - x2, colval );
+		display_direct_line_rgb( x0 - yp, y0 + xp,
+		                         x0 - y2, y0 + x2, colval );
+		display_direct_line_rgb( x0 - yp, y0 - xp,
+		                         x0 - y2, y0 - x2, colval );
 
-		display_pixel( x0 + x, y0 + y, colval );
-		display_pixel( x0 - x, y0 + y, colval );
-		display_pixel( x0 + x, y0 - y, colval );
-		display_pixel( x0 - x, y0 - y, colval );
-		display_pixel( x0 + y, y0 + x, colval );
-		display_pixel( x0 - y, y0 + x, colval );
-		display_pixel( x0 + y, y0 - x, colval );
-		display_pixel( x0 - y, y0 - x, colval );
+		xp = x2;
+		yp = y2;
 	}
 }
 
+struct CornerList {
+	struct Corner
+	{
+		scr_coord p;
+		Corner *prev;
+		Corner *next;
+	};
 
-// bresenham circle (from wikipedia ...)
+	Corner store[8];
+
+	Corner *first;
+	Corner *next_free;
+
+	CornerList() : first(nullptr), next_free(store) {}
+
+	void addCorner(scr_coord p)
+	{
+		Corner *c = next_free;
+		next_free++;
+		c->p = p;
+		if(  !first  ) {
+			first = c;
+			first->next = first;
+			first->prev = first;
+		}
+		else {
+			c->prev = first->prev;
+			c->next = first;
+			first->prev->next = c;
+			first->prev = c;
+		}
+	}
+
+	void insertCorner(Corner *after, scr_coord p)
+	{
+		Corner *c = next_free;
+		next_free++;
+		c->p = p;
+		c->prev = after;
+		c->next = after->next;
+		after->next->prev = c;
+		after->next = c;
+	}
+
+	void removeCorner(Corner *pos)
+	{
+		if(  pos == first  ) {
+			first = pos->next;
+		}
+		pos->prev->next = pos->next;
+		pos->next->prev = pos->prev;
+	}
+
+	Corner *getFirstCorner()
+	{
+		return first;
+	}
+	Corner *getNextCorner(Corner *pos)
+	{
+		return pos->next;
+	}
+
+	void prepareSplit(Corner *first_split, Corner *last_split)
+	{
+		if(  first_split->next == last_split  ) {
+			//this cannot happen
+			assert( false );
+			insertCorner( first_split, first_split->p );
+			insertCorner( first_split, last_split->p );
+		}
+		else if(  first_split->next->next == last_split  ) {
+			insertCorner( first_split, first_split->next->p );
+		}
+		else {
+			while(  first_split->next->next->next != last_split  ) {
+				removeCorner( first_split->next->next );
+			}
+		}
+	}
+};
+
+static void display_quad_rgb(scr_coord_val x0, scr_coord_val y0,
+                             scr_coord_val x1, scr_coord_val y1,
+                             scr_coord_val x2, scr_coord_val y2,
+                             scr_coord_val x3, scr_coord_val y3,
+                             const PIXVAL colval)
+{
+	CornerList corners;
+	corners.addCorner( scr_coord( x0, y0 ) );
+	corners.addCorner( scr_coord( x1, y1 ) );
+	corners.addCorner( scr_coord( x3, y3 ) );
+	corners.addCorner( scr_coord( x2, y2 ) );
+
+	//point to the point before/after the section that is split off
+	CornerList::Corner *first_split = nullptr, *last_split = nullptr;
+	CornerList::Corner *cur;
+	bool all_outside;
+
+	//intersection by CR0.clip_rect.x
+	first_split = nullptr;
+	last_split = nullptr;
+	cur = corners.first;
+	all_outside = true;
+	while(  cur  ) {
+		//test if the line between this corner and the next is
+		//intersected by CR0.clip_rect.x
+		if(  cur->p.x >= CR0.clip_rect.x  ) {
+			all_outside = false;
+		}
+		if(  cur->p.x >= CR0.clip_rect.x &&
+		                cur->next->p.x < CR0.clip_rect.x  ) {
+			first_split = cur;
+			cur = cur->next;
+			while(  cur  ) {
+				if(  cur->p.x < CR0.clip_rect.x &&
+				                cur->next->p.x >= CR0.clip_rect.x  ) {
+					last_split = cur->next;
+					break;
+				}
+				cur = cur->next;
+			}
+			break;
+		}
+		cur = cur->next;
+		if(  cur == corners.first  ) {
+			break;
+		}
+	}
+	if(  all_outside  ) {
+		return;
+	}
+	if(  first_split && last_split  ) {
+		corners.prepareSplit( first_split, last_split );
+
+		first_split->next->p.y = first_split->p.y +
+		                         ( first_split->next->p.y - first_split->p.y ) *
+		                         ( CR0.clip_rect.x - first_split->p.x ) /
+		                         ( first_split->next->p.x - first_split->p.x );
+		first_split->next->p.x = CR0.clip_rect.x;
+
+		last_split->prev->p.y = last_split->p.y +
+		                        ( last_split->prev->p.y - last_split->p.y ) *
+		                        ( CR0.clip_rect.x - last_split->p.x ) /
+		                        ( last_split->prev->p.x - last_split->p.x );
+		last_split->prev->p.x = CR0.clip_rect.x;
+	}
+
+	//intersection by CR0.clip_rect.xx
+	first_split = nullptr;
+	last_split = nullptr;
+	cur = corners.first;
+	all_outside = true;
+	while(  cur  ) {
+		//test if the line between this corner and the next is
+		//intersected by CR0.clip_rect.xx
+		if(  cur->p.x < CR0.clip_rect.xx  ) {
+			all_outside = false;
+		}
+		if(  cur->p.x < CR0.clip_rect.xx &&
+		                cur->next->p.x >= CR0.clip_rect.xx  ) {
+			first_split = cur;
+			cur = cur->next;
+			while(  cur  ) {
+				if(  cur->p.x >= CR0.clip_rect.xx &&
+				                cur->next->p.x < CR0.clip_rect.xx  ) {
+					last_split = cur->next;
+					break;
+				}
+				cur = cur->next;
+			}
+			break;
+		}
+		cur = cur->next;
+		if(  cur == corners.first  ) {
+			break;
+		}
+	}
+	if(  all_outside  ) {
+		return;
+	}
+	if(  first_split && last_split  ) {
+		corners.prepareSplit( first_split, last_split );
+
+		first_split->next->p.y = first_split->p.y +
+		                         ( first_split->next->p.y - first_split->p.y ) *
+		                         ( CR0.clip_rect.xx - first_split->p.x ) /
+		                         ( first_split->next->p.x - first_split->p.x );
+		first_split->next->p.x = CR0.clip_rect.xx;
+
+		last_split->prev->p.y = last_split->p.y +
+		                        ( last_split->prev->p.y - last_split->p.y ) *
+		                        ( CR0.clip_rect.xx - last_split->p.x ) /
+		                        ( last_split->prev->p.x - last_split->p.x );
+		last_split->prev->p.x = CR0.clip_rect.xx;
+	}
+
+	//intersection by CR0.clip_rect.y
+	first_split = nullptr;
+	last_split = nullptr;
+	cur = corners.first;
+	all_outside = true;
+	while(  cur  ) {
+		//test if the line between this corner and the next is
+		//intersected by CR0.clip_rect.y
+		if(  cur->p.y >= CR0.clip_rect.y  ) {
+			all_outside = false;
+		}
+		if(  cur->p.y >= CR0.clip_rect.y &&
+		                cur->next->p.y < CR0.clip_rect.y  ) {
+			first_split = cur;
+			cur = cur->next;
+			while(  cur  ) {
+				if(  cur->p.y < CR0.clip_rect.y &&
+				                cur->next->p.y >= CR0.clip_rect.y  ) {
+					last_split = cur->next;
+					break;
+				}
+				cur = cur->next;
+			}
+			break;
+		}
+		cur = cur->next;
+		if(  cur == corners.first  ) {
+			break;
+		}
+	}
+	if(  all_outside  ) {
+		return;
+	}
+	if(  first_split && last_split  ) {
+		corners.prepareSplit( first_split, last_split );
+
+		first_split->next->p.x = first_split->p.x +
+		                         ( first_split->next->p.x - first_split->p.x ) *
+		                         ( CR0.clip_rect.y - first_split->p.y ) /
+		                         ( first_split->next->p.y - first_split->p.y );
+		first_split->next->p.y = CR0.clip_rect.y;
+
+		last_split->prev->p.x = last_split->p.x +
+		                        ( last_split->prev->p.x - last_split->p.x ) *
+		                        ( CR0.clip_rect.y - last_split->p.y ) /
+		                        ( last_split->prev->p.y - last_split->p.y );
+		last_split->prev->p.y = CR0.clip_rect.y;
+	}
+
+	//intersection by CR0.clip_rect.yy
+	first_split = nullptr;
+	last_split = nullptr;
+	cur = corners.first;
+	all_outside = true;
+	while(  cur  ) {
+		//test if the line between this corner and the next is
+		//intersected by CR0.clip_rect.yy
+		if(  cur->p.y < CR0.clip_rect.yy  ) {
+			all_outside = false;
+		}
+		if(  cur->p.y < CR0.clip_rect.yy &&
+		                cur->next->p.y >= CR0.clip_rect.yy  ) {
+			first_split = cur;
+			cur = cur->next;
+			while(  cur  ) {
+				if(  cur->p.y >= CR0.clip_rect.yy &&
+				                cur->next->p.y < CR0.clip_rect.yy  ) {
+					last_split = cur->next;
+					break;
+				}
+				cur = cur->next;
+			}
+			break;
+		}
+		cur = cur->next;
+		if(  cur == corners.first  ) {
+			break;
+		}
+	}
+	if(  all_outside  ) {
+		return;
+	}
+	if(  first_split && last_split  ) {
+		corners.prepareSplit( first_split, last_split );
+
+		first_split->next->p.x = first_split->p.x +
+		                         ( first_split->next->p.x - first_split->p.x ) *
+		                         ( CR0.clip_rect.yy - first_split->p.y ) /
+		                         ( first_split->next->p.y - first_split->p.y );
+		first_split->next->p.y = CR0.clip_rect.yy;
+
+		last_split->prev->p.x = last_split->p.x +
+		                        ( last_split->prev->p.x - last_split->p.x ) *
+		                        ( CR0.clip_rect.yy - last_split->p.y ) /
+		                        ( last_split->prev->p.y - last_split->p.y );
+		last_split->prev->p.y = CR0.clip_rect.yy;
+	}
+
+	//at this point we either returned because all of the quad ended up outside
+	//the clip rect, or we have a polygon with up to 8 corners.
+
+	DrawCommandKey cmdkey;
+	cmdkey.cr.poly_active = 0;
+	cmdkey.tex = 0;
+	cmdkey.rgbmap_tex = 0;
+	cmdkey.alphatex = 0;
+	cmdkey.uses_tex = 1;
+	cmdkey.uses_rgbmap_tex = 0;
+	cmdkey.uses_alphatex = 0;
+
+	CornerList::Corner *p1 = corners.first;
+	CornerList::Corner *p2 = corners.first->prev;
+	while(  true  ) {
+		queueDrawCommand( cmdkey,
+		                  p1->p.x, p1->p.y,
+		                  p1->next->p.x, p1->next->p.y,
+		                  p2->p.x, p2->p.y,
+		                  p2->prev->p.x, p2->prev->p.y,
+		                  0, 0, 0, 0, 0, 0, 0, 0,
+		                  0, 0, 0, 0, 0, 0, 0, 0,
+		                  makeColor( 0, 0, 0, 1 ),
+		                  makeColor_rgb( colval )
+		                  CLIP_NUM_DEFAULT
+		                );
+		p1 = p1->next;
+		if(  p1 == p2  ) {
+			break;
+		}
+		p2 = p2->prev;
+		if(  p1 == p2  ) {
+			break;
+		}
+	}
+}
+
 void display_filled_circle_rgb(scr_coord_val x0, scr_coord_val  y0, int radius, const PIXVAL colval)
 {
-	int f = 1 - radius;
-	int ddF_x = 1;
-	int ddF_y = -2 * radius;
-	int x = 0;
-	int y = radius;
-
-	display_fb_internal( x0 - radius, y0, radius + radius + 1, 1, colval, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
-	display_pixel( x0, y0 + radius, colval );
-	display_pixel( x0, y0 - radius, colval );
-	display_pixel( x0 + radius, y0, colval );
-	display_pixel( x0 - radius, y0, colval );
-
-	while(  x < y  ) {
-		// ddF_x == 2 * x + 1;
-		// ddF_y == -2 * y;
-		// f == x*x + y*y - radius*radius + 2*x - y + 1;
-		if(  f >= 0  ) {
-			y--;
-			ddF_y += 2;
-			f += ddF_y;
-		}
-
-		x++;
-		ddF_x += 2;
-		f += ddF_x;
-		display_fb_internal( x0 - x, y0 + y, x + x, 1, colval, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
-		display_fb_internal( x0 - x, y0 - y, x + x, 1, colval, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
-
-		display_fb_internal( x0 - y, y0 + x, y + y, 1, colval, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
-		display_fb_internal( x0 - y, y0 - x, y + y, 1, colval, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
+	//bail early when we can be sure none is visible
+	if(  x0 + radius < CR0.clip_rect.x || x0 - radius >= CR0.clip_rect.xx ||
+	                y0+radius < CR0.clip_rect.y || y0-radius >= CR0.clip_rect.yy  ) {
+		return;
 	}
-//	mark_rect_dirty_wc( x0-radius, y0-radius, x0+radius+1, y0+radius+1 );
+
+
+	float max_err = 0.5f;//pixels
+	//segments per octant
+	int num_segments = ceil( M_PI / sqrt( 2 * radius * max_err - max_err * max_err ) / 8.0f );
+	if(  num_segments < 1  ) {
+		num_segments = 1;
+	}
+
+	scr_coord_val xp = 0, yp = radius;
+	float angle = 0.0f;
+	for(  int i = 0; i < num_segments; i++  ) {
+		angle += M_PI * 2 / 8 / num_segments;
+		scr_coord_val x2 = sin( angle ) * radius;
+		scr_coord_val y2 = cos( angle ) * radius;
+
+		display_quad_rgb( x0 - xp, y0 - yp,
+		                  x0 + xp, y0 - yp,
+		                  x0 - x2, y0 - y2,
+		                  x0 + x2, y0 - y2,
+		                  colval );
+
+		display_quad_rgb( x0 - x2, y0 + y2,
+		                  x0 + x2, y0 + y2,
+		                  x0 - xp, y0 + yp,
+		                  x0 + xp, y0 + yp,
+		                  colval );
+
+		display_quad_rgb( x0 - yp, y0 - xp,
+		                  x0 - yp, y0 + xp,
+		                  x0 - y2, y0 - x2,
+		                  x0 - y2, y0 + x2,
+		                  colval );
+
+		display_quad_rgb( x0 + y2, y0 - x2,
+		                  x0 + y2, y0 + x2,
+		                  x0 + yp, y0 - xp,
+		                  x0 + yp, y0 + xp,
+		                  colval );
+
+		xp = x2;
+		yp = y2;
+	}
+
+	display_fb_internal( x0 - xp, y0 - yp, xp * 2, yp * 2, colval,
+	                     CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
 }
 
 
@@ -4767,7 +5606,7 @@ void draw_bezier_rgb(scr_coord_val Ax, scr_coord_val Ay, scr_coord_val Bx, scr_c
 		rx = Ax * b * b * b + 3 * Cx * b * b * a + 3 * Dx * b * a * a + Bx * a * a * a;
 		ry = Ay * b * b * b + 3 * Cy * b * b * a + 3 * Dy * b * a * a + By * a * a * a;
 		// fixed point: due to cycling between 0 and 32 (1<<5), we divide by 32^3 == 1<<15 because of cubic interpolation
-		if(  !draw && !dontDraw  ) {
+		if(  !dontDraw  ) {
 			display_direct_line_rgb( rx >> 15, ry >> 15, oldx >> 15, oldy >> 15, colore );
 		}
 		else {
