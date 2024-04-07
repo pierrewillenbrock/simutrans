@@ -565,10 +565,33 @@ struct ArrayInfo
 	int use_ctr;
 };
 
+static GLvec2f makeVec2f(GLfloat x, GLfloat y)
+{
+	GLvec2f v;
+	v.x = x;
+	v.y = y;
+	return v;
+}
+
+static GLvec2s makeVec2s(GLshort x, GLshort y)
+{
+	GLvec2s v;
+	v.x = x;
+	v.y = y;
+	return v;
+}
+
 static GLcolorf makeColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a)
 {
 	GLcolorf c = { r, g, b, a };
 	return c;
+}
+
+static GLvec4f toVec4(GLcolorf const &c)
+{
+	GLvec4f v;
+	v.glcolor = c;
+	return v;
 }
 
 struct DrawCommand
@@ -577,20 +600,6 @@ struct DrawCommand
 	TextureAtlas_Texname tex;
 	GLuint rgbmap_tex;
 	TextureAtlas_Texname alphatex;
-	scr_coord_val vx1;
-	scr_coord_val vy1;
-	scr_coord_val vx2;
-	scr_coord_val vy2;
-	GLfloat tx1;
-	GLfloat ty1;
-	GLfloat tx2;
-	GLfloat ty2;
-	GLfloat ax1;
-	GLfloat ay1;
-	GLfloat ax2;
-	GLfloat ay2;
-	GLcolorf alpha;
-	GLcolorf color;
 	//for stencil
 	scr_coord_val min_x;
 	scr_coord_val min_y;
@@ -609,6 +618,14 @@ struct Vertex
 	GLvec2f alphacoord;
 	GLvec2s vertex;
 };
+
+static Vertex makeVertex(GLvec4f const &alpha, GLvec4f const &color,
+                         GLvec2f const &texcoord, GLvec2f const &alphacoord,
+                         GLvec2s const &vertex)
+{
+	Vertex v = { alpha, color, texcoord, alphacoord, vertex };
+	return v;
+}
 
 struct  CopyVertex
 {
@@ -1807,6 +1824,7 @@ static void runDrawCommand(DrawCommand const &cmd, GLint vertex_first, GLint ver
 }
 
 static std::vector<DrawCommand> drawCommands;
+static std::vector<Vertex> drawVertices;
 
 
 static bool makeDrawCommandCompatible(DrawCommand &cm, DrawCommand const &c2)
@@ -1903,46 +1921,6 @@ static void flushDrawCommands()
 		return;
 	}
 
-	std::vector<Vertex> vertices;
-	vertices.reserve( drawCommands.size() * 4 );
-
-	for(  auto it = drawCommands.begin(); it != drawCommands.end(); it++  ) {
-		Vertex v;
-		v.alpha.glcolor = it->alpha;
-		v.color.glcolor = it->color;
-		v.texcoord.x = it->tx1;
-		v.texcoord.y = it->ty1;
-		v.alphacoord.x = it->ax1;
-		v.alphacoord.y = it->ay1;
-		v.vertex.x = it->vx1;
-		v.vertex.y = it->vy1;
-		vertices.emplace_back( v );
-
-		v.texcoord.x = it->tx2;
-		v.texcoord.y = it->ty1;
-		v.alphacoord.x = it->ax2;
-		v.alphacoord.y = it->ay1;
-		v.vertex.x = it->vx2;
-		v.vertex.y = it->vy1;
-		vertices.emplace_back( v );
-
-		v.texcoord.x = it->tx1;
-		v.texcoord.y = it->ty2;
-		v.alphacoord.x = it->ax1;
-		v.alphacoord.y = it->ay2;
-		v.vertex.x = it->vx1;
-		v.vertex.y = it->vy2;
-		vertices.emplace_back( v );
-
-		v.texcoord.x = it->tx2;
-		v.texcoord.y = it->ty2;
-		v.alphacoord.x = it->ax2;
-		v.alphacoord.y = it->ay2;
-		v.vertex.x = it->vx2;
-		v.vertex.y = it->vy2;
-		vertices.emplace_back( v );
-	}
-
 	setupCombinedShader();
 
 	auto b = drawCommands.begin();
@@ -1953,11 +1931,12 @@ static void flushDrawCommands()
 		for(  unsigned int i = 0; e != drawCommands.end() && i < gl_max_commands; i++, e++, eno++  ) {
 		}
 		flushDrawCommands( b, e,
-		                   vertices.data() + bno * 4, ( eno - bno ) * 4 );
+		                   drawVertices.data() + bno * 4, ( eno - bno ) * 4 );
 		b = e;
 	}
 
 	drawCommands.clear();
+	drawVertices.clear();
 
 	disableShaders();
 
@@ -1974,7 +1953,7 @@ static void scrollDrawCommands(scr_coord_val /*start_y*/, scr_coord_val /*x_offs
 	flushDrawCommands();
 }
 
-static void queueDrawCommand(DrawCommand cmd,
+static void queueDrawCommand(DrawCommand &&cmd,
                              scr_coord_val vx1,
                              scr_coord_val vy1,
                              scr_coord_val vx2,
@@ -1990,26 +1969,28 @@ static void queueDrawCommand(DrawCommand cmd,
                              GLcolorf alpha,
                              GLcolorf color)
 {
-	cmd.vx1 = vx1;
-	cmd.vy1 = vy1;
-	cmd.vx2 = vx2;
-	cmd.vy2 = vy2;
-	cmd.tx1 = tx1;
-	cmd.ty1 = ty1;
-	cmd.tx2 = tx2;
-	cmd.ty2 = ty2;
-	cmd.ax1 = ax1;
-	cmd.ay1 = ay1;
-	cmd.ax2 = ax2;
-	cmd.ay2 = ay2;
-	cmd.alpha = alpha;
-	cmd.color = color;
 	cmd.min_x = vx1;
 	cmd.min_y = vy1;
 	cmd.max_x = vx2;
 	cmd.max_y = vy2;
 
 	drawCommands.emplace_back( cmd );
+	drawVertices.emplace_back( makeVertex( toVec4( alpha ), toVec4( color ),
+	                                       makeVec2f( tx1, ty1 ),
+	                                       makeVec2f( ax1, ay1 ),
+	                                       makeVec2s( vx1, vy1 ) ) );
+	drawVertices.emplace_back( makeVertex( toVec4( alpha ), toVec4( color ),
+	                                       makeVec2f( tx2, ty1 ),
+	                                       makeVec2f( ax2, ay1 ),
+	                                       makeVec2s( vx2, vy1 ) ) );
+	drawVertices.emplace_back( makeVertex( toVec4( alpha ), toVec4( color ),
+	                                       makeVec2f( tx1, ty2 ),
+	                                       makeVec2f( ax1, ay2 ),
+	                                       makeVec2s( vx1, vy2 ) ) );
+	drawVertices.emplace_back( makeVertex( toVec4( alpha ), toVec4( color ),
+	                                       makeVec2f( tx2, ty2 ),
+	                                       makeVec2f( ax2, ay2 ),
+	                                       makeVec2s( vx2, vy2 ) ) );
 }
 
 static void updateRGBMap(GLuint &tex, PIXVAL *rgbmap, uint64_t code)
@@ -2826,7 +2807,7 @@ static void display_img_pc(const image_id n,
 		cmd.uses_tex = 1;
 		cmd.uses_rgbmap_tex = 1;
 		cmd.uses_alphatex = 0;
-		queueDrawCommand( cmd,
+		queueDrawCommand( std::move( cmd ),
 		                  xp,
 		                  yp,
 		                  xp + w,
@@ -3218,7 +3199,7 @@ static void simgraphgl_tint_rect(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 		cmd.uses_tex = 1;
 		cmd.uses_rgbmap_tex = 0;
 		cmd.uses_alphatex = 0;
-		queueDrawCommand( cmd,
+		queueDrawCommand( std::move( cmd ),
 		                  xp,
 		                  yp,
 		                  xp + w,
@@ -3264,7 +3245,7 @@ static void display_img_blend_wc(const image_id n,
 		cmd.uses_tex = 1;
 		cmd.uses_rgbmap_tex = 1;
 		cmd.uses_alphatex = 0;
-		queueDrawCommand( cmd,
+		queueDrawCommand( std::move( cmd ),
 		                  xp,
 		                  yp,
 		                  xp + w,
@@ -3306,7 +3287,7 @@ static void display_img_blend_wc_colour(const image_id n,
 		cmd.uses_tex = 1;
 		cmd.uses_rgbmap_tex = 0;
 		cmd.uses_alphatex = 0;
-		queueDrawCommand( cmd,
+		queueDrawCommand( std::move( cmd ),
 		                  xp,
 		                  yp,
 		                  xp + w,
@@ -3366,8 +3347,8 @@ static void display_img_alpha_wc(const image_id n, const image_id alpha_n,
 		cmd.uses_tex = 1;
 		cmd.uses_rgbmap_tex = 1;
 		cmd.uses_alphatex = 1;
-		//todo: someone please explain to me why there is 2.0 needed here
-		queueDrawCommand( cmd,
+		//todo: someone please explain to me why there is 2.0 in alpha is needed here
+		queueDrawCommand( std::move( cmd ),
 		                  xp,
 		                  yp,
 		                  xp + w,
@@ -3608,7 +3589,7 @@ static void display_pixel(scr_coord_val x, scr_coord_val y, PIXVAL color)
 		cmd.uses_tex = 1;
 		cmd.uses_rgbmap_tex = 0;
 		cmd.uses_alphatex = 0;
-		queueDrawCommand( cmd,
+		queueDrawCommand( std::move( cmd ),
 		                  x,
 		                  y,
 		                  x + 1,
@@ -3639,7 +3620,7 @@ static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_va
 		cmd.uses_tex = 1;
 		cmd.uses_rgbmap_tex = 0;
 		cmd.uses_alphatex = 0;
-		queueDrawCommand( cmd,
+		queueDrawCommand( std::move( cmd ),
 		                  xp,
 		                  yp,
 		                  xp + w,
@@ -3692,7 +3673,7 @@ static void display_vl_internal(const scr_coord_val xp, scr_coord_val yp, scr_co
 		cmd.uses_tex = 1;
 		cmd.uses_rgbmap_tex = 0;
 		cmd.uses_alphatex = 0;
-		queueDrawCommand( cmd,
+		queueDrawCommand( std::move( cmd ),
 		                  xp,
 		                  yp,
 		                  xp + 1,
@@ -3744,7 +3725,7 @@ static void simgraphgl_draw_array(scr_coord_val xp, scr_coord_val yp, scr_coord_
 		cmd.uses_tex = 1;
 		cmd.uses_rgbmap_tex = 0;
 		cmd.uses_alphatex = 0;
-		queueDrawCommand( cmd,
+		queueDrawCommand( std::move( cmd ),
 		                  xp,
 		                  yp,
 		                  xp + w,
@@ -4070,7 +4051,7 @@ static scr_coord_val simgraphgl_draw_text_clipped_n(scr_coord_val x, scr_coord_v
 				cmd.uses_tex = 1;
 				cmd.uses_rgbmap_tex = 0;
 				cmd.uses_alphatex = 0;
-				queueDrawCommand( cmd,
+				queueDrawCommand( std::move( cmd ),
 				                  sx,
 				                  sy,
 				                  sx + w,
@@ -4823,6 +4804,7 @@ static bool simgraphgl_init(scr_size window_size, sint16 full_screen)
 	glGenBuffers( 1, &gl_copy_vertices_buffer_name );
 
 	drawCommands.clear();
+	drawVertices.clear();
 
 	dbg->message( "simgraph_init", "Init done." );
 	fflush( NULL );
