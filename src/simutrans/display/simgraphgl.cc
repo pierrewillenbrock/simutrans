@@ -1422,38 +1422,15 @@ static void runDrawCommand(DrawCommand const &cmd, GLint vertex_first, GLint ver
 
 static std::vector<DrawCommand> drawCommands;
 
-static void flushDrawCommands()
+static void flushDrawCommands(std::vector<DrawCommand>::iterator begin,
+                              std::vector<DrawCommand>::iterator end,
+                              std::vector<Vertex> &vertices,
+                              std::vector<GLushort> &indices)
 {
-	if(  drawCommands.empty()  ) {
-		return;
-	}
-
-	glUseProgram( combined_program );
-
-	//this tells opengl which texture object to use
-	//these cannot be moved into vertex attributes until
-	//bindless textures are available
-	glUniform1i( combined_s_texColor_Location, 0 );
-	glUniform1i( combined_s_texRGBMap_Location, 1 );
-	glUniform1i( combined_s_texAlpha_Location, 2 );
-
-	//the rest should be vertex attributes.
-
-	glEnable( GL_BLEND );
-	glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-
-	GLuint vertices_name;
-	GLuint indices_name;
-
-	glGenBuffers( 1, &vertices_name );
-	glGenBuffers( 1, &indices_name );
-	std::vector<Vertex> vertices;
-	std::vector<GLushort> indices;
-	vertices.reserve( drawCommands.size() * 4 );
-	indices.reserve( drawCommands.size() * 6 - 2 );
-
-	for(  auto it = drawCommands.begin(); it != drawCommands.end(); it++  ) {
-		if(  it != drawCommands.begin()  ) {
+	vertices.clear();
+	indices.clear();
+	for(  auto it = begin; it != end; it++  ) {
+		if(  it != begin  ) {
 			//readd the previous vertices to make the triangles invalid
 			//this results in the last valid tri being -3,-2,-1
 			//then follow -2,-1,-1; -1,-1,0; -1,0,0; 0,0,1
@@ -1502,36 +1479,20 @@ static void flushDrawCommands()
 		indices.push_back( vertices.size() );
 		vertices.push_back( v );
 	}
-	glBindBuffer( GL_ARRAY_BUFFER, vertices_name );
 	//when keeping the buffer around, we want GL_DYNAMIC_DRAW.
-	glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STREAM_DRAW );
+	glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_DYNAMIC_DRAW );
 
-	glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, indices_name );
-	glBufferData( GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLushort), indices.data(), GL_STREAM_DRAW );
-
-	glEnableClientState( GL_VERTEX_ARRAY );
-	glVertexPointer( 2, GL_SHORT, sizeof(Vertex), (void *)offsetof( Vertex, vertex ) );
-	glClientActiveTexture( GL_TEXTURE0 );
-	glEnableClientState( GL_TEXTURE_COORD_ARRAY );
-	glTexCoordPointer( 2, GL_FLOAT, sizeof(Vertex), (void *)offsetof( Vertex, texcoord ) );
-	glClientActiveTexture( GL_TEXTURE1 );
-	glEnableClientState( GL_TEXTURE_COORD_ARRAY );
-	glTexCoordPointer( 2, GL_FLOAT, sizeof(Vertex), (void *)offsetof( Vertex, alphacoord ) );
-	glEnableClientState( GL_COLOR_ARRAY );
-	glColorPointer( 4, GL_FLOAT, sizeof(Vertex), (void *)offsetof( Vertex, color ) );
-
-	glEnableVertexAttribArray( combined_a_alphaMask_Location );
-	glVertexAttribPointer( combined_a_alphaMask_Location, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof( Vertex, alpha ) );
+	glBufferData( GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLushort), indices.data(), GL_DYNAMIC_DRAW );
 
 	int vertex_current = 0;
 
-	for(  auto it = drawCommands.begin(); it != drawCommands.end();  ) {
+	for(  auto it = begin; it != end;  ) {
 		int vertex_first = vertex_current;
 		int vertex_count = 4;
 		std::vector<DrawCommand>::iterator it2 = it;
 		it2++;
 		vertex_current += 6;
-		while(  it2 != drawCommands.end()  ) {
+		while(  it2 != end  ) {
 			//for now, check if the basic setup is identical.
 			//later, we should try and find a setup that can be used for
 			//the most number of commands
@@ -1575,6 +1536,72 @@ static void flushDrawCommands()
 		runDrawCommand( *it, vertex_first, vertex_count );
 		it = it2;
 	}
+}
+
+static void flushDrawCommands()
+{
+	if(  drawCommands.empty()  ) {
+		return;
+	}
+
+	glUseProgram( combined_program );
+
+	//this tells opengl which texture object to use
+	//these cannot be moved into vertex attributes until
+	//bindless textures are available
+	glUniform1i( combined_s_texColor_Location, 0 );
+	glUniform1i( combined_s_texRGBMap_Location, 1 );
+	glUniform1i( combined_s_texAlpha_Location, 2 );
+
+	//the rest should be vertex attributes.
+
+	glEnable( GL_BLEND );
+	glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+
+	GLuint vertices_name;
+	GLuint indices_name;
+
+	glGenBuffers( 1, &vertices_name );
+	glGenBuffers( 1, &indices_name );
+	glBindBuffer( GL_ARRAY_BUFFER, vertices_name );
+	glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, indices_name );
+
+	std::vector<Vertex> vertices;
+	std::vector<GLushort> indices;
+	int const max_commands = 16384;
+	if(  drawCommands.size() > max_commands  ) {
+		vertices.reserve( max_commands * 4 );
+		indices.reserve( max_commands * 6 - 2 );
+	}
+	else {
+		vertices.reserve( drawCommands.size() * 4 );
+		indices.reserve( drawCommands.size() * 6 - 2 );
+	}
+
+	glEnableClientState( GL_VERTEX_ARRAY );
+	glVertexPointer( 2, GL_SHORT, sizeof(Vertex), (void *)offsetof( Vertex, vertex ) );
+	glClientActiveTexture( GL_TEXTURE0 );
+	glEnableClientState( GL_TEXTURE_COORD_ARRAY );
+	glTexCoordPointer( 2, GL_FLOAT, sizeof(Vertex), (void *)offsetof( Vertex, texcoord ) );
+	glClientActiveTexture( GL_TEXTURE1 );
+	glEnableClientState( GL_TEXTURE_COORD_ARRAY );
+	glTexCoordPointer( 2, GL_FLOAT, sizeof(Vertex), (void *)offsetof( Vertex, alphacoord ) );
+	glEnableClientState( GL_COLOR_ARRAY );
+	glColorPointer( 4, GL_FLOAT, sizeof(Vertex), (void *)offsetof( Vertex, color ) );
+
+	glEnableVertexAttribArray( combined_a_alphaMask_Location );
+	glVertexAttribPointer( combined_a_alphaMask_Location, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof( Vertex, alpha ) );
+
+	auto b = drawCommands.begin();
+	auto e = b;
+	while(  b != drawCommands.end()  ) {
+		for(  unsigned int i = 0; e != drawCommands.end() && i < max_commands; i++, e++  ) {
+		}
+		flushDrawCommands( b, e,
+		                   vertices, indices );
+		b = e;
+	}
+
 	drawCommands.clear();
 
 	glDisableClientState( GL_VERTEX_ARRAY );
@@ -1605,10 +1632,7 @@ static void scrollDrawCommands(scr_coord_val /*start_y*/, scr_coord_val /*x_offs
 
 static void queueDrawCommand(DrawCommand const &cmd)
 {
-	drawCommands.push_back( cmd );
-	if(  drawCommands.size() > 256  ) {
-		flushDrawCommands();
-	}
+	drawCommands.push_back(cmd);
 }
 
 static void updateRGBMap(GLuint &tex, PIXVAL *rgbmap, uint64_t code)
