@@ -722,6 +722,9 @@ static int night_shift = -1;
 /*
  * gl buffers
  */
+static int const gl_max_commands = 16384;
+static GLuint gl_indices_buffer_name;
+static GLuint gl_vertices_buffer_name;
 static GLuint gl_copy_vertices_buffer_name;
 
 static CopyVertex gl_copy_vertices[4] = {
@@ -730,6 +733,7 @@ static CopyVertex gl_copy_vertices[4] = {
 	{ 1.0 * 100,  1.0 * 100, 1.0, 0.0},
 	{ 1.0 * 100,  0.0,     1.0, 1.0}
 };
+
 
 /*
  * special colors during daytime
@@ -1680,65 +1684,10 @@ static std::vector<DrawCommand> drawCommands;
 
 static void flushDrawCommands(std::vector<DrawCommand>::iterator begin,
                               std::vector<DrawCommand>::iterator end,
-                              std::vector<Vertex> &vertices,
-                              std::vector<GLushort> &indices)
+                              Vertex *vertices, size_t vertices_count)
 {
-	vertices.clear();
-	indices.clear();
-	for(  auto it = begin; it != end; it++  ) {
-		if(  it != begin  ) {
-			//readd the previous vertices to make the triangles invalid
-			//this results in the last valid tri being -3,-2,-1
-			//then follow -2,-1,-1; -1,-1,0; -1,0,0; 0,0,1
-			//then the first valid tri again: 0,1,2
-
-			indices.emplace_back( vertices.size() - 1 );
-			indices.emplace_back( vertices.size() );
-		}
-
-		Vertex v;
-		v.alpha.glcolor = it->alpha;
-		v.color.glcolor = it->color;
-		v.texcoord.x = it->tx1;
-		v.texcoord.y = it->ty1;
-		v.alphacoord.x = it->ax1;
-		v.alphacoord.y = it->ay1;
-		v.vertex.x = it->vx1;
-		v.vertex.y = it->vy1;
-		indices.emplace_back( vertices.size() );
-		vertices.emplace_back( v );
-
-		v.texcoord.x = it->tx2;
-		v.texcoord.y = it->ty1;
-		v.alphacoord.x = it->ax2;
-		v.alphacoord.y = it->ay1;
-		v.vertex.x = it->vx2;
-		v.vertex.y = it->vy1;
-		indices.emplace_back( vertices.size() );
-		vertices.emplace_back( v );
-
-		v.texcoord.x = it->tx1;
-		v.texcoord.y = it->ty2;
-		v.alphacoord.x = it->ax1;
-		v.alphacoord.y = it->ay2;
-		v.vertex.x = it->vx1;
-		v.vertex.y = it->vy2;
-		indices.emplace_back( vertices.size() );
-		vertices.emplace_back( v );
-
-		v.texcoord.x = it->tx2;
-		v.texcoord.y = it->ty2;
-		v.alphacoord.x = it->ax2;
-		v.alphacoord.y = it->ay2;
-		v.vertex.x = it->vx2;
-		v.vertex.y = it->vy2;
-		indices.emplace_back( vertices.size() );
-		vertices.emplace_back( v );
-	}
 	//when keeping the buffer around, we want GL_DYNAMIC_DRAW.
-	glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_DYNAMIC_DRAW );
-
-	glBufferData( GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLushort), indices.data(), GL_DYNAMIC_DRAW );
+	glBufferData( GL_ARRAY_BUFFER, vertices_count * sizeof(Vertex), vertices, GL_DYNAMIC_DRAW );
 
 	int vertex_current = 0;
 
@@ -1814,24 +1763,47 @@ static void flushDrawCommands()
 	glEnable( GL_BLEND );
 	glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
 
-	GLuint vertices_name;
-	GLuint indices_name;
-
-	glGenBuffers( 1, &vertices_name );
-	glGenBuffers( 1, &indices_name );
-	glBindBuffer( GL_ARRAY_BUFFER, vertices_name );
-	glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, indices_name );
+	glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, gl_indices_buffer_name );
+	glBindBuffer( GL_ARRAY_BUFFER, gl_vertices_buffer_name );
 
 	std::vector<Vertex> vertices;
-	std::vector<GLushort> indices;
-	int const max_commands = 16384;
-	if(  drawCommands.size() > max_commands  ) {
-		vertices.reserve( max_commands * 4 );
-		indices.reserve( max_commands * 6 - 2 );
-	}
-	else {
-		vertices.reserve( drawCommands.size() * 4 );
-		indices.reserve( drawCommands.size() * 6 - 2 );
+	vertices.reserve( drawCommands.size() * 4 );
+
+	for(  auto it = drawCommands.begin(); it != drawCommands.end(); it++  ) {
+		Vertex v;
+		v.alpha.glcolor = it->alpha;
+		v.color.glcolor = it->color;
+		v.texcoord.x = it->tx1;
+		v.texcoord.y = it->ty1;
+		v.alphacoord.x = it->ax1;
+		v.alphacoord.y = it->ay1;
+		v.vertex.x = it->vx1;
+		v.vertex.y = it->vy1;
+		vertices.emplace_back( v );
+
+		v.texcoord.x = it->tx2;
+		v.texcoord.y = it->ty1;
+		v.alphacoord.x = it->ax2;
+		v.alphacoord.y = it->ay1;
+		v.vertex.x = it->vx2;
+		v.vertex.y = it->vy1;
+		vertices.emplace_back( v );
+
+		v.texcoord.x = it->tx1;
+		v.texcoord.y = it->ty2;
+		v.alphacoord.x = it->ax1;
+		v.alphacoord.y = it->ay2;
+		v.vertex.x = it->vx1;
+		v.vertex.y = it->vy2;
+		vertices.emplace_back( v );
+
+		v.texcoord.x = it->tx2;
+		v.texcoord.y = it->ty2;
+		v.alphacoord.x = it->ax2;
+		v.alphacoord.y = it->ay2;
+		v.vertex.x = it->vx2;
+		v.vertex.y = it->vy2;
+		vertices.emplace_back( v );
 	}
 
 	glEnableClientState( GL_VERTEX_ARRAY );
@@ -1850,11 +1822,13 @@ static void flushDrawCommands()
 
 	auto b = drawCommands.begin();
 	auto e = b;
+	unsigned int bno = 0;
+	unsigned int eno = bno;
 	while(  b != drawCommands.end()  ) {
-		for(  unsigned int i = 0; e != drawCommands.end() && i < max_commands; i++, e++  ) {
+		for(  unsigned int i = 0; e != drawCommands.end() && i < gl_max_commands; i++, e++, eno++  ) {
 		}
 		flushDrawCommands( b, e,
-		                   vertices, indices );
+		                   vertices.data() + bno * 4, ( eno - bno ) * 4 );
 		b = e;
 	}
 
@@ -1867,9 +1841,6 @@ static void flushDrawCommands()
 	glDisableClientState( GL_TEXTURE_COORD_ARRAY );
 	glDisableClientState( GL_COLOR_ARRAY );
 	glDisableVertexAttribArray( combined_a_alphaMask_Location );
-
-	glDeleteBuffers( 1, &vertices_name );
-	glDeleteBuffers( 1, &indices_name );
 
 	glUseProgram( 0 );
 
@@ -4642,6 +4613,35 @@ static bool simgraphgl_init(scr_size window_size, sint16 full_screen)
 	dr_textur_init();
 	inited = true;
 
+
+	GLuint combined_fragmentShader;
+	GLuint vertexShader;
+
+	combined_fragmentShader = compileShader(
+	                GL_FRAGMENT_SHADER,
+	                combined_fragmentShaderText,
+	                sizeof(combined_fragmentShaderText),
+	                "combined fragment shader" );
+	vertexShader = compileShader(
+	                GL_VERTEX_SHADER,
+	                vertexShaderText,
+	                sizeof(vertexShaderText),
+	                "vertex shader" );
+
+
+	combined_program = linkProgram( vertexShader,
+	                                combined_fragmentShader,
+	                                "combined program" );
+
+	glDeleteShader( combined_fragmentShader );
+	glDeleteShader( vertexShader );
+
+	combined_s_texColor_Location = glGetUniformLocation( combined_program, "s_texColor" );
+	combined_s_texRGBMap_Location = glGetUniformLocation( combined_program, "s_texRGBMap" );
+	combined_s_texAlpha_Location = glGetUniformLocation( combined_program, "s_texAlpha" );
+	combined_a_alphaMask_Location = glGetAttribLocation( combined_program, "a_alphaMask" );
+
+
 	GLuint copy_fragmentShader;
 	GLuint copy_vertexShader;
 
@@ -4696,33 +4696,38 @@ static bool simgraphgl_init(scr_size window_size, sint16 full_screen)
 	memcpy( rgbmap_all_day, rgbmap_day_night, RGBMAPSIZE * sizeof(PIXVAL) );
 	updateRGBMap( rgbmap_all_day_tex, rgbmap_all_day, 0 );
 
-	GLuint combined_fragmentShader;
-	GLuint vertexShader;
+	glGenBuffers( 1, &gl_indices_buffer_name );
+	glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, gl_indices_buffer_name );
 
-	combined_fragmentShader = compileShader(
-	                GL_FRAGMENT_SHADER,
-	                combined_fragmentShaderText,
-	                sizeof(combined_fragmentShaderText),
-	                "combined fragment shader" );
-	vertexShader = compileShader(
-	                GL_VERTEX_SHADER,
-	                vertexShaderText,
-	                sizeof(vertexShaderText),
-	                "vertex shader" );
+	std::vector<GLushort> indices;
 
+	indices.reserve( gl_max_commands * 6 - 2 );
 
-	combined_program = linkProgram( vertexShader,
-	                                combined_fragmentShader,
-	                                "combined program" );
+	for(  unsigned int i = 0; i < gl_max_commands; i++  ) {
+		if(  i != 0  ) {
+			//readd the previous vertices to make the triangles invalid
+			//this results in the last valid tri being -3,-2,-1
+			//then follow -2,-1,-1; -1,-1,0; -1,0,0; 0,0,1
+			//then the first valid tri again: 0,1,2
 
-	glDeleteShader( combined_fragmentShader );
-	glDeleteShader( vertexShader );
+			indices.emplace_back( i * 4 - 1 );
+			indices.emplace_back( i * 4 );
+		}
 
-	combined_s_texColor_Location = glGetUniformLocation( combined_program, "s_texColor" );
-	combined_s_texRGBMap_Location = glGetUniformLocation( combined_program, "s_texRGBMap" );
-	combined_s_texAlpha_Location = glGetUniformLocation( combined_program, "s_texAlpha" );
-	combined_a_alphaMask_Location = glGetAttribLocation( combined_program, "a_alphaMask" );
+		indices.emplace_back( i * 4 );
+		indices.emplace_back( i * 4 + 1 );
+		indices.emplace_back( i * 4 + 2 );
+		indices.emplace_back( i * 4 + 3 );
+	}
+	glBufferData( GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLushort), indices.data(), GL_STATIC_DRAW );
+
+	glGenBuffers( 1, &gl_vertices_buffer_name );
 	glGenBuffers( 1, &gl_copy_vertices_buffer_name );
+
+	drawCommands.clear();
+
+	dbg->message( "simgraph_init", "Init done." );
+	fflush( NULL );
 
 	return true;
 }
@@ -4742,10 +4747,16 @@ static bool simgraphgl_is_display_init()
  */
 static void simgraphgl_exit()
 {
+	rgbaatlas.clear();
+	charatlas.clear();
+
 	gfx->free_all_images_above( 0 );
 	images.clear();
 
 	glDeleteBuffers( 1, &gl_copy_vertices_buffer_name );
+	glDeleteBuffers( 1, &gl_indices_buffer_name );
+	glDeleteBuffers( 1, &gl_vertices_buffer_name );
+	glDeleteProgram( combined_program );
 	glDeleteProgram( copy_program );
 
 	dr_os_close();
