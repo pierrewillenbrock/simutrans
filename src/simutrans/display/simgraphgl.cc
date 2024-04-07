@@ -119,7 +119,8 @@ typedef GLvec2<GLshort> GLvec2s;
 
 }
 
-static void build_stencil_for(int _x0, int _y0, int _x1, int _y1,
+static void build_stencil_for(std::vector<simgraphgl::GLvec2s> &vertices,
+                              int _x0, int _y0, int _x1, int _y1,
                               int min_x, int min_y, int max_x, int max_y);
 
 namespace simgraphgl {
@@ -157,17 +158,18 @@ public:
 		non_convex = non_convex_;
 	}
 
-	void build_stencil(scr_coord_val min_x, scr_coord_val min_y, scr_coord_val max_x, scr_coord_val max_y) const
+	void build_stencil(std::vector<GLvec2s> &vertices,
+	                   scr_coord_val min_x, scr_coord_val min_y, scr_coord_val max_x, scr_coord_val max_y) const
 	{
 		if(  non_convex  ) {
 			if(  y1 < y0  ) {
-				build_stencil_for(
+				build_stencil_for( vertices,
 				                   x0, y0,
 				                   x1, y1,
 				                   min_x, y1,
 				                   max_x, max_y);
 				if(  min_y < y1  ) {
-					build_stencil_for(
+					build_stencil_for( vertices,
 					                   x1,y1,
 					                   x1, min_y,
 					                   min_x, min_y,
@@ -176,13 +178,13 @@ public:
 			}
 			else {
 				if(  min_y < y0  ) {
-					build_stencil_for(
+					build_stencil_for( vertices,
 					                   x0, min_y,
 					                   x0, y0,
 					                   min_x, min_y,
 					                   max_x, y0);
 				}
-				build_stencil_for(
+				build_stencil_for( vertices,
 				                   x0, y0,
 				                   x1, y1,
 				                   min_x, y0,
@@ -190,7 +192,7 @@ public:
 			}
 		}
 		else {
-			build_stencil_for(
+			build_stencil_for( vertices,
 			                   x0, y0,
 			                   x1, y1,
 			                   min_x, min_y,
@@ -501,6 +503,7 @@ public:
 	}
 };
 
+
 struct PIX32
 {
 	uint8_t R;
@@ -538,7 +541,13 @@ struct DrawCommand
 	unsigned int uses_alphatex: 1;
 };
 
-struct Vertex
+static GLvec2s make_GLvec2s(GLshort x, GLshort y)
+{
+	GLvec2s v = { { {x,y} } };
+	return v;
+}
+
+struct CombinedVertex
 {
 	GLvec4f alpha;
 	GLvec4f color;
@@ -713,6 +722,7 @@ static int night_shift = -1;
 static int const gl_max_commands = 16384;
 static GLuint gl_indices_buffer_name;
 static GLuint gl_vertices_buffer_name;
+static GLuint gl_stencil_vertices_buffer_name;
 
 
 /*
@@ -1094,7 +1104,8 @@ void display_pop_clip_wh(CLIP_NUM_DEF0)
 }
 
 
-static void build_stencil_for(int _x0, int _y0, int _x1, int _y1,
+static void build_stencil_for(std::vector<GLvec2s> &vertices,
+                              int _x0, int _y0, int _x1, int _y1,
                               int min_x, int min_y, int max_x, int max_y)
 {
 	float x0 = _x0;
@@ -1238,38 +1249,64 @@ static void build_stencil_for(int _x0, int _y0, int _x1, int _y1,
 		return;
 	}
 
+	if(  !vertices.empty()  ) {
+		vertices.emplace_back( vertices.back() );
+		if(  vertices.size() % 2 == 0  ) {
+			vertices.emplace_back( vertices.back() );
+		}
+		vertices.emplace_back( make_GLvec2s( x0, y0 ) );
+	}
 	//okay. each point is on one of the boundaries.
 	//put out the original edge
-	glBegin( GL_POLYGON );
-	glVertex2f( x0, y0 );
-	glVertex2f( x1, y1 );
-	//then follow the edges clockwise. maximum count is 5.
-	while(  dir0 != dir1  )
-	{
-		switch(dir1)
-		{
+	vertices.emplace_back( make_GLvec2s( x0, y0 ) );
+	vertices.emplace_back( make_GLvec2s( x1, y1 ) );
+	//then follow the edges alternatingly counterclockwise and clockwise.
+	//maximum count is 5.
+	while(  dir0 != dir1  ) {
+		switch( dir0 ) {
+		case 0:
+			dir0 = 3;
+			vertices.emplace_back( make_GLvec2s( min_x, min_y ) );
+			break;
+		case 1:
+			dir0--;
+			vertices.emplace_back( make_GLvec2s( max_x, min_y ) );
+			break;
+		case 2:
+			dir0--;
+			vertices.emplace_back( make_GLvec2s( max_x, max_y ) );
+			break;
+		case 3:
+			dir0--;
+			vertices.emplace_back( make_GLvec2s( min_x, max_y ) );
+			break;
+		}
+		if(  dir0 == dir1  ) {
+			break;
+		}
+		switch( dir1 ) {
 		case 0:
 			dir1++;
-			glVertex2i( max_x, min_y );
+			vertices.emplace_back( make_GLvec2s( max_x, min_y ) );
 			break;
 		case 1:
 			dir1++;
-			glVertex2i( max_x, max_y );
+			vertices.emplace_back( make_GLvec2s( max_x, max_y ) );
 			break;
 		case 2:
 			dir1++;
-			glVertex2i( min_x, max_y );
+			vertices.emplace_back( make_GLvec2s( min_x, max_y ) );
 			break;
 		case 3:
 			dir1 = 0;
-			glVertex2i( min_x, min_y );
+			vertices.emplace_back( make_GLvec2s( min_x, min_y ) );
 			break;
 		}
 	}
-	glEnd();
 }
 
-static void build_stencil(int min_x, int min_y, int max_x, int max_y, clipping_info_t const &cr)
+static void build_stencil(int min_x, int min_y, int max_x, int max_y,
+                          clipping_info_t const &cr)
 {
 	glColorMask( 0, 0, 0, 0 );
 	glBindTexture( GL_TEXTURE_2D, 0 );
@@ -1277,20 +1314,39 @@ static void build_stencil(int min_x, int min_y, int max_x, int max_y, clipping_i
 	glStencilFunc( GL_ALWAYS, 0, 1 );
 	glStencilOp( GL_KEEP, GL_KEEP, GL_REPLACE );
 
-//	glClear(GL_STENCIL_BUFFER_BIT);
-	glBegin( GL_QUADS );
-	glVertex2i( min_x, min_y );
-	glVertex2i( max_x, min_y );
-	glVertex2i( max_x, max_y );
-	glVertex2i( min_x, max_y );
-	glEnd();
+	std::vector<GLvec2s> vertices;
 
-	glStencilFunc( GL_ALWAYS, 1, 1 );
+	vertices.emplace_back( make_GLvec2s( min_x, min_y ) );
+	vertices.emplace_back( make_GLvec2s( max_x, min_y ) );
+	vertices.emplace_back( make_GLvec2s( min_x, max_y ) );
+	vertices.emplace_back( make_GLvec2s( max_x, max_y ) );
+
+	glUseProgram( 0 );
+	glBindBuffer( GL_ARRAY_BUFFER, gl_stencil_vertices_buffer_name );
+	glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof(GLvec2s), vertices.data(), GL_DYNAMIC_DRAW );
+	glEnableClientState( GL_VERTEX_ARRAY );
+	glVertexPointer( 2, GL_SHORT, sizeof(GLvec2s), (void *)0 );
+
+	glDrawArrays( GL_TRIANGLE_STRIP, 0, vertices.size() );
+
+	vertices.clear();
+
 	for(  uint8 i = 0; i < cr.number_of_clips; i++  ) {
 		if(  cr.clip_ribi[i] & cr.active_ribi  ) {
-			cr.poly_clips[i].build_stencil( min_x, min_y, max_x, max_y );
+			cr.poly_clips[i].build_stencil( vertices, min_x, min_y, max_x, max_y );
 		}
 	}
+
+	if(  !vertices.empty()  ) {
+		glStencilFunc( GL_ALWAYS, 1, 1 );
+
+		glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof(GLvec2s), vertices.data(), GL_DYNAMIC_DRAW );
+		glEnableClientState( GL_VERTEX_ARRAY );
+		glVertexPointer( 2, GL_SHORT, sizeof(GLvec2s), (void *)0 );
+
+		glDrawArrays( GL_TRIANGLE_STRIP, 0, vertices.size() );
+	}
+
 	glDisable( GL_STENCIL_TEST );
 	glColorMask( 1, 1, 1, 1 );
 }
@@ -1435,18 +1491,18 @@ static void setupCombinedShader()
 	glBindBuffer( GL_ARRAY_BUFFER, gl_vertices_buffer_name );
 
 	glEnableClientState( GL_VERTEX_ARRAY );
-	glVertexPointer( 2, GL_SHORT, sizeof(Vertex), (void *)offsetof( Vertex, vertex ) );
+	glVertexPointer( 2, GL_SHORT, sizeof(CombinedVertex), (void *)offsetof( CombinedVertex, vertex ) );
 	glClientActiveTexture( GL_TEXTURE0 );
 	glEnableClientState( GL_TEXTURE_COORD_ARRAY );
-	glTexCoordPointer( 2, GL_FLOAT, sizeof(Vertex), (void *)offsetof( Vertex, texcoord ) );
+	glTexCoordPointer( 2, GL_FLOAT, sizeof(CombinedVertex), (void *)offsetof( CombinedVertex, texcoord ) );
 	glClientActiveTexture( GL_TEXTURE1 );
 	glEnableClientState( GL_TEXTURE_COORD_ARRAY );
-	glTexCoordPointer( 2, GL_FLOAT, sizeof(Vertex), (void *)offsetof( Vertex, alphacoord ) );
+	glTexCoordPointer( 2, GL_FLOAT, sizeof(CombinedVertex), (void *)offsetof( CombinedVertex, alphacoord ) );
 	glEnableClientState( GL_COLOR_ARRAY );
-	glColorPointer( 4, GL_FLOAT, sizeof(Vertex), (void *)offsetof( Vertex, color ) );
+	glColorPointer( 4, GL_FLOAT, sizeof(CombinedVertex), (void *)offsetof( CombinedVertex, color ) );
 
 	glEnableVertexAttribArray( combined_a_alphaMask_Location );
-	glVertexAttribPointer( combined_a_alphaMask_Location, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof( Vertex, alpha ) );
+	glVertexAttribPointer( combined_a_alphaMask_Location, 4, GL_FLOAT, GL_FALSE, sizeof(CombinedVertex), (void *)offsetof( CombinedVertex, alpha ) );
 }
 
 static void disableShaders()
@@ -1501,7 +1557,7 @@ static void runDrawCommand(DrawCommand const &cmd, GLint vertex_first, GLint ver
 
 static std::vector<DrawCommand> drawCommands;
 static unsigned int drawCommandsPos = 0;
-static std::vector<Vertex> drawVertices;
+static std::vector<CombinedVertex> drawVertices;
 
 
 static bool makeDrawCommandCompatible(DrawCommand &cm, DrawCommand const &c2)
@@ -1564,10 +1620,10 @@ static bool makeDrawCommandCompatible(DrawCommand &cm, DrawCommand const &c2)
 
 static void flushDrawCommands(std::vector<DrawCommand>::iterator begin,
                               std::vector<DrawCommand>::iterator end,
-                              Vertex *vertices, size_t vertices_count)
+                              CombinedVertex *vertices, size_t vertices_count)
 {
 	//when keeping the buffer around, we want GL_DYNAMIC_DRAW.
-	glBufferData( GL_ARRAY_BUFFER, vertices_count * sizeof(Vertex), vertices, GL_DYNAMIC_DRAW );
+	glBufferData( GL_ARRAY_BUFFER, vertices_count * sizeof(CombinedVertex), vertices, GL_DYNAMIC_DRAW );
 
 	int vertex_current = 0;
 
@@ -4482,6 +4538,7 @@ bool simgraph_init(scr_size window_size, sint16 full_screen)
 	glBufferData( GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLushort), indices.data(), GL_STATIC_DRAW );
 
 	glGenBuffers( 1, &gl_vertices_buffer_name );
+	glGenBuffers( 1, &gl_stencil_vertices_buffer_name );
 
 	drawCommandsPos = 0;
 
@@ -4514,6 +4571,7 @@ void simgraph_exit()
 
 	glDeleteBuffers( 1, &gl_indices_buffer_name );
 	glDeleteBuffers( 1, &gl_vertices_buffer_name );
+	glDeleteBuffers( 1, &gl_stencil_vertices_buffer_name );
 	glDeleteProgram( combined_program );
 
 	dr_os_close();
