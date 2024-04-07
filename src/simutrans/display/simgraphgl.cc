@@ -1349,23 +1349,11 @@ static void runDrawCommand(DrawCommand const &cmd)
 	}
 
 	glActiveTextureARB( GL_TEXTURE0_ARB );
-	glEnable( GL_TEXTURE_2D );
 	glBindTexture( GL_TEXTURE_2D, cmd.tex );
 	glActiveTextureARB( GL_TEXTURE1_ARB );
-	glEnable( GL_TEXTURE_2D );
 	glBindTexture( GL_TEXTURE_2D, cmd.rgbmap_tex );
 	glActiveTextureARB( GL_TEXTURE2_ARB );
-	glEnable( GL_TEXTURE_2D );
 	glBindTexture( GL_TEXTURE_2D, cmd.alphatex );
-
-	glUseProgram( combined_program );
-
-	//this tells opengl which texture object to use
-	//these cannot be moved into vertex attributes until
-	//bindless textures are available
-	glUniform1i( combined_s_texColor_Location, 0 );
-	glUniform1i( combined_s_texRGBMap_Location, 1 );
-	glUniform1i( combined_s_texAlpha_Location, 2 );
 
 	//the rest should be vertex attributes.
 
@@ -1373,8 +1361,6 @@ static void runDrawCommand(DrawCommand const &cmd)
 	                  cmd.alpha.r, cmd.alpha.g, cmd.alpha.b, cmd.alpha.a );
 	glColor4f( cmd.color.r, cmd.color.g, cmd.color.b, cmd.color.a );
 
-	glEnable( GL_BLEND );
-	glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
 	glBegin( GL_QUADS );
 	glTexCoord2f( cmd.tx1,  cmd.ty1 );
 	glMultiTexCoord2f( GL_TEXTURE1, cmd.ax1, cmd.ay1 );
@@ -1390,14 +1376,6 @@ static void runDrawCommand(DrawCommand const &cmd)
 	glVertex2i( cmd.vx1, cmd.vy2 );
 	glEnd();
 
-	glUseProgram( 0 );
-
-	glActiveTextureARB( GL_TEXTURE2_ARB );
-	glDisable( GL_TEXTURE_2D );
-	glActiveTextureARB( GL_TEXTURE1_ARB );
-	glDisable( GL_TEXTURE_2D );
-	glActiveTextureARB( GL_TEXTURE0_ARB );
-
 	if(  cmd.cr.number_of_clips > 0  ) {
 		glDisable( GL_STENCIL_TEST );
 		glStencilFunc( GL_ALWAYS, 1, 1 );
@@ -1408,10 +1386,38 @@ static std::vector<DrawCommand> drawCommands;
 
 static void flushDrawCommands()
 {
+	glUseProgram( combined_program );
+
+	//this tells opengl which texture object to use
+	//these cannot be moved into vertex attributes until
+	//bindless textures are available
+	glUniform1i( combined_s_texColor_Location, 0 );
+	glUniform1i( combined_s_texRGBMap_Location, 1 );
+	glUniform1i( combined_s_texAlpha_Location, 2 );
+
+	glActiveTextureARB( GL_TEXTURE0_ARB );
+	glEnable( GL_TEXTURE_2D );
+	glActiveTextureARB( GL_TEXTURE1_ARB );
+	glEnable( GL_TEXTURE_2D );
+	glActiveTextureARB( GL_TEXTURE2_ARB );
+	glEnable( GL_TEXTURE_2D );
+
+	glEnable( GL_BLEND );
+	glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+
 	for(  auto it = drawCommands.begin(); it != drawCommands.end(); it++  ) {
 		runDrawCommand( *it );
 	}
 	drawCommands.clear();
+
+	glUseProgram( 0 );
+
+	glActiveTextureARB( GL_TEXTURE2_ARB );
+	glDisable( GL_TEXTURE_2D );
+	glActiveTextureARB( GL_TEXTURE1_ARB );
+	glDisable( GL_TEXTURE_2D );
+	glActiveTextureARB( GL_TEXTURE0_ARB );
+
 }
 
 static void scrollDrawCommands(scr_coord_val /*start_y*/, scr_coord_val /*x_offset*/, scr_coord_val /*h*/)
