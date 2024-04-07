@@ -528,20 +528,6 @@ struct DrawCommand
 	GLuint tex;
 	GLuint rgbmap_tex;
 	GLuint alphatex;
-	scr_coord_val vx1;
-	scr_coord_val vy1;
-	scr_coord_val vx2;
-	scr_coord_val vy2;
-	GLfloat tx1;
-	GLfloat ty1;
-	GLfloat tx2;
-	GLfloat ty2;
-	GLfloat ax1;
-	GLfloat ay1;
-	GLfloat ax2;
-	GLfloat ay2;
-	GLcolorf alpha;
-	GLcolorf color;
 	//for stencil
 	scr_coord_val min_x;
 	scr_coord_val min_y;
@@ -1515,6 +1501,7 @@ static void runDrawCommand(DrawCommand const &cmd, GLint vertex_first, GLint ver
 
 static std::vector<DrawCommand> drawCommands;
 static unsigned int drawCommandsPos = 0;
+static std::vector<Vertex> drawVertices;
 
 
 static bool makeDrawCommandCompatible(DrawCommand &cm, DrawCommand const &c2)
@@ -1611,46 +1598,6 @@ static void flushDrawCommands()
 		return;
 	}
 
-	std::vector<Vertex> vertices;
-	vertices.reserve( drawCommands.size() * 4 );
-
-	for(  auto it = drawCommands.begin(); it != drawCommands.end(); it++  ) {
-		Vertex v;
-		v.alpha.glcolor = it->alpha;
-		v.color.glcolor = it->color;
-		v.texcoord.x = it->tx1;
-		v.texcoord.y = it->ty1;
-		v.alphacoord.x = it->ax1;
-		v.alphacoord.y = it->ay1;
-		v.vertex.x = it->vx1;
-		v.vertex.y = it->vy1;
-		vertices.push_back( v );
-
-		v.texcoord.x = it->tx2;
-		v.texcoord.y = it->ty1;
-		v.alphacoord.x = it->ax2;
-		v.alphacoord.y = it->ay1;
-		v.vertex.x = it->vx2;
-		v.vertex.y = it->vy1;
-		vertices.push_back( v );
-
-		v.texcoord.x = it->tx1;
-		v.texcoord.y = it->ty2;
-		v.alphacoord.x = it->ax1;
-		v.alphacoord.y = it->ay2;
-		v.vertex.x = it->vx1;
-		v.vertex.y = it->vy2;
-		vertices.push_back( v );
-
-		v.texcoord.x = it->tx2;
-		v.texcoord.y = it->ty2;
-		v.alphacoord.x = it->ax2;
-		v.alphacoord.y = it->ay2;
-		v.vertex.x = it->vx2;
-		v.vertex.y = it->vy2;
-		vertices.push_back( v );
-	}
-
 	setupCombinedShader();
 
 	auto b = drawCommands.begin();
@@ -1661,7 +1608,7 @@ static void flushDrawCommands()
 		for(  unsigned int i = 0; e != drawCommands.end() && i < gl_max_commands && eno < drawCommandsPos; i++, e++, eno++  ) {
 		}
 		flushDrawCommands( b, e,
-		                   vertices.data() + bno * 4, ( eno - bno ) * 4 );
+		                   drawVertices.data() + bno * 4, ( eno - bno ) * 4 );
 		b = e;
 		bno = eno;
 	}
@@ -1683,7 +1630,7 @@ static void scrollDrawCommands(scr_coord_val /*start_y*/, scr_coord_val /*x_offs
 	flushDrawCommands();
 }
 
-static void queueDrawCommand(DrawCommand cmd,
+static void queueDrawCommand(DrawCommand &&cmd,
                              scr_coord_val vx1,
                              scr_coord_val vy1,
                              scr_coord_val vx2,
@@ -1699,29 +1646,54 @@ static void queueDrawCommand(DrawCommand cmd,
                              GLcolorf alpha,
                              GLcolorf color)
 {
-	cmd.vx1 = vx1;
-	cmd.vy1 = vy1;
-	cmd.vx2 = vx2;
-	cmd.vy2 = vy2;
-	cmd.tx1 = tx1;
-	cmd.ty1 = ty1;
-	cmd.tx2 = tx2;
-	cmd.ty2 = ty2;
-	cmd.ax1 = ax1;
-	cmd.ay1 = ay1;
-	cmd.ax2 = ax2;
-	cmd.ay2 = ay2;
-	cmd.alpha = alpha;
-	cmd.color = color;
 	cmd.min_x = vx1;
 	cmd.min_y = vy1;
 	cmd.max_x = vx2;
 	cmd.max_y = vy2;
 
-	if(drawCommands.size() <= drawCommandsPos)
-		drawCommands.resize(drawCommandsPos+1);
+	if(  drawCommands.size() <= drawCommandsPos  ) {
+		drawCommands.resize( drawCommandsPos + 1 );
+	}
+	if(  drawVertices.size() <= drawCommandsPos * 4  ) {
+		drawVertices.resize( drawCommandsPos * 4 + 4 );
+	}
 
 	drawCommands[drawCommandsPos] = cmd;
+	drawVertices[drawCommandsPos*4+0].alpha.glcolor = alpha;
+	drawVertices[drawCommandsPos*4+0].color.glcolor = color;
+	drawVertices[drawCommandsPos*4+0].texcoord.x = tx1;
+	drawVertices[drawCommandsPos*4+0].texcoord.y = ty1;
+	drawVertices[drawCommandsPos*4+0].alphacoord.x = ax1;
+	drawVertices[drawCommandsPos*4+0].alphacoord.y = ay1;
+	drawVertices[drawCommandsPos*4+0].vertex.x = vx1;
+	drawVertices[drawCommandsPos*4+0].vertex.y = vy1;
+
+	drawVertices[drawCommandsPos*4+1].alpha.glcolor = alpha;
+	drawVertices[drawCommandsPos*4+1].color.glcolor = color;
+	drawVertices[drawCommandsPos*4+1].texcoord.x = tx2;
+	drawVertices[drawCommandsPos*4+1].texcoord.y = ty1;
+	drawVertices[drawCommandsPos*4+1].alphacoord.x = ax2;
+	drawVertices[drawCommandsPos*4+1].alphacoord.y = ay1;
+	drawVertices[drawCommandsPos*4+1].vertex.x = vx2;
+	drawVertices[drawCommandsPos*4+1].vertex.y = vy1;
+
+	drawVertices[drawCommandsPos*4+2].alpha.glcolor = alpha;
+	drawVertices[drawCommandsPos*4+2].color.glcolor = color;
+	drawVertices[drawCommandsPos*4+2].texcoord.x = tx1;
+	drawVertices[drawCommandsPos*4+2].texcoord.y = ty2;
+	drawVertices[drawCommandsPos*4+2].alphacoord.x = ax1;
+	drawVertices[drawCommandsPos*4+2].alphacoord.y = ay2;
+	drawVertices[drawCommandsPos*4+2].vertex.x = vx1;
+	drawVertices[drawCommandsPos*4+2].vertex.y = vy2;
+
+	drawVertices[drawCommandsPos*4+3].alpha.glcolor = alpha;
+	drawVertices[drawCommandsPos*4+3].color.glcolor = color;
+	drawVertices[drawCommandsPos*4+3].texcoord.x = tx2;
+	drawVertices[drawCommandsPos*4+3].texcoord.y = ty2;
+	drawVertices[drawCommandsPos*4+3].alphacoord.x = ax2;
+	drawVertices[drawCommandsPos*4+3].alphacoord.y = ay2;
+	drawVertices[drawCommandsPos*4+3].vertex.x = vx2;
+	drawVertices[drawCommandsPos*4+3].vertex.y = vy2;
 	drawCommandsPos++;
 }
 
@@ -2549,7 +2521,7 @@ static void display_img_pc(const image_id n,
 		cmd.uses_tex = 1;
 		cmd.uses_rgbmap_tex = 1;
 		cmd.uses_alphatex = 0;
-		queueDrawCommand( cmd,
+		queueDrawCommand( std::move( cmd ),
 		                  xp,
 		                  yp,
 		                  xp + w,
@@ -2940,7 +2912,7 @@ void display_blend_wh_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, s
 		cmd.uses_tex = 1;
 		cmd.uses_rgbmap_tex = 0;
 		cmd.uses_alphatex = 0;
-		queueDrawCommand( cmd,
+		queueDrawCommand( std::move( cmd ),
 		                  xp,
 		                  yp,
 		                  xp + w,
@@ -2986,7 +2958,7 @@ static void display_img_blend_wc(const image_id n,
 		cmd.uses_tex = 1;
 		cmd.uses_rgbmap_tex = 1;
 		cmd.uses_alphatex = 0;
-		queueDrawCommand( cmd,
+		queueDrawCommand( std::move( cmd ),
 		                  xp,
 		                  yp,
 		                  xp + w,
@@ -3028,7 +3000,7 @@ static void display_img_blend_wc_colour(const image_id n,
 		cmd.uses_tex = 1;
 		cmd.uses_rgbmap_tex = 0;
 		cmd.uses_alphatex = 0;
-		queueDrawCommand( cmd,
+		queueDrawCommand( std::move( cmd ),
 		                  xp,
 		                  yp,
 		                  xp + w,
@@ -3088,8 +3060,8 @@ static void display_img_alpha_wc(const image_id n, const image_id alpha_n,
 		cmd.uses_tex = 1;
 		cmd.uses_rgbmap_tex = 1;
 		cmd.uses_alphatex = 1;
-		//todo: someone please explain to me why there is 2.0 needed here
-		queueDrawCommand( cmd,
+		//todo: someone please explain to me why there is 2.0 in alpha is needed here
+		queueDrawCommand( std::move( cmd ),
 		                  xp,
 		                  yp,
 		                  xp + w,
@@ -3330,7 +3302,7 @@ static void display_pixel(scr_coord_val x, scr_coord_val y, PIXVAL color)
 		cmd.uses_tex = 1;
 		cmd.uses_rgbmap_tex = 0;
 		cmd.uses_alphatex = 0;
-		queueDrawCommand( cmd,
+		queueDrawCommand( std::move( cmd ),
 		                  x,
 		                  y,
 		                  x + 1,
@@ -3361,7 +3333,7 @@ static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_va
 		cmd.uses_tex = 1;
 		cmd.uses_rgbmap_tex = 0;
 		cmd.uses_alphatex = 0;
-		queueDrawCommand( cmd,
+		queueDrawCommand( std::move( cmd ),
 		                  xp,
 		                  yp,
 		                  xp + w,
@@ -3414,7 +3386,7 @@ static void display_vl_internal(const scr_coord_val xp, scr_coord_val yp, scr_co
 		cmd.uses_tex = 1;
 		cmd.uses_rgbmap_tex = 0;
 		cmd.uses_alphatex = 0;
-		queueDrawCommand( cmd,
+		queueDrawCommand( std::move( cmd ),
 		                  xp,
 		                  yp,
 		                  xp + 1,
@@ -3466,7 +3438,7 @@ void display_array_wh(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_c
 		cmd.uses_tex = 1;
 		cmd.uses_rgbmap_tex = 0;
 		cmd.uses_alphatex = 0;
-		queueDrawCommand( cmd,
+		queueDrawCommand( std::move( cmd ),
 		                  xp,
 		                  yp,
 		                  xp + w,
@@ -3789,7 +3761,7 @@ scr_coord_val display_text_proportional_len_clip_rgb(scr_coord_val x, scr_coord_
 				cmd.uses_tex = 1;
 				cmd.uses_rgbmap_tex = 0;
 				cmd.uses_alphatex = 0;
-				queueDrawCommand( cmd,
+				queueDrawCommand( std::move( cmd ),
 				                  sx,
 				                  sy,
 				                  sx + w,
