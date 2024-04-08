@@ -76,6 +76,13 @@ extern const sint32 zoom_den[MAX_ZOOM_FACTOR + 1] = { 1, 2, 3, 1, 4, 8, 2, 8, 4,
 #endif
 static int standard_pointer = -1;
 
+namespace simgraphgl {
+
+template <typename T> struct GLcolor { T r,g,b,a; };
+typedef GLcolor<GLfloat> GLcolorf;
+
+}
+
 static void build_stencil_for(int _x0, int _y0, int _x1, int _y1,
                               int min_x, int min_y, int max_x, int max_y);
 
@@ -460,6 +467,27 @@ struct ArrayInfo
 	int change_ctr;
 	int use_ctr;
 };
+
+
+struct DrawCommand
+{
+	clipping_info_t cr;
+	GLuint tex;
+	GLuint rgbmap_tex;
+	GLuint alphatex;
+	scr_coord_val vx1;
+	scr_coord_val vy1;
+	scr_coord_val vx2;
+	scr_coord_val vy2;
+	GLfloat tx1;
+	GLfloat ty1;
+	GLfloat tx2;
+	GLfloat ty2;
+	GLcolorf alpha;
+	GLcolorf color;
+	bool use_stencil;
+};
+
 }
 
 using namespace simgraphgl;
@@ -1292,6 +1320,64 @@ int zoom_factor_down()
 	return false;
 }
 
+
+static void runDrawCommand(DrawCommand const &cmd)
+{
+	if(  cmd.cr.number_of_clips > 0 && cmd.use_stencil  ) {
+		build_stencil( cmd.vx1, cmd.vy1, cmd.vx2, cmd.vy2, cmd.cr );
+		glEnable( GL_STENCIL_TEST );
+		glStencilOp( GL_KEEP, GL_KEEP, GL_KEEP );
+		glStencilFunc( GL_NOTEQUAL, 1, 1 );
+	}
+
+	glActiveTextureARB( GL_TEXTURE0_ARB );
+	glEnable( GL_TEXTURE_2D );
+	glBindTexture( GL_TEXTURE_2D, cmd.tex );
+	glActiveTextureARB( GL_TEXTURE1_ARB );
+	glEnable( GL_TEXTURE_2D );
+	glBindTexture( GL_TEXTURE_2D, cmd.rgbmap_tex );
+	glActiveTextureARB( GL_TEXTURE2_ARB );
+	glEnable( GL_TEXTURE_2D );
+	glBindTexture( GL_TEXTURE_2D, cmd.alphatex );
+
+	glUseProgram( combined_program );
+
+	glUniform1i( combined_texColor_Location, 0 );
+	glUniform1i( combined_texRGBMap_Location, 1 );
+	glUniform1i( combined_texAlpha_Location, 2 );
+
+	glUniform4f( combined_alphaMask_Location,
+	             cmd.alpha.r, cmd.alpha.g, cmd.alpha.b, cmd.alpha.a );
+	glColor4f( cmd.color.r, cmd.color.g, cmd.color.b, cmd.color.a );
+
+	glEnable( GL_BLEND );
+	glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+	glBegin( GL_QUADS );
+	glTexCoord2f( cmd.tx1,  cmd.ty1 );
+	glVertex2i( cmd.vx1, cmd.vy1 );
+	glTexCoord2f( cmd.tx2,  cmd.ty1 );
+	glVertex2i( cmd.vx2, cmd.vy1 );
+	glTexCoord2f( cmd.tx2, cmd.ty2 );
+	glVertex2i( cmd.vx2, cmd.vy2 );
+	glTexCoord2f( cmd.tx1, cmd.ty2 );
+	glVertex2i( cmd.vx1, cmd.vy2 );
+	glEnd();
+
+	glUseProgram( 0 );
+
+	glActiveTextureARB( GL_TEXTURE2_ARB );
+	glDisable( GL_TEXTURE_2D );
+	glActiveTextureARB( GL_TEXTURE1_ARB );
+	glDisable( GL_TEXTURE_2D );
+	glActiveTextureARB( GL_TEXTURE0_ARB );
+
+	if(  cmd.cr.number_of_clips > 0 && cmd.use_stencil  ) {
+		glDisable( GL_STENCIL_TEST );
+		glStencilFunc( GL_ALWAYS, 1, 1 );
+	}
+}
+
+
 static void updateRGBMap(GLuint &tex, PIXVAL *rgbmap, uint64_t code)
 {
 	if(  rgbmap_cache[code] != 0  ) {
@@ -2029,54 +2115,29 @@ static void display_img_pc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, 
 	const scr_coord_val yoff = clip_wh( &yp, &h, CR.clip_rect.y, CR.clip_rect.yy );
 
 	if(  w > 0 && h > 0  ) {
-		if(  CR.number_of_clips > 0  )
-		{
-			build_stencil( xp, yp, xp + w, yp + h, CR );
-			glEnable( GL_STENCIL_TEST );
-			glStencilOp( GL_KEEP, GL_KEEP, GL_KEEP );
-			glStencilFunc( GL_NOTEQUAL, 1, 1 );
-		}
-
-		glActiveTextureARB( GL_TEXTURE0_ARB );
-		glEnable( GL_TEXTURE_2D );
-		glBindTexture( GL_TEXTURE_2D, tex );
-		glActiveTextureARB( GL_TEXTURE1_ARB );
-		glEnable( GL_TEXTURE_2D );
-		glBindTexture( GL_TEXTURE_2D, rgbmap_tex );
-
-		glUseProgram( combined_program );
-
-		glUniform1i( combined_texColor_Location, 0 );
-		glUniform1i( combined_texRGBMap_Location, 1 );
-		glUniform1i( combined_texAlpha_Location, 2 );
-
-		glUniform4f( combined_alphaMask_Location,
-		             0.0, 0.0, 0.0, 1.0 );
-		glColor4f( 0, 0, 0, 0.0 );
-
-		glEnable( GL_BLEND );
-		glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-		glBegin( GL_QUADS );
-		glTexCoord2f( xoff   / float( rw ),  yoff   / float( rh ) );
-		glVertex2i( xp,     yp );
-		glTexCoord2f( ( xoff + w ) / float( rw ),  yoff   / float( rh ) );
-		glVertex2i( xp + w,   yp );
-		glTexCoord2f( ( xoff + w ) / float( rw ), ( yoff + h ) / float( rh ) );
-		glVertex2i( xp + w,   yp + h );
-		glTexCoord2f( xoff   / float( rw ), ( yoff + h ) / float( rh ) );
-		glVertex2i( xp,     yp + h );
-		glEnd();
-
-		glUseProgram( 0 );
-
-		glActiveTextureARB( GL_TEXTURE1_ARB );
-		glDisable( GL_TEXTURE_2D );
-		glActiveTextureARB( GL_TEXTURE0_ARB );
-
-		if(  CR.number_of_clips > 0  ) {
-			glDisable( GL_STENCIL_TEST );
-			glStencilFunc( GL_ALWAYS, 1, 1 );
-		}
+		DrawCommand cmd;
+		cmd.cr = CR;
+		cmd.vx1 = xp;
+		cmd.vy1 = yp;
+		cmd.vx2 = xp + w;
+		cmd.vy2 = yp + h;
+		cmd.tx1 = xoff / float( rw );
+		cmd.ty1 = yoff / float( rh );
+		cmd.tx2 = ( xoff + w ) / float( rw );
+		cmd.ty2 = ( yoff + h ) / float( rh );
+		cmd.use_stencil = true;
+		cmd.tex = tex;
+		cmd.rgbmap_tex = rgbmap_tex;
+		cmd.alphatex = 0;
+		cmd.alpha.r = 0;
+		cmd.alpha.g = 0;
+		cmd.alpha.b = 0;
+		cmd.alpha.a = 1;
+		cmd.color.r = 0;
+		cmd.color.g = 0;
+		cmd.color.b = 0;
+		cmd.color.a = 0;
+		runDrawCommand( cmd );
 	}
 }
 
@@ -2445,40 +2506,29 @@ void display_blend_wh_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, s
 
 		const float alpha = percent_blend / 100.0;
 
-		glActiveTextureARB( GL_TEXTURE0_ARB );
-		glEnable( GL_TEXTURE_2D );
-		glBindTexture( GL_TEXTURE_2D, 0 );
-
-		glUseProgram( combined_program );
-
-		glUniform1i( combined_texColor_Location, 0 );
-		glUniform1i( combined_texRGBMap_Location, 1 );
-		glUniform1i( combined_texAlpha_Location, 2 );
-
-		glUniform4f( combined_alphaMask_Location,
-		             0.0, 0.0, 0.0, alpha );
-		glColor4f( ( colval & 0xf800 ) / float( 0xf800 ),
-		           ( colval & 0x07e0 ) / float( 0x07e0 ),
-		           ( colval & 0x001f ) / float( 0x001f ),
-		           1.0 );
-
-
-		glEnable( GL_BLEND );
-		glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-		glBegin( GL_QUADS );
-		glTexCoord2f( xoff   / float( rw ),  yoff   / float( rh ) );
-		glVertex2i( xp,     yp );
-		glTexCoord2f( ( xoff + w ) / float( rw ),  yoff   / float( rh ) );
-		glVertex2i( xp + w,   yp );
-		glTexCoord2f( ( xoff + w ) / float( rw ), ( yoff + h ) / float( rh ) );
-		glVertex2i( xp + w,   yp + h );
-		glTexCoord2f( xoff   / float( rw ), ( yoff + h ) / float( rh ) );
-		glVertex2i( xp,     yp + h );
-		glEnd();
-
-		glUseProgram( 0 );
-
-		glActiveTextureARB( GL_TEXTURE0_ARB );
+		DrawCommand cmd;
+		cmd.cr = CR0;
+		cmd.tex = 0;
+		cmd.rgbmap_tex = 0;
+		cmd.alphatex = 0;
+		cmd.tx1 = xoff / float( rw );
+		cmd.ty1 = yoff / float( rh );
+		cmd.tx2 = ( xoff + w ) / float( rw );
+		cmd.ty2 = ( yoff + h ) / float( rh );
+		cmd.vx1 = xp;
+		cmd.vy1 = yp;
+		cmd.vx2 = xp + w;
+		cmd.vy2 = yp + h;
+		cmd.use_stencil = false;
+		cmd.alpha.r = 0;
+		cmd.alpha.g = 0;
+		cmd.alpha.b = 0;
+		cmd.alpha.a = alpha;
+		cmd.color.r = ( colval & 0xf800 ) / float( 0xf800 );
+		cmd.color.g = ( colval & 0x07e0 ) / float( 0x07e0 );
+		cmd.color.b = ( colval & 0x001f ) / float( 0x001f );
+		cmd.color.a = 1.0;
+		runDrawCommand( cmd );
 	}
 }
 
@@ -2491,41 +2541,29 @@ static void display_img_blend_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 	const scr_coord_val yoff = clip_wh( &yp, &h, CR.clip_rect.y, CR.clip_rect.yy );
 
 	if(  w > 0 && h > 0  ) {
-		glActiveTextureARB( GL_TEXTURE0_ARB );
-		glEnable( GL_TEXTURE_2D );
-		glBindTexture( GL_TEXTURE_2D, tex );
-		glActiveTextureARB( GL_TEXTURE1_ARB );
-		glEnable( GL_TEXTURE_2D );
-		glBindTexture( GL_TEXTURE_2D, rgbmap_tex );
-
-		glUseProgram( combined_program );
-
-		glUniform1i( combined_texColor_Location, 0 );
-		glUniform1i( combined_texRGBMap_Location, 1 );
-		glUniform1i( combined_texAlpha_Location, 2 );
-
-		glUniform4f( combined_alphaMask_Location,
-		             0.0, 0.0, 0.0, alpha );
-		glColor4f( 0.0, 0.0, 0.0, 0.0 );
-
-		glEnable( GL_BLEND );
-		glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-		glBegin( GL_QUADS );
-		glTexCoord2f( xoff   / float( rw ),  yoff   / float( rh ) );
-		glVertex2i( xp,     yp );
-		glTexCoord2f( ( xoff + w ) / float( rw ),  yoff   / float( rh ) );
-		glVertex2i( xp + w,   yp );
-		glTexCoord2f( ( xoff + w ) / float( rw ), ( yoff + h ) / float( rh ) );
-		glVertex2i( xp + w,   yp + h );
-		glTexCoord2f( xoff   / float( rw ), ( yoff + h ) / float( rh ) );
-		glVertex2i( xp,     yp + h );
-		glEnd();
-
-		glUseProgram( 0 );
-
-		glActiveTextureARB( GL_TEXTURE1_ARB );
-		glDisable( GL_TEXTURE_2D );
-		glActiveTextureARB( GL_TEXTURE0_ARB );
+		DrawCommand cmd;
+		cmd.tex = tex;
+		cmd.rgbmap_tex = rgbmap_tex;
+		cmd.alphatex = 0;
+		cmd.alpha.r = 0;
+		cmd.alpha.g = 0;
+		cmd.alpha.b = 0;
+		cmd.alpha.a = alpha;
+		cmd.color.r = 0;
+		cmd.color.g = 0;
+		cmd.color.b = 0;
+		cmd.color.a = 0;
+		cmd.cr = CR;
+		cmd.tx1 = xoff / float( rw );
+		cmd.ty1 = yoff / float( rh );
+		cmd.tx2 = ( xoff + w ) / float( rw );
+		cmd.ty2 = ( yoff + h ) / float( rh );
+		cmd.vx1 = xp;
+		cmd.vy1 = yp;
+		cmd.vx2 = xp + w;
+		cmd.vy2 = yp + h;
+		cmd.use_stencil = false;
+		runDrawCommand( cmd );
 	}
 }
 
@@ -2537,39 +2575,29 @@ static void display_img_blend_wc_colour(scr_coord_val xp, scr_coord_val yp, scr_
 	const scr_coord_val yoff = clip_wh( &yp, &h, CR.clip_rect.y, CR.clip_rect.yy );
 
 	if(  w > 0 && h > 0  ) {
-		glActiveTextureARB( GL_TEXTURE0_ARB );
-		glEnable( GL_TEXTURE_2D );
-		glBindTexture( GL_TEXTURE_2D, tex );
-
-		glUseProgram( combined_program );
-
-		glUniform1i( combined_texColor_Location, 0 );
-		glUniform1i( combined_texRGBMap_Location, 1 );
-		glUniform1i( combined_texAlpha_Location, 2 );
-
-		glUniform4f( combined_alphaMask_Location,
-		             0.0, 0.0, 0.0, alpha );
-		glColor4f( ( colour & 0xf800 ) / float( 0xf800 ),
-		           ( colour & 0x07e0 ) / float( 0x07e0 ),
-		           ( colour & 0x001f ) / float( 0x001f ),
-		           1.0 );
-
-		glEnable( GL_BLEND );
-		glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-		glBegin( GL_QUADS );
-		glTexCoord2f( xoff   / float( rw ),  yoff   / float( rh ) );
-		glVertex2i( xp,     yp );
-		glTexCoord2f( ( xoff + w ) / float( rw ),  yoff   / float( rh ) );
-		glVertex2i( xp + w,   yp );
-		glTexCoord2f( ( xoff + w ) / float( rw ), ( yoff + h ) / float( rh ) );
-		glVertex2i( xp + w,   yp + h );
-		glTexCoord2f( xoff   / float( rw ), ( yoff + h ) / float( rh ) );
-		glVertex2i( xp,     yp + h );
-		glEnd();
-
-		glUseProgram( 0 );
-
-		glActiveTextureARB( GL_TEXTURE0_ARB );
+		DrawCommand cmd;
+		cmd.use_stencil = false;
+		cmd.tex = tex;
+		cmd.rgbmap_tex = 0;
+		cmd.alphatex = 0;
+		cmd.alpha.r = 0;
+		cmd.alpha.g = 0;
+		cmd.alpha.b = 0;
+		cmd.alpha.a = alpha;
+		cmd.color.r = ( colour & 0xf800 ) / float( 0xf800 );
+		cmd.color.g = ( colour & 0x07e0 ) / float( 0x07e0 );
+		cmd.color.b = ( colour & 0x001f ) / float( 0x001f );
+		cmd.color.a = 1.0;
+		cmd.cr = CR;
+		cmd.tx1 = xoff / float( rw );
+		cmd.ty1 = yoff / float( rh );
+		cmd.tx2 = ( xoff + w ) / float( rw );
+		cmd.ty2 = ( yoff + h ) / float( rh );
+		cmd.vx1 = xp;
+		cmd.vy1 = yp;
+		cmd.vx2 = xp + w;
+		cmd.vy2 = yp + h;
+		runDrawCommand( cmd );
 	}
 }
 
@@ -2586,50 +2614,30 @@ static void display_img_alpha_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 	const scr_coord_val yoff = clip_wh( &yp, &h, CR.clip_rect.y, CR.clip_rect.yy );
 
 	if(  w > 0 && h > 0  ) {
-		glActiveTextureARB( GL_TEXTURE0_ARB );
-		glEnable( GL_TEXTURE_2D );
-		glBindTexture( GL_TEXTURE_2D, tex );
-		glActiveTextureARB( GL_TEXTURE1_ARB );
-		glEnable( GL_TEXTURE_2D );
-		glBindTexture( GL_TEXTURE_2D, rgbmap_tex );
-		glActiveTextureARB( GL_TEXTURE2_ARB );
-		glEnable( GL_TEXTURE_2D );
-		glBindTexture( GL_TEXTURE_2D, alphatex );
-
-		glUseProgram( combined_program );
-
-		glUniform1i( combined_texColor_Location, 0 );
-		glUniform1i( combined_texRGBMap_Location, 1 );
-		glUniform1i( combined_texAlpha_Location, 2 );
-
+		DrawCommand cmd;
+		cmd.cr = CR;
+		cmd.tex = tex;
+		cmd.rgbmap_tex = rgbmap_tex;
+		cmd.alphatex = alphatex;
+		cmd.use_stencil = false;
 		//todo: someone please explain to me why there is 2.0 needed here
-		glUniform4f( combined_alphaMask_Location,
-		             ( alpha_flags & ALPHA_RED ) ? 2.0 : 0.0,
-		             ( alpha_flags & ALPHA_GREEN ) ? 2.0 : 0.0,
-		             ( alpha_flags & ALPHA_BLUE ) ? 1.0 : 0.0,
-		             0.0 );
-		glColor4f( 0, 0, 0, 0.0 );
-
-		glEnable( GL_BLEND );
-		glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-		glBegin( GL_QUADS );
-		glTexCoord2f( xoff   / float( rw ),  yoff   / float( rh ) );
-		glVertex2i( xp,     yp );
-		glTexCoord2f( ( xoff + w ) / float( rw ),  yoff   / float( rh ) );
-		glVertex2i( xp + w,   yp );
-		glTexCoord2f( ( xoff + w ) / float( rw ), ( yoff + h ) / float( rh ) );
-		glVertex2i( xp + w,   yp + h );
-		glTexCoord2f( xoff   / float( rw ), ( yoff + h ) / float( rh ) );
-		glVertex2i( xp,     yp + h );
-		glEnd();
-
-		glUseProgram( 0 );
-
-		glActiveTextureARB( GL_TEXTURE2_ARB );
-		glDisable( GL_TEXTURE_2D );
-		glActiveTextureARB( GL_TEXTURE1_ARB );
-		glDisable( GL_TEXTURE_2D );
-		glActiveTextureARB( GL_TEXTURE0_ARB );
+		cmd.alpha.r = ( alpha_flags & ALPHA_RED ) ? 2.0 : 0.0;
+		cmd.alpha.g = ( alpha_flags & ALPHA_GREEN ) ? 2.0 : 0.0;
+		cmd.alpha.b = ( alpha_flags & ALPHA_BLUE ) ? 1.0 : 0.0;
+		cmd.alpha.a = 0;
+		cmd.color.r = 0;
+		cmd.color.g = 0;
+		cmd.color.b = 0;
+		cmd.color.a = 0;
+		cmd.tx1 = xoff / float( rw );
+		cmd.ty1 = yoff / float( rh );
+		cmd.tx2 = ( xoff + w ) / float( rw );
+		cmd.ty2 = ( yoff + h ) / float( rh );
+		cmd.vx1 = xp;
+		cmd.vy1 = yp;
+		cmd.vx2 = xp + w;
+		cmd.vy2 = yp + h;
+		runDrawCommand( cmd );
 	}
 }
 
@@ -2831,17 +2839,29 @@ void display_scroll_band(scr_coord_val start_y, scr_coord_val x_offset, scr_coor
 static void display_pixel(scr_coord_val x, scr_coord_val y, PIXVAL color)
 {
 	if(  x >= CR0.clip_rect.x && x < CR0.clip_rect.xx && y >= CR0.clip_rect.y && y < CR0.clip_rect.yy  ) {
-		glColor3f( ( color & 0xf800 ) / float( 0x10000 ),
-		           ( color & 0x07e0 ) / float( 0x00800 ),
-		           ( color & 0x001f ) / float( 0x00020 ) );
-		glDisable( GL_TEXTURE_2D );
-		glBindTexture( GL_TEXTURE_2D, 0 );
-		glBegin( GL_QUADS );
-		glVertex2i( x + 1, y );
-		glVertex2i( x, y );
-		glVertex2i( x, y + 1 );
-		glVertex2i( x + 1, y + 1 );
-		glEnd();
+		DrawCommand cmd;
+		cmd.cr = CR0;
+		cmd.tex = 0;
+		cmd.rgbmap_tex = 0;
+		cmd.alphatex = 0;
+		cmd.use_stencil = false;
+		cmd.alpha.r = 0;
+		cmd.alpha.g = 0;
+		cmd.alpha.b = 0;
+		cmd.alpha.a = 1;
+		cmd.color.r = ( color & 0xf800 ) / float( 0x10000 );
+		cmd.color.g = ( color & 0x07e0 ) / float( 0x00800 );
+		cmd.color.b = ( color & 0x001f ) / float( 0x00020 );
+		cmd.color.a = 1;
+		cmd.tx1 = 0;
+		cmd.ty1 = 0;
+		cmd.tx2 = 0;
+		cmd.ty2 = 0;
+		cmd.vx1 = x;
+		cmd.vy1 = y;
+		cmd.vx2 = x + 1;
+		cmd.vy2 = y + 1;
+		runDrawCommand( cmd );
 	}
 }
 
@@ -2852,17 +2872,29 @@ static void display_pixel(scr_coord_val x, scr_coord_val y, PIXVAL color)
 static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL colval, bool /*dirty*/, scr_coord_val cL, scr_coord_val cR, scr_coord_val cT, scr_coord_val cB)
 {
 	if(  clip_lr( &xp, &w, cL, cR ) && clip_lr( &yp, &h, cT, cB )  ) {
-		glColor3f( ( colval & 0xf800 ) / float( 0x10000 ),
-		           ( colval & 0x07e0 ) / float( 0x00800 ),
-		           ( colval & 0x001f ) / float( 0x00020 ) );
-		glDisable( GL_TEXTURE_2D );
-		glBindTexture( GL_TEXTURE_2D, 0 );
-		glBegin( GL_QUADS );
-		glVertex2i( xp + w, yp );
-		glVertex2i( xp, yp );
-		glVertex2i( xp, yp + h );
-		glVertex2i( xp + w, yp + h );
-		glEnd();
+		DrawCommand cmd;
+		cmd.cr = CR0;
+		cmd.tex = 0;
+		cmd.rgbmap_tex = 0;
+		cmd.alphatex = 0;
+		cmd.use_stencil = false;
+		cmd.alpha.r = 0;
+		cmd.alpha.g = 0;
+		cmd.alpha.b = 0;
+		cmd.alpha.a = 1;
+		cmd.color.r = ( colval & 0xf800 ) / float( 0xf800 );
+		cmd.color.g = ( colval & 0x07e0 ) / float( 0x07e0 );
+		cmd.color.b = ( colval & 0x001f ) / float( 0x001f );
+		cmd.color.a = 1;
+		cmd.tx1 = 0;
+		cmd.ty1 = 0;
+		cmd.tx2 = 0;
+		cmd.ty2 = 0;
+		cmd.vx1 = xp;
+		cmd.vy1 = yp;
+		cmd.vx2 = xp + w;
+		cmd.vy2 = yp + h;
+		runDrawCommand( cmd );
 	}
 }
 
@@ -2895,17 +2927,29 @@ void display_filled_roundbox_clip(scr_coord_val xp, scr_coord_val yp, scr_coord_
 static void display_vl_internal(const scr_coord_val xp, scr_coord_val yp, scr_coord_val h, const PIXVAL colval, int /*dirty*/, scr_coord_val cL, scr_coord_val cR, scr_coord_val cT, scr_coord_val cB)
 {
 	if(  xp >= cL && xp < cR && clip_lr( &yp, &h, cT, cB )  ) {
-		glColor3f( ( colval & 0xf800 ) / float( 0x10000 ),
-		           ( colval & 0x07e0 ) / float( 0x00800 ),
-		           ( colval & 0x001f ) / float( 0x00020 ) );
-		glDisable( GL_TEXTURE_2D );
-		glBindTexture( GL_TEXTURE_2D, 0 );
-		glBegin( GL_QUADS );
-		glVertex2i( xp + 1, yp );
-		glVertex2i( xp, yp );
-		glVertex2i( xp, yp + h );
-		glVertex2i( xp + 1, yp + h );
-		glEnd();
+		DrawCommand cmd;
+		cmd.cr = CR0;
+		cmd.tex = 0;
+		cmd.rgbmap_tex = 0;
+		cmd.alphatex = 0;
+		cmd.use_stencil = false;
+		cmd.alpha.r = 0;
+		cmd.alpha.g = 0;
+		cmd.alpha.b = 0;
+		cmd.alpha.a = 1;
+		cmd.color.r = ( colval & 0xf800 ) / float( 0xf800 );
+		cmd.color.g = ( colval & 0x07e0 ) / float( 0x07e0 );
+		cmd.color.b = ( colval & 0x001f ) / float( 0x001f );
+		cmd.color.a = 1;
+		cmd.tx1 = 0;
+		cmd.ty1 = 0;
+		cmd.tx2 = 0;
+		cmd.ty2 = 0;
+		cmd.vx1 = xp;
+		cmd.vy1 = yp;
+		cmd.vx2 = xp + 1;
+		cmd.vy2 = yp + h;
+		runDrawCommand( cmd );
 	}
 }
 
@@ -2935,20 +2979,29 @@ void display_array_wh(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_c
 
 	if(  w > 0 && h > 0  ) {
 		GLuint texname = getArrayTex( arr, arr_w, arr_h );
-
-		glEnable( GL_TEXTURE_2D );
-		glBindTexture( GL_TEXTURE_2D, texname );
-		glColor3f( 1, 1, 1 );
-		glBegin( GL_QUADS );
-		glTexCoord2f( xoff / float( arr_w ), yoff / float( arr_h ) );
-		glVertex2i( xp, yp );
-		glTexCoord2f( ( xoff + w ) / float( arr_w ), yoff / float( arr_h ) );
-		glVertex2i( xp + w, yp );
-		glTexCoord2f( ( xoff + w ) / float( arr_w ), ( yoff + h ) / float( arr_h ) );
-		glVertex2i( xp + w, yp + h );
-		glTexCoord2f( xoff / float( arr_w ), ( yoff + h ) / float( arr_h ) );
-		glVertex2i( xp, yp + h );
-		glEnd();
+		DrawCommand cmd;
+		cmd.cr = CR0;
+		cmd.tex = texname;
+		cmd.rgbmap_tex = 0;
+		cmd.alphatex = 0;
+		cmd.use_stencil = false;
+		cmd.alpha.r = 0;
+		cmd.alpha.g = 0;
+		cmd.alpha.b = 0;
+		cmd.alpha.a = 1;
+		cmd.color.r = 0;
+		cmd.color.g = 0;
+		cmd.color.b = 0;
+		cmd.color.a = 0.5;
+		cmd.tx1 = xoff / float( arr_w );
+		cmd.ty1 = yoff / float( arr_h );
+		cmd.tx2 = ( xoff + w ) / float( arr_w );
+		cmd.ty2 = ( yoff + h ) / float( arr_h );
+		cmd.vx1 = xp;
+		cmd.vy1 = yp;
+		cmd.vx2 = xp + w;
+		cmd.vy2 = yp + h;
+		runDrawCommand( cmd );
 	}
 }
 
@@ -3250,27 +3303,29 @@ scr_coord_val display_text_proportional_len_clip_rgb(scr_coord_val x, scr_coord_
 				                              glx, gly,
 				                              glw, glh );
 
-				glEnable( GL_TEXTURE_2D );
-				glBindTexture( GL_TEXTURE_2D, texname );
-				glColor3f( ( color & 0xf800 ) / float( 0x10000 ),
-				           ( color & 0x07e0 ) / float( 0x00800 ),
-				           ( color & 0x001f ) / float( 0x00020 ) );
-				glEnable( GL_BLEND );
-				glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-				glBegin( GL_QUADS );
-				glTexCoord2f( glx + tx / float( rw ) * glw,
-				              gly + ty / float( rh ) * glh );
-				glVertex2i( sx,         sy );
-				glTexCoord2f( glx + ( tx + w ) / float( rw ) * glw,
-				              gly + ty / float( rh ) * glh );
-				glVertex2i( sx + w,     sy );
-				glTexCoord2f( glx + ( tx + w ) / float( rw ) * glw,
-				              gly + ( ty + h ) / float( rh ) * glh );
-				glVertex2i( sx + w,     sy + h );
-				glTexCoord2f( glx + tx / float( rw ) * glw,
-				              gly + ( ty + h ) / float( rh ) * glh );
-				glVertex2i( sx,         sy + h );
-				glEnd();
+				DrawCommand cmd;
+				cmd.cr = CR0;
+				cmd.tex = texname;
+				cmd.rgbmap_tex = 0;
+				cmd.alphatex = 0;
+				cmd.use_stencil = false;
+				cmd.alpha.r = 0;
+				cmd.alpha.g = 0;
+				cmd.alpha.b = 0;
+				cmd.alpha.a = 1;
+				cmd.color.r = ( color & 0xf800 ) / float( 0xf800 );
+				cmd.color.g = ( color & 0x07e0 ) / float( 0x07e0 );
+				cmd.color.b = ( color & 0x001f ) / float( 0x001f );
+				cmd.color.a = 1;
+				cmd.tx1 = glx + tx / float( rw ) * glw;
+				cmd.ty1 = gly + ty / float( rh ) * glh;
+				cmd.tx2 = glx + ( tx + w ) / float( rw ) * glw;
+				cmd.ty2 = gly + ( ty + h ) / float( rh ) * glh;
+				cmd.vx1 = sx;
+				cmd.vy1 = sy;
+				cmd.vx2 = sx + w;
+				cmd.vy2 = sy + h;
+				runDrawCommand( cmd );
 			}
 		}
 
