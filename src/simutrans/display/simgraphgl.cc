@@ -78,6 +78,7 @@ static int standard_pointer = -1;
 static void build_stencil_for(int _x0, int _y0, int _x1, int _y1,
                               int min_x, int min_y, int max_x, int max_y);
 
+namespace simgraphgl {
 class clip_line_t {
 private:
 	// line from (x0,y0) to (x1 y1)
@@ -166,6 +167,17 @@ struct CharPageInfo {
 	GLuint width, height;
 	GLuint curx, cury, lineheight;
 };
+
+struct PIX32
+{
+	uint8_t R;
+	uint8_t G;
+	uint8_t B;
+	uint8_t A;
+};
+}
+
+using namespace simgraphgl;
 
 #ifdef MULTI_THREAD
 clipping_info_t clips[MAX_THREADS];
@@ -1030,13 +1042,6 @@ static void updateRGBMap(GLuint &tex, PIXVAL *rgbmap, uint64_t code)
 	glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
 	glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
 
-	struct PIX32 {
-		uint8_t R;
-		uint8_t G;
-		uint8_t B;
-		uint8_t A;
-	};
-
 	PIX32 *tmp = (PIX32 *)malloc( w * h * sizeof(PIX32) );
 	memset( tmp, 0, 256 * 256 * sizeof(PIX32) );
 
@@ -1418,13 +1423,6 @@ static GLuint getIndexImgTex(struct imd &image,
 	glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
 	glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
 
-	struct PIX32 {
-		uint8_t R;
-		uint8_t G;
-		uint8_t B;
-		uint8_t A;
-	};
-
 	PIX32 *tmp = (PIX32 *)malloc( w * h * 4 );
 	memset( tmp, 0, w * h * 4 );
 	PIX32 *p = tmp;
@@ -1494,13 +1492,6 @@ static GLuint getBaseImgTex(struct imd &image,
 	glPixelStorei( GL_UNPACK_ALIGNMENT, 4 );
 	glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
 	glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
-
-	struct PIX32 {
-		uint8_t R;
-		uint8_t G;
-		uint8_t B;
-		uint8_t A;
-	};
 
 	PIX32 *tmp = (PIX32 *)malloc( w * h * 4 );
 	memset( tmp, 0, w * h * 4 );
