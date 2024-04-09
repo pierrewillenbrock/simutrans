@@ -160,6 +160,17 @@ public:
 	{
 		return ! (*this == oth);
 	}
+	std::size_t hash() const {
+		std::size_t const *kp = (std::size_t const *)&x0;
+		std::size_t h = 0;
+		for(  unsigned i = 0;
+		                i < sizeof(scr_coord_val) * 4 / sizeof(std::size_t);
+		                i++  ) {
+			h = ( h * 8 ) + ( h >> 20 );
+			h += kp[i];
+		}
+		return h;
+	}
 
 	void clip_from_to(scr_coord_val x0_, scr_coord_val y0_, scr_coord_val x1_, scr_coord_val y1_, bool non_convex_)
 	{
@@ -221,9 +232,52 @@ public:
 
 #define MAX_POLY_CLIPS 6
 
+bool operator==(clip_dimension const &a, clip_dimension const &b)
+{
+	//clip_dimension is fully packed and multiples of 2*4 bytes so we use
+	//std::size_t sized chunks of the actual struct to compare
+	std::size_t const *ap = (std::size_t const *)&a;
+	std::size_t const *bp = (std::size_t const *)&b;
+	for(  unsigned i = 0;
+	                i < sizeof(clip_dimension) / sizeof(std::size_t);
+	                i++  ) {
+		if(  ap[i] != bp[i]  ) {
+			return false;
+		}
+	}
+	return true;
+}
+
+bool operator!=(clip_dimension const &a, clip_dimension const &b)
+{
+	return !(a == b);
+}
+
 struct constant_clipping_info_t {
 	clip_line_t poly_clips[MAX_POLY_CLIPS];
 	uint8 poly_active;
+	bool operator==(constant_clipping_info_t const &b) const
+	{
+		if(  poly_active != b.poly_active  ) {
+			return false;
+		}
+		if(  poly_active != 0  ) {
+			for(  int i = 0;  i < MAX_POLY_CLIPS;  i++  ) {
+				bool inactive_a = (poly_active & (1 << i)) != 0;
+				if(  inactive_a  ) {
+					continue;
+				}
+				if(  poly_clips[i] != b.poly_clips[i]  ) {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+	bool operator!=(constant_clipping_info_t const &b) const
+	{
+		return !( *this == b );
+	}
 };
 
 MSVC_ALIGN(64) struct clipping_info_t {
@@ -569,6 +623,36 @@ struct DrawCommandKey {
 	unsigned int uses_tex: 1;
 	unsigned int uses_rgbmap_tex: 1;
 	unsigned int uses_alphatex: 1;
+	bool operator==(DrawCommandKey const &b) const
+	{
+		if(  cr != b.cr  ) {
+			return false;
+		}
+		if(  tex != b.tex  ) {
+			return false;
+		}
+		if(  rgbmap_tex != b.rgbmap_tex  ) {
+			return false;
+		}
+		if(  alphatex != b.alphatex  ) {
+			return false;
+		}
+		if(  uses_tex != b.uses_tex  ) {
+			return false;
+		}
+		if(  uses_rgbmap_tex != b.uses_rgbmap_tex  ) {
+			return false;
+		}
+		if(  uses_alphatex != b.uses_alphatex  ) {
+			return false;
+		}
+		return true;
+	}
+	bool operator!=(DrawCommandKey const &b) const
+	{
+		return !(*this == b);
+	}
+
 };
 struct DrawCommand
 {
@@ -1686,128 +1770,334 @@ static void runDrawCommand(DrawCommand const &cmd, GLint vertex_first, GLint ver
 	}
 }
 
-static std::vector<DrawCommand> drawCommands;
-static scr_coord_val drawCommandsZPos = 0;
-static unsigned int drawCommandsPos = 0;
-static std::vector<CombinedVertex> drawVertices;
-
-
-static bool makeDrawCommandCompatible(DrawCommand &cm, DrawCommand const &c2)
+namespace std
 {
-	//these comparisons are ordered by computational effort and
-	//the probability of exiting early with them
-	if(  cm.key.cr.poly_active != c2.key.cr.poly_active  ) {
-		return false;
+template<> struct hash< clip_dimension >
+{
+	std::size_t operator()(clip_dimension const &k) const noexcept
+	{
+		//clip_dimension is fully packed and multiples of 2*4 bytes so we use
+		//std::size_t sized chunks of the actual struct to hash
+		std::size_t h = 0;
+		std::size_t const *kp = (std::size_t const *)&k;
+		for(  unsigned i = 0;
+		                i < sizeof(clip_dimension) / sizeof(std::size_t);
+		                i++  ) {
+			h += kp[i];
+			h = h * 8 + ( h >> 20 );
+		}
+		return h;
 	}
-	if(  cm.key.rgbmap_tex != c2.key.rgbmap_tex && cm.key.uses_rgbmap_tex  &&
-	                c2.key.uses_rgbmap_tex  ) {
-		return false;
+};
+template<> struct hash< simgraphgl::clip_line_t >
+{
+	std::size_t operator()(simgraphgl::clip_line_t const &k) const noexcept
+	{
+		std::size_t h = k.hash();
+		return h;
 	}
-	if(  cm.key.tex != c2.key.tex && cm.key.uses_tex && c2.key.uses_tex  ) {
-		return false;
-	}
-	if(  cm.key.alphatex != c2.key.alphatex && cm.key.uses_alphatex  &&
-		c2.key.uses_alphatex  ) {
-		return false;
-	}
-	if(  cm.key.cr.poly_active != 0  ) {
-		for(  int i = 0;  i < MAX_POLY_CLIPS;  i++  ) {
-			if(  (cm.key.cr.poly_active & (1 << i)) == 0  ) {
-				continue;
-			}
-			if(  cm.key.cr.poly_clips[i] != c2.key.cr.poly_clips[i]  ) {
-				return false;
+};
+template<> struct hash< simgraphgl::constant_clipping_info_t >
+{
+	std::size_t operator()(simgraphgl::constant_clipping_info_t const &k) const noexcept
+	{
+		std::size_t h = 0;
+		h += k.poly_active;
+		if(  k.poly_active != 0  ) {
+			for(  int i = 0;  i < MAX_POLY_CLIPS;  i++  ) {
+				if(  !(k.poly_active & (1 << i))  ) {
+					continue;
+				}
+				h = h * 8 + (h >> 20);
+				h += hash< simgraphgl::clip_line_t > {}( k.poly_clips[i] );
 			}
 		}
+		return h;
 	}
-
-	if(  !cm.key.uses_tex && c2.key.uses_tex  ) {
-		cm.key.tex = c2.key.tex;
-		cm.key.uses_tex = 1;
+};
+template<> struct hash< DrawCommandKey >
+{
+	std::size_t operator()(DrawCommandKey const &k) const noexcept
+	{
+		std::size_t h = k.alphatex;
+		h = h * 8 + (h >> 20);
+		h += k.rgbmap_tex;
+		h = h * 8 + (h >> 20);
+		h += k.tex;
+		h = h * 8 + (h >> 20);
+		h += k.uses_alphatex;
+		h = h * 8 + (h >> 20);
+		h += k.uses_rgbmap_tex;
+		h = h * 8 + (h >> 20);
+		h += k.uses_tex;
+		h = h * 8 + (h >> 20);
+		h += hash< simgraphgl::constant_clipping_info_t >{}( k.cr );
+		return h;
 	}
-	if(  !cm.key.uses_rgbmap_tex && c2.key.uses_rgbmap_tex  ) {
-		cm.key.rgbmap_tex = c2.key.rgbmap_tex;
-		cm.key.uses_rgbmap_tex = 1;
-	}
-	if(  !cm.key.uses_alphatex && c2.key.uses_alphatex  ) {
-		cm.key.alphatex = c2.key.alphatex;
-		cm.key.uses_alphatex = 1;
-	}
-	if(  cm.min_x > c2.min_x  ) {
-		cm.min_x = c2.min_x;
-	}
-	if(  cm.min_y > c2.min_y  ) {
-		cm.min_y = c2.min_y;
-	}
-	if(  cm.max_x < c2.max_x  ) {
-		cm.max_x = c2.max_x;
-	}
-	if(  cm.max_y < c2.max_y  ) {
-		cm.max_y = c2.max_y;
-	}
-	return true;
+};
 }
 
+struct DrawCommandList {
+	//for stencil
+	scr_coord_val min_x;
+	scr_coord_val min_y;
+	scr_coord_val max_x;
+	scr_coord_val max_y;
+	std::size_t verticesPos;
+	DrawCommandList() : verticesPos(0) {}
+	std::vector< CombinedVertex > vertices;
+	void clear()
+	{
+		verticesPos = 0;
+	}
+	void addDrawCommand(scr_coord_val vx1, scr_coord_val vy1,
+	                    scr_coord_val vx2, scr_coord_val vy2,
+	                    scr_coord_val vz,
+	                    GLfloat tx1, GLfloat ty1,
+	                    GLfloat tx2, GLfloat ty2,
+	                    GLfloat ax1, GLfloat ay1,
+	                    GLfloat ax2, GLfloat ay2,
+	                    GLcolorf alpha, GLcolorf color)
+	{
+		if(  vertices.size() < verticesPos * 4 + 4  ) {
+			vertices.resize( verticesPos * 4 + 4 );
+		}
 
-static void flushDrawCommands(std::vector<DrawCommand>::iterator begin,
-                              std::vector<DrawCommand>::iterator end,
-                              CombinedVertex *vertices, size_t vertices_count)
+		if(  verticesPos == 0  ) {
+			max_x = vx2;
+			max_y = vy2;
+			min_x = vx1;
+			min_y = vy1;
+		}
+		else {
+			if(  max_x < vx2  ) {
+				max_x = vx2;
+			}
+			if(  max_y < vy2  ) {
+				max_y = vy2;
+			}
+			if(  min_x > vx1  ) {
+				min_x = vx1;
+			}
+			if(  min_y > vy1  ) {
+				min_y = vy1;
+			}
+		}
+
+		vertices[verticesPos * 4 + 0].alpha.glcolor = alpha;
+		vertices[verticesPos * 4 + 0].color.glcolor = color;
+		vertices[verticesPos * 4 + 0].texcoord.x = tx1;
+		vertices[verticesPos * 4 + 0].texcoord.y = ty1;
+		vertices[verticesPos * 4 + 0].alphacoord.x = ax1;
+		vertices[verticesPos * 4 + 0].alphacoord.y = ay1;
+		vertices[verticesPos * 4 + 0].vertex.x = vx1;
+		vertices[verticesPos * 4 + 0].vertex.y = vy1;
+		vertices[verticesPos * 4 + 0].vertex.z = vz;
+
+		vertices[verticesPos * 4 + 1].alpha.glcolor = alpha;
+		vertices[verticesPos * 4 + 1].color.glcolor = color;
+		vertices[verticesPos * 4 + 1].texcoord.x = tx2;
+		vertices[verticesPos * 4 + 1].texcoord.y = ty1;
+		vertices[verticesPos * 4 + 1].alphacoord.x = ax2;
+		vertices[verticesPos * 4 + 1].alphacoord.y = ay1;
+		vertices[verticesPos * 4 + 1].vertex.x = vx2;
+		vertices[verticesPos * 4 + 1].vertex.y = vy1;
+		vertices[verticesPos * 4 + 1].vertex.z = vz;
+
+		vertices[verticesPos * 4 + 2].alpha.glcolor = alpha;
+		vertices[verticesPos * 4 + 2].color.glcolor = color;
+		vertices[verticesPos * 4 + 2].texcoord.x = tx1;
+		vertices[verticesPos * 4 + 2].texcoord.y = ty2;
+		vertices[verticesPos * 4 + 2].alphacoord.x = ax1;
+		vertices[verticesPos * 4 + 2].alphacoord.y = ay2;
+		vertices[verticesPos * 4 + 2].vertex.x = vx1;
+		vertices[verticesPos * 4 + 2].vertex.y = vy2;
+		vertices[verticesPos * 4 + 2].vertex.z = vz;
+
+		vertices[verticesPos * 4 + 3].alpha.glcolor = alpha;
+		vertices[verticesPos * 4 + 3].color.glcolor = color;
+		vertices[verticesPos * 4 + 3].texcoord.x = tx2;
+		vertices[verticesPos * 4 + 3].texcoord.y = ty2;
+		vertices[verticesPos * 4 + 3].alphacoord.x = ax2;
+		vertices[verticesPos * 4 + 3].alphacoord.y = ay2;
+		vertices[verticesPos * 4 + 3].vertex.x = vx2;
+		vertices[verticesPos * 4 + 3].vertex.y = vy2;
+		vertices[verticesPos * 4 + 3].vertex.z = vz;
+		verticesPos++;
+	}
+};
+
+struct DrawCommandBatch
+{
+	std::unordered_map< DrawCommandKey, DrawCommandList> unused_unordered_list;
+	std::unordered_map< DrawCommandKey, DrawCommandList> unordered_list;
+	std::vector< std::pair< DrawCommandKey, DrawCommandList> > ordered_list;
+	int ordered_list_pos;
+	DrawCommandBatch() : ordered_list_pos(-1) {}
+	void clear()
+	{
+		unused_unordered_list = std::move( unordered_list );
+		for(  auto &l : unused_unordered_list  ) {
+			l.second.clear();
+		}
+		ordered_list_pos = -1;
+		for(  auto &l : ordered_list  ) {
+			l.second.clear();
+		}
+	}
+	void addDrawCommand(DrawCommandKey const &key,
+	                    scr_coord_val vx1, scr_coord_val vy1,
+	                    scr_coord_val vx2, scr_coord_val vy2,
+	                    scr_coord_val vz,
+	                    GLfloat tx1, GLfloat ty1,
+	                    GLfloat tx2, GLfloat ty2,
+	                    GLfloat ax1, GLfloat ay1,
+	                    GLfloat ax2, GLfloat ay2,
+	                    GLcolorf alpha, GLcolorf color)
+	{
+		//non-binary alpha may be produced when:
+		//alpha.a is not zero or alpha.a is not 1
+		//alpha.rgb is non-zero
+		if(  ( alpha.r == 0 || alpha.r == 1 ) &&
+		                ( alpha.g == 0 || alpha.g == 1 ) &&
+		                ( alpha.b == 0 || alpha.b == 1 ) &&
+		                ( alpha.a == 0 || alpha.a == 1 )  ) {
+			auto it = unused_unordered_list.find( key );
+			if(  it != unused_unordered_list.end()  ) {
+				unordered_list[key] = std::move( it->second );
+				unused_unordered_list.erase( it );
+			}
+			unordered_list[key].addDrawCommand( vx1, vy1, vx2, vy2,
+			                                    vz,
+			                                    tx1, ty1, tx2, ty2,
+			                                    ax1, ay1, ax2, ay2,
+			                                    alpha, color );
+		}
+		else {
+			if(  ordered_list_pos == -1 ||
+				ordered_list[ordered_list_pos].first != key  ) {
+				ordered_list_pos++;
+				if(  (int)ordered_list.size() <= ordered_list_pos  ) {
+					ordered_list.resize( ordered_list_pos + 1 );
+				}
+				ordered_list[ordered_list_pos].first = key;
+			}
+			ordered_list[ordered_list_pos].second.addDrawCommand(
+			                                vx1, vy1, vx2, vy2,
+			                                vz,
+			                                tx1, ty1, tx2, ty2,
+			                                ax1, ay1, ax2, ay2,
+			                                alpha, color );
+		}
+	}
+};
+
+struct DrawCommandBatches
+{
+	unsigned int batchesPos = 0;
+	int zpos;
+	std::vector< DrawCommandBatch > batches;
+	void clear()
+	{
+		for(  auto &b : batches  ) {
+			b.clear();
+		}
+		batchesPos = 0;
+		zpos = -32767;
+	}
+	void addDrawCommand(DrawCommandKey const &key,
+	                    scr_coord_val vx1, scr_coord_val vy1,
+	                    scr_coord_val vx2, scr_coord_val vy2,
+	                    GLfloat tx1, GLfloat ty1,
+	                    GLfloat tx2, GLfloat ty2,
+	                    GLfloat ax1, GLfloat ay1,
+	                    GLfloat ax2, GLfloat ay2,
+	                    GLcolorf alpha, GLcolorf color)
+	{
+		if(  batches.size() <= batchesPos  ) {
+			batches.resize( batchesPos + 1 );
+		}
+		batches[batchesPos].addDrawCommand( key,
+		                                    vx1, vy1, vx2, vy2,
+		                                    zpos,
+		                                    tx1, ty1, tx2, ty2,
+		                                    ax1, ay1, ax2, ay2,
+		                                    alpha, color
+		                                  );
+		if(  zpos >= 32767  ) {
+			zpos = -32767;
+			batchesPos++;
+		}
+		else {
+			zpos++;
+		}
+	}
+};
+static DrawCommandBatches drawCommandBatches;
+
+static void flushDrawCommands(DrawCommandKey const &key,
+                              DrawCommandList const &list,
+                              CombinedVertex  const *vertices,
+                              size_t cmd_count)
 {
 	//when keeping the buffer around, we want GL_DYNAMIC_DRAW.
-	glBufferData( GL_ARRAY_BUFFER, vertices_count * sizeof(CombinedVertex), vertices, GL_DYNAMIC_DRAW );
+	glBufferData( GL_ARRAY_BUFFER, cmd_count * 4 * sizeof(CombinedVertex), vertices, GL_DYNAMIC_DRAW );
 
-	int vertex_current = 0;
-
-	for(  auto it = begin; it != end;  ) {
-		DrawCommand cmd = *it;
-		int vertex_first = vertex_current;
-		int vertex_count = 4;
-		std::vector<DrawCommand>::iterator it2 = it;
-		it2++;
-		vertex_current += 6;
-		while(  it2 != end  ) {
-			if(  !makeDrawCommandCompatible( cmd, *it2 )  ) {
-				break;
-			}
-
-			it2++;
-			vertex_count += 6;
-			vertex_current += 6;
-		}
-		runDrawCommand( cmd, vertex_first, vertex_count );
-		it = it2;
-	}
+	DrawCommand cmd;
+	cmd.key = key;
+	cmd.max_x = list.max_x;
+	cmd.max_y = list.max_y;
+	cmd.min_x = list.min_x;
+	cmd.min_y = list.min_y;
+	runDrawCommand( cmd, 0, cmd_count * 6 - 2 );
 }
 
 static void flushDrawCommands()
 {
-	if(  drawCommandsPos == 0  ) {
-		return;
-	}
-
 	glClearDepthf( 0.f );
-	glClear( GL_DEPTH_BUFFER_BIT );
 	setupCombinedShader();
 
-	auto b = drawCommands.begin();
-	auto e = b;
-	unsigned int bno = 0;
-	unsigned int eno = bno;
-	while(  bno < drawCommandsPos  ) {
-		unsigned int batch_size = gl_max_commands;
-		if(  batch_size > drawCommandsPos-eno  ) {
-			batch_size = drawCommandsPos-eno;
+	for(  unsigned int batchno = 0;
+	                batchno <= drawCommandBatches.batchesPos  &&
+	                batchno < drawCommandBatches.batches.size();
+	                batchno++  ) {
+		auto &batch = drawCommandBatches.batches[batchno];
+		glDepthMask( GL_TRUE );
+		glClear( GL_DEPTH_BUFFER_BIT );
+		glEnable( GL_DEPTH_TEST );
+		for(  auto &el : batch.unordered_list  ) {
+			unsigned vno = 0;
+			std::size_t vcount = el.second.verticesPos;
+			CombinedVertex const *data = el.second.vertices.data();
+			while(  vno < vcount  ) {
+				unsigned int batch_size = gl_max_commands;
+				if(  batch_size > vcount - vno  ) {
+					batch_size = vcount - vno;
+				}
+				flushDrawCommands( el.first, el.second,
+				                   data + vno * 4,
+				                   batch_size );
+				vno += batch_size;
+			}
 		}
-		e += batch_size;
-		eno += batch_size;
-		flushDrawCommands( b, e,
-		                   drawVertices.data() + bno * 4, ( eno - bno ) * 4 );
-		b = e;
-		bno = eno;
+		glDepthMask( GL_FALSE );
+		for(  int i = 0;  i <= batch.ordered_list_pos;  i++  ) {
+			auto &el = batch.ordered_list[i];
+			unsigned vno = 0;
+			std::size_t vcount = el.second.verticesPos;
+			CombinedVertex const *data = el.second.vertices.data();
+			while(  vno < vcount  ) {
+				unsigned int batch_size = gl_max_commands;
+				if(  batch_size > vcount - vno  ) {
+					batch_size = vcount - vno;
+				}
+				flushDrawCommands( el.first, el.second,
+				                   data + vno * 4,
+				                   batch_size );
+				vno += batch_size;
+			}
+		}
 	}
-
-	drawCommandsPos = 0;
-	drawCommandsZPos = -32767;
 
 	disableShaders();
 
@@ -1817,19 +2107,7 @@ static void flushDrawCommands()
 	glDisable( GL_TEXTURE_2D );
 	glActiveTextureARB( GL_TEXTURE0_ARB );
 
-	//results: there is a shit load of small keys(4400), few inbetween(11), and then
-	//a small number of big(4), and really big(4) ones.
-	//overall, 330000 quads in 4500 keys (from 19000 batches)
-	//there may already be a benefits in getting the number of batches to quarter the
-	//current number, but the cost may outweigh the gain.
-	//the big and really big ones are probably not collected from small batches(but
-	//if they are, that would be a huge win)
-	//=> needs some more research into why there are so many small keys.
-	//   we may be better off using a different rendering approach for those,
-	//   maybe going for a ubershader that does the clipping for us.
-	//=> implement the per-key rendering.
-	//   structure for that: std::vector<Batch>, Batch: std::map<key, full commands and vertices> -- need to split everytime the z-position rolls over, therefore the vector
-	//   governing them all.
+	drawCommandBatches.clear();
 }
 
 static void scrollDrawCommands(scr_coord_val /*start_y*/, scr_coord_val /*x_offset*/, scr_coord_val /*h*/)
@@ -1853,68 +2131,16 @@ static void queueDrawCommand(DrawCommand &&cmd,
                              GLcolorf alpha,
                              GLcolorf color)
 {
-	if(  drawCommandsZPos >= 32767  ) {
-		drawCommandsZPos = -32767;
-	}
-	else {
-		drawCommandsZPos++;
-	}
-	scr_coord_val vz = drawCommandsZPos;
-
-
 	cmd.min_x = vx1;
 	cmd.min_y = vy1;
 	cmd.max_x = vx2;
 	cmd.max_y = vy2;
 
-	if(  drawCommands.size() <= drawCommandsPos  ) {
-		drawCommands.resize( drawCommandsPos + 1 );
-	}
-	if(  drawVertices.size() <= drawCommandsPos * 4  ) {
-		drawVertices.resize( drawCommandsPos * 4 + 4 );
-	}
-
-	drawCommands[drawCommandsPos] = cmd;
-	drawVertices[drawCommandsPos*4+0].alpha.glcolor = alpha;
-	drawVertices[drawCommandsPos*4+0].color.glcolor = color;
-	drawVertices[drawCommandsPos*4+0].texcoord.x = tx1;
-	drawVertices[drawCommandsPos*4+0].texcoord.y = ty1;
-	drawVertices[drawCommandsPos*4+0].alphacoord.x = ax1;
-	drawVertices[drawCommandsPos*4+0].alphacoord.y = ay1;
-	drawVertices[drawCommandsPos*4+0].vertex.x = vx1;
-	drawVertices[drawCommandsPos*4+0].vertex.y = vy1;
-	drawVertices[drawCommandsPos*4+0].vertex.z = vz;
-
-	drawVertices[drawCommandsPos*4+1].alpha.glcolor = alpha;
-	drawVertices[drawCommandsPos*4+1].color.glcolor = color;
-	drawVertices[drawCommandsPos*4+1].texcoord.x = tx2;
-	drawVertices[drawCommandsPos*4+1].texcoord.y = ty1;
-	drawVertices[drawCommandsPos*4+1].alphacoord.x = ax2;
-	drawVertices[drawCommandsPos*4+1].alphacoord.y = ay1;
-	drawVertices[drawCommandsPos*4+1].vertex.x = vx2;
-	drawVertices[drawCommandsPos*4+1].vertex.y = vy1;
-	drawVertices[drawCommandsPos*4+1].vertex.z = vz;
-
-	drawVertices[drawCommandsPos*4+2].alpha.glcolor = alpha;
-	drawVertices[drawCommandsPos*4+2].color.glcolor = color;
-	drawVertices[drawCommandsPos*4+2].texcoord.x = tx1;
-	drawVertices[drawCommandsPos*4+2].texcoord.y = ty2;
-	drawVertices[drawCommandsPos*4+2].alphacoord.x = ax1;
-	drawVertices[drawCommandsPos*4+2].alphacoord.y = ay2;
-	drawVertices[drawCommandsPos*4+2].vertex.x = vx1;
-	drawVertices[drawCommandsPos*4+2].vertex.y = vy2;
-	drawVertices[drawCommandsPos*4+2].vertex.z = vz;
-
-	drawVertices[drawCommandsPos*4+3].alpha.glcolor = alpha;
-	drawVertices[drawCommandsPos*4+3].color.glcolor = color;
-	drawVertices[drawCommandsPos*4+3].texcoord.x = tx2;
-	drawVertices[drawCommandsPos*4+3].texcoord.y = ty2;
-	drawVertices[drawCommandsPos*4+3].alphacoord.x = ax2;
-	drawVertices[drawCommandsPos*4+3].alphacoord.y = ay2;
-	drawVertices[drawCommandsPos*4+3].vertex.x = vx2;
-	drawVertices[drawCommandsPos*4+3].vertex.y = vy2;
-	drawVertices[drawCommandsPos*4+3].vertex.z = vz;
-	drawCommandsPos++;
+	drawCommandBatches.addDrawCommand( cmd.key,
+	                                   vx1, vy1, vx2, vy2,
+	                                   tx1, ty1, tx2, ty2,
+	                                   ax1, ay1, ax2, ay2,
+	                                   alpha, color );
 }
 
 static void updateRGBMap(GLuint &tex, PIXVAL *rgbmap, uint64_t code)
@@ -4710,7 +4936,7 @@ bool simgraph_init(scr_size window_size, sint16 full_screen)
 	glGenBuffers( 1, &gl_stencil_vertices_buffer_name );
 	glGenBuffers( 1, &gl_copy_vertices_buffer_name );
 
-	drawCommandsPos = 0;
+	drawCommandBatches.clear();
 
 	dbg->message( "simgraph_init", "Init done." );
 	fflush( NULL );
