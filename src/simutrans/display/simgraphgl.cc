@@ -2010,11 +2010,11 @@ void display_set_player_color_scheme(const int player, const uint8 col1, const u
 }
 
 
-static GLuint getIndexImgTex(struct imd &image,
+static GLuint getIndexImgTex(unsigned int image_idx,
                              const PIXVAL *sp,
                              GLfloat &tcx, GLfloat &tcy, GLfloat &tcw, GLfloat &tch)
 {
-	unsigned int image_idx = &image - images.data();
+	struct imd &image = images[image_idx];
 	scr_coord_val w = image.base_w;
 	scr_coord_val h = image.base_h;
 
@@ -2086,11 +2086,11 @@ static GLuint getIndexImgTex(struct imd &image,
 	return tex;
 }
 
-static GLuint getBaseImgTex(struct imd &image,
+static GLuint getBaseImgTex(unsigned int image_idx,
                             const PIXVAL *sp,
                             GLfloat &tcx, GLfloat &tcy, GLfloat &tcw, GLfloat &tch)
 {
-	unsigned int image_idx = &image - images.data();
+	struct imd &image = images[image_idx];
 	scr_coord_val w = image.base_w;
 	scr_coord_val h = image.base_h;
 	if(  h <= 0 || w <= 0  ) {
@@ -2520,7 +2520,7 @@ void display_img_aux(const image_id n, scr_coord_val xp, scr_coord_val yp, const
 		rezoom_img( n );
 		sp = images[n].base_data;
 		GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-		tex = getIndexImgTex( images[n], sp, x1, y1, tcw, tch );
+		tex = getIndexImgTex( n, sp, x1, y1, tcw, tch );
 		x2 = x1 + tcw;
 		y2 = y1 + tch;
 
@@ -2740,7 +2740,7 @@ void display_color_img(const image_id n, scr_coord_val xp, scr_coord_val yp, sin
 			const PIXVAL *sp = images[n].base_data;
 
 			GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-			GLuint tex = getIndexImgTex( images[n], sp, x1, y1, tcw, tch );
+			GLuint tex = getIndexImgTex( n, sp, x1, y1, tcw, tch );
 			x2 = x1 + tcw;
 			y2 = y1 + tch;
 			display_img_pc( x, y,
@@ -2788,7 +2788,7 @@ void display_base_img(const image_id n, scr_coord_val xp, scr_coord_val yp, cons
 		const PIXVAL *sp = images[n].base_data;
 
 		GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-		GLuint tex = getIndexImgTex( images[n], sp, x1, y1, tcw, tch );
+		GLuint tex = getIndexImgTex( n, sp, x1, y1, tcw, tch );
 		x2 = x1 + tcw;
 		y2 = y1 + tch;
 		display_img_pc( x, y,
@@ -3022,7 +3022,7 @@ void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_va
 
 		if(  color_index & OUTLINE_FLAG  ) {
 			GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-			GLuint tex = getIndexImgTex( images[n], sp, x1, y1, tcw, tch );
+			GLuint tex = getIndexImgTex( n, sp, x1, y1, tcw, tch );
 			x2 = x1 + tcw;
 			y2 = y1 + tch;
 			display_img_blend_wc_colour( xp, yp,
@@ -3033,7 +3033,7 @@ void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_va
 		}
 		else {
 			GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-			GLuint tex = getIndexImgTex( images[n], sp, x1, y1, tcw, tch );
+			GLuint tex = getIndexImgTex( n, sp, x1, y1, tcw, tch );
 			x2 = x1 + tcw;
 			y2 = y1 + tch;
 			display_img_blend_wc( xp, yp,
@@ -3067,10 +3067,10 @@ void display_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const 
 
 		GLfloat tx1 = 0, ty1 = 0, tx2 = 1, ty2 = 1, tw = 1, th = 1;
 		GLfloat ax1 = 0, ay1 = 0, ax2 = 1, ay2 = 1, aw = 1, ah = 1;
-		GLuint tex = getIndexImgTex( images[n], sp, tx1, ty1, tw, th );
+		GLuint tex = getIndexImgTex( n, sp, tx1, ty1, tw, th );
 		tx2 = tx1 + tw;
 		ty2 = ty1 + th;
-		GLuint alphatex = getBaseImgTex( images[alpha_n], alphamap, ax1, ay1, aw, ah );
+		GLuint alphatex = getBaseImgTex( alpha_n, alphamap, ax1, ay1, aw, ah );
 		ax2 = ax1 + aw;
 		ay2 = ay1 + ah;
 		display_img_alpha_wc( xp, yp,
@@ -3124,7 +3124,7 @@ void display_base_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp
 					activate_player_color( 0, daynight );
 				}
 				GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-				tex = getIndexImgTex( images[n], sp, x1, y1, tcw, tch );
+				tex = getIndexImgTex( n, sp, x1, y1, tcw, tch );
 				x2 = x1 + tcw;
 				y2 = y1 + tch;
 				display_img_blend_wc( x, y,
@@ -3134,7 +3134,7 @@ void display_base_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp
 			}
 			else {
 				GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-				tex = getIndexImgTex( images[n], sp, x1, y1, tcw, tch );
+				tex = getIndexImgTex( n, sp, x1, y1, tcw, tch );
 				x2 = x1 + tcw;
 				y2 = y1 + tch;
 				display_img_blend_wc_colour( x, y,
@@ -3183,10 +3183,10 @@ void display_base_img_alpha(const image_id n, const image_id alpha_n, const unsi
 			}
 			GLfloat tx1 = 0, ty1 = 0, tx2 = 1, ty2 = 1, tw = 1, th = 1;
 			GLfloat ax1 = 0, ay1 = 0, ax2 = 1, ay2 = 1, aw = 1, ah = 1;
-			GLuint tex = getIndexImgTex( images[n], sp, tx1, ty1, tw, th );
+			GLuint tex = getIndexImgTex( n, sp, tx1, ty1, tw, th );
 			tx2 = tx1 + tw;
 			ty2 = ty1 + th;
-			GLuint alphatex = getBaseImgTex( images[n], alphamap, ax1, ay1, aw, ah );
+			GLuint alphatex = getBaseImgTex( n, alphamap, ax1, ay1, aw, ah );
 			ax2 = ax1 + aw;
 			ay2 = ay1 + ah;
 
