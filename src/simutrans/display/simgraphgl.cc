@@ -2254,11 +2254,11 @@ static void simgraphgl_set_player_color_scheme(const int player, const uint8 col
 }
 
 
-static TextureAtlas_Texname getIndexImgTex( struct imd &image,
+static TextureAtlas_Texname getIndexImgTex( unsigned int image_idx,
                 const PIXVAL *sp,
                 GLfloat &tcx, GLfloat &tcy, GLfloat &tcw, GLfloat &tch )
 {
-	unsigned int image_idx = &image - images.data();
+	struct imd &image = images[image_idx];
 	scr_coord_val w = image.base_w;
 	scr_coord_val h = image.base_h;
 
@@ -2332,11 +2332,11 @@ static TextureAtlas_Texname getIndexImgTex( struct imd &image,
 	return tex;
 }
 
-static TextureAtlas_Texname getBaseImgTex( struct imd &image,
+static TextureAtlas_Texname getBaseImgTex( unsigned int image_idx,
                 const PIXVAL *sp,
                 GLfloat &tcx, GLfloat &tcy, GLfloat &tcw, GLfloat &tch )
 {
-	unsigned int image_idx = &image - images.data();
+	struct imd &image = images[image_idx];
 	scr_coord_val w = image.base_w;
 	scr_coord_val h = image.base_h;
 	if(  h <= 0 || w <= 0  ) {
@@ -2787,7 +2787,7 @@ static void simgraphgl_draw_img_aux(const image_id n, scr_coord_val xp, scr_coor
 		rezoom_img( n );
 		sp = images[n].base_data;
 		GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-		tex = getIndexImgTex( images[n], sp, x1, y1, tcw, tch );
+		tex = getIndexImgTex( n, sp, x1, y1, tcw, tch );
 		x2 = x1 + tcw;
 		y2 = y1 + tch;
 
@@ -3008,7 +3008,7 @@ void simgraphgl_draw_color_img(const image_id n, scr_coord_val xp, scr_coord_val
 			const PIXVAL *sp = images[n].base_data;
 
 			GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-			TextureAtlas_Texname tex = getIndexImgTex( images[n], sp, x1, y1, tcw, tch );
+			TextureAtlas_Texname tex = getIndexImgTex( n, sp, x1, y1, tcw, tch );
 			x2 = x1 + tcw;
 			y2 = y1 + tch;
 			display_img_pc( x, y,
@@ -3056,7 +3056,7 @@ static void simgraphgl_draw_base_img(const image_id n, scr_coord_val xp, scr_coo
 		const PIXVAL *sp = images[n].base_data;
 
 		GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-		TextureAtlas_Texname tex = getIndexImgTex( images[n], sp, x1, y1, tcw, tch );
+		TextureAtlas_Texname tex = getIndexImgTex( n, sp, x1, y1, tcw, tch );
 		x2 = x1 + tcw;
 		y2 = y1 + tch;
 		display_img_pc( x, y,
@@ -3290,7 +3290,7 @@ static void simgraphgl_draw_rezoomed_img_blend(const image_id n, scr_coord_val x
 
 		if(  color_index & OUTLINE_FLAG  ) {
 			GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-			TextureAtlas_Texname tex = getIndexImgTex( images[n], sp, x1, y1, tcw, tch );
+			TextureAtlas_Texname tex = getIndexImgTex( n, sp, x1, y1, tcw, tch );
 			x2 = x1 + tcw;
 			y2 = y1 + tch;
 			display_img_blend_wc_colour( xp, yp,
@@ -3301,7 +3301,7 @@ static void simgraphgl_draw_rezoomed_img_blend(const image_id n, scr_coord_val x
 		}
 		else {
 			GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-			TextureAtlas_Texname tex = getIndexImgTex( images[n], sp, x1, y1, tcw, tch );
+			TextureAtlas_Texname tex = getIndexImgTex( n, sp, x1, y1, tcw, tch );
 			x2 = x1 + tcw;
 			y2 = y1 + tch;
 			display_img_blend_wc( xp, yp,
@@ -3335,10 +3335,10 @@ static void simgraphgl_draw_rezoomed_img_alpha(const image_id n, const image_id 
 
 		GLfloat tx1 = 0, ty1 = 0, tx2 = 1, ty2 = 1, tw = 1, th = 1;
 		GLfloat ax1 = 0, ay1 = 0, ax2 = 1, ay2 = 1, aw = 1, ah = 1;
-		TextureAtlas_Texname tex = getIndexImgTex( images[n], sp, tx1, ty1, tw, th );
+		TextureAtlas_Texname tex = getIndexImgTex( n, sp, tx1, ty1, tw, th );
 		tx2 = tx1 + tw;
 		ty2 = ty1 + th;
-		TextureAtlas_Texname alphatex = getBaseImgTex( images[alpha_n], alphamap, ax1, ay1, aw, ah );
+		TextureAtlas_Texname alphatex = getBaseImgTex( alpha_n, alphamap, ax1, ay1, aw, ah );
 		ax2 = ax1 + aw;
 		ay2 = ay1 + ah;
 		display_img_alpha_wc( xp, yp,
@@ -3392,7 +3392,7 @@ static void simgraphgl_draw_base_img_blend(const image_id n, scr_coord_val xp, s
 					activate_player_color( 0, daynight );
 				}
 				GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-				tex = getIndexImgTex( images[n], sp, x1, y1, tcw, tch );
+				tex = getIndexImgTex( n, sp, x1, y1, tcw, tch );
 				x2 = x1 + tcw;
 				y2 = y1 + tch;
 				display_img_blend_wc( x, y,
@@ -3402,7 +3402,7 @@ static void simgraphgl_draw_base_img_blend(const image_id n, scr_coord_val xp, s
 			}
 			else {
 				GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-				tex = getIndexImgTex( images[n], sp, x1, y1, tcw, tch );
+				tex = getIndexImgTex( n, sp, x1, y1, tcw, tch );
 				x2 = x1 + tcw;
 				y2 = y1 + tch;
 				display_img_blend_wc_colour( x, y,
@@ -3451,10 +3451,10 @@ static void simgraphgl_draw_base_img_alpha(const image_id n, const image_id alph
 			}
 			GLfloat tx1 = 0, ty1 = 0, tx2 = 1, ty2 = 1, tw = 1, th = 1;
 			GLfloat ax1 = 0, ay1 = 0, ax2 = 1, ay2 = 1, aw = 1, ah = 1;
-			TextureAtlas_Texname tex = getIndexImgTex( images[n], sp, tx1, ty1, tw, th );
+			TextureAtlas_Texname tex = getIndexImgTex( n, sp, tx1, ty1, tw, th );
 			tx2 = tx1 + tw;
 			ty2 = ty1 + th;
-			TextureAtlas_Texname alphatex = getBaseImgTex( images[n], alphamap, ax1, ay1, aw, ah );
+			TextureAtlas_Texname alphatex = getBaseImgTex( n, alphamap, ax1, ay1, aw, ah );
 			ax2 = ax1 + aw;
 			ay2 = ay1 + ah;
 
