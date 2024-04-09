@@ -1581,7 +1581,7 @@ static void disableCopyShader()
 static void runDrawCommand(DrawCommand const &cmd)
 {
 	if(  cmd.cr.number_of_clips > 0 && cmd.use_stencil  ) {
-		build_stencil( cmd.vx1, cmd.vy1, cmd.vx2, cmd.vy2, cmd.cr );
+		build_stencil( 0, 0, disp_width, disp_height, cmd.cr );
 		glEnable( GL_STENCIL_TEST );
 		glStencilOp( GL_KEEP, GL_KEEP, GL_KEEP );
 		glStencilFunc( GL_NOTEQUAL, 1, 1 );
@@ -1634,6 +1634,28 @@ static void runDrawCommand(DrawCommand const &cmd)
 	}
 }
 
+static std::vector<DrawCommand> drawCommands;
+
+static void flushDrawCommands()
+{
+	for(  auto it = drawCommands.begin(); it != drawCommands.end(); it++  ) {
+		runDrawCommand( *it );
+	}
+	drawCommands.clear();
+}
+
+static void scrollDrawCommands(scr_coord_val /*start_y*/, scr_coord_val /*x_offset*/, scr_coord_val /*h*/)
+{
+	flushDrawCommands();
+}
+
+static void queueDrawCommand(DrawCommand const &cmd)
+{
+	drawCommands.emplace_back( cmd );
+	if(  drawCommands.size() > 256  ) {
+		flushDrawCommands();
+	}
+}
 
 static void updateRGBMap(GLuint &tex, PIXVAL *rgbmap, uint64_t code)
 {
@@ -2201,6 +2223,16 @@ static image_id simgraphgl_register_image(const image_t *image_in)
 // (mostly needed when changing climate zones)
 static void simgraphgl_free_all_images_above(image_id above)
 {
+	flushDrawCommands();
+
+	for(  auto it = images.begin() + above; it != images.end(); it++  ) {
+		if(  it->base_tex  ) {
+			glDeleteTextures( 1, &( it->base_tex ) );
+		}
+		if(  isValidTexname( it->index_tex )  ) {
+			glDeleteTextures( 1, &gltexFromTexname( it->index_tex ) );
+		}
+	}
 	images.resize( above );
 }
 
@@ -2409,7 +2441,7 @@ static void display_img_pc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, 
 		cmd.color.g = 0;
 		cmd.color.b = 0;
 		cmd.color.a = 0;
-		runDrawCommand( cmd );
+		queueDrawCommand( cmd );
 	}
 }
 
@@ -2801,7 +2833,7 @@ static void simgraphgl_tint_rect(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 		cmd.color.g = ( colval & 0x07e0 ) / float( 0x07e0 );
 		cmd.color.b = ( colval & 0x001f ) / float( 0x001f );
 		cmd.color.a = 1.0;
-		runDrawCommand( cmd );
+		queueDrawCommand( cmd );
 	}
 }
 
@@ -2836,7 +2868,7 @@ static void display_img_blend_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 		cmd.vx2 = xp + w;
 		cmd.vy2 = yp + h;
 		cmd.use_stencil = false;
-		runDrawCommand( cmd );
+		queueDrawCommand( cmd );
 	}
 }
 
@@ -2870,7 +2902,7 @@ static void display_img_blend_wc_colour(scr_coord_val xp, scr_coord_val yp, scr_
 		cmd.vy1 = yp;
 		cmd.vx2 = xp + w;
 		cmd.vy2 = yp + h;
-		runDrawCommand( cmd );
+		queueDrawCommand( cmd );
 	}
 }
 
@@ -2910,7 +2942,7 @@ static void display_img_alpha_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 		cmd.vy1 = yp;
 		cmd.vx2 = xp + w;
 		cmd.vy2 = yp + h;
-		runDrawCommand( cmd );
+		queueDrawCommand( cmd );
 	}
 }
 
@@ -3091,8 +3123,10 @@ static void simgraphgl_draw_base_img_alpha(const image_id n, const image_id alph
 // scrolls horizontally, will ignore clipping etc.
 static void simgraphgl_move_scroll_band(scr_coord_val start_y, scr_coord_val x_offset, scr_coord_val h)
 {
+	scrollDrawCommands( start_y, x_offset, h );
 	glDisable( GL_TEXTURE_2D );
 	glDisable( GL_BLEND );
+
 	if(  x_offset > 0  ) {
 		glRasterPos2i( 0,        start_y + h );
 		glCopyPixels( x_offset, disp_height - start_y - h,
@@ -3134,7 +3168,7 @@ static void display_pixel(scr_coord_val x, scr_coord_val y, PIXVAL color)
 		cmd.vy1 = y;
 		cmd.vx2 = x + 1;
 		cmd.vy2 = y + 1;
-		runDrawCommand( cmd );
+		queueDrawCommand( cmd );
 	}
 }
 
@@ -3167,7 +3201,7 @@ static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_va
 		cmd.vy1 = yp;
 		cmd.vx2 = xp + w;
 		cmd.vy2 = yp + h;
-		runDrawCommand( cmd );
+		queueDrawCommand( cmd );
 	}
 }
 
@@ -3222,7 +3256,7 @@ static void display_vl_internal(const scr_coord_val xp, scr_coord_val yp, scr_co
 		cmd.vy1 = yp;
 		cmd.vx2 = xp + 1;
 		cmd.vy2 = yp + h;
-		runDrawCommand( cmd );
+		queueDrawCommand( cmd );
 	}
 }
 
@@ -3274,7 +3308,7 @@ static void simgraphgl_draw_array(scr_coord_val xp, scr_coord_val yp, scr_coord_
 		cmd.vy1 = yp;
 		cmd.vx2 = xp + w;
 		cmd.vy2 = yp + h;
-		runDrawCommand( cmd );
+		queueDrawCommand( cmd );
 	}
 }
 
@@ -3312,6 +3346,7 @@ static bool simgraphgl_load_font(const char *fname, bool reload)
 
 		env_t::fontname = fname;
 
+		flushDrawCommands();
 		charatlas.clear();
 		return default_font.is_loaded();
 	}
@@ -3601,7 +3636,7 @@ static scr_coord_val simgraphgl_draw_text_clipped_n(scr_coord_val x, scr_coord_v
 				cmd.vy1 = sy;
 				cmd.vx2 = sx + w;
 				cmd.vy2 = sy + h;
-				runDrawCommand( cmd );
+				queueDrawCommand( cmd );
 			}
 		}
 
@@ -4122,6 +4157,7 @@ static void simgraphgl_draw_right_triangle(scr_coord_val x, scr_coord_val y, scr
  */
 static void simgraphgl_flush_framebuffer()
 {
+	flushDrawCommands();
 	dr_textur( 0, 0, disp_width, disp_height );
 }
 
@@ -4380,6 +4416,7 @@ static bool simgraphgl_take_screenshot(const scr_rect &area)
 
 	raw_image_t img( clipped_area.w, clipped_area.h, raw_image_t::FMT_RGB888 );
 
+	flushDrawCommands();
 #if 0
 	for(  scr_coord_val y = 0; y < clipped_area.h; ++y  ) {
 		uint8 *dst = img.access_pixel( 0, y );
