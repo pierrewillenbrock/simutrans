@@ -10,6 +10,7 @@
 
 #include <map>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <deque>
 
@@ -220,6 +221,11 @@ public:
 
 #define MAX_POLY_CLIPS 6
 
+struct constant_clipping_info_t {
+	clip_line_t poly_clips[MAX_POLY_CLIPS];
+	uint8 poly_active;
+};
+
 MSVC_ALIGN(64) struct clipping_info_t {
 	// current clipping rectangle
 	clip_dimension clip_rect;
@@ -231,6 +237,19 @@ MSVC_ALIGN(64) struct clipping_info_t {
 	uint8 active_ribi;
 	uint8 clip_ribi[MAX_POLY_CLIPS];
 	clip_line_t poly_clips[MAX_POLY_CLIPS];
+	operator constant_clipping_info_t() const
+	{
+		constant_clipping_info_t t;
+		t.poly_active = 0;
+		for(  int i = 0;  i < MAX_POLY_CLIPS;  i++  ) {
+			if(  i < number_of_clips &&
+			                ( clip_ribi[i] & active_ribi ) != 0  ) {
+				t.poly_active |= 1 << i;
+				t.poly_clips[i] = poly_clips[i];
+			}
+		}
+		return t;
+	}
 } GCC_ALIGN(64); // aligned to separate cachelines
 
 template<typename Key>
@@ -542,20 +561,23 @@ static GLcolorf makeColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a)
 	return c;
 }
 
-struct DrawCommand
-{
-	clipping_info_t cr;
+struct DrawCommandKey {
+	constant_clipping_info_t cr;
 	GLuint tex;
 	GLuint rgbmap_tex;
 	GLuint alphatex;
+	unsigned int uses_tex: 1;
+	unsigned int uses_rgbmap_tex: 1;
+	unsigned int uses_alphatex: 1;
+};
+struct DrawCommand
+{
+	DrawCommandKey key;
 	//for stencil
 	scr_coord_val min_x;
 	scr_coord_val min_y;
 	scr_coord_val max_x;
 	scr_coord_val max_y;
-	unsigned int uses_tex: 1;
-	unsigned int uses_rgbmap_tex: 1;
-	unsigned int uses_alphatex: 1;
 };
 
 static GLvec2s make_GLvec2s(GLshort x, GLshort y)
@@ -570,7 +592,7 @@ struct CombinedVertex
 	GLvec4f color;
 	GLvec2f texcoord;
 	GLvec2f alphacoord;
-	GLvec2s vertex;
+	GLvec3s vertex;
 };
 
 struct  CopyVertex
@@ -884,11 +906,12 @@ static char const combined_fragmentShaderText[] =
 	"                          alpha.g * v_alphaMask.g +\n"
 	"                          alpha.b * v_alphaMask.b +\n"
 	"                          index.a * v_alphaMask.a, 0.0, 1.0);\n"
+	"   if(gl_FragColor.a < 0.01) discard;\n"
 	"}\n";
 
 //vertex shader
 static char const vertexShaderText[] =
-	"attribute vec2 a_position;\n"
+	"attribute vec3 a_position;\n"
 	"attribute vec2 a_alpha_coord;\n"
 	"varying vec2 v_alpha_coord;\n"
 	"attribute vec2 a_color_coord;\n"
@@ -899,7 +922,7 @@ static char const vertexShaderText[] =
 	"varying vec4 v_alphaMask;\n"
 	"uniform mat4 u_MVP;\n"
 	"void main () {\n"
-	"   gl_Position = u_MVP * vec4(a_position,0,1);\n"
+	"   gl_Position = u_MVP * vec4(a_position,1);\n"
 	"   v_alpha_coord = a_alpha_coord;\n"
 	"   v_color_coord = a_color_coord;\n"
 	"   v_color = a_color;\n"
@@ -1383,7 +1406,7 @@ static void build_stencil_for(std::vector<GLvec2s> &vertices,
 }
 
 static void build_stencil(int min_x, int min_y, int max_x, int max_y,
-                          clipping_info_t const &cr)
+                          constant_clipping_info_t const &cr)
 {
 	//using most of the "default" shader here, so the model/view/projection
 	//matrices must be setup.
@@ -1412,8 +1435,8 @@ static void build_stencil(int min_x, int min_y, int max_x, int max_y,
 
 	vertices.clear();
 
-	for(  uint8 i = 0; i < cr.number_of_clips; i++  ) {
-		if(  cr.clip_ribi[i] & cr.active_ribi  ) {
+	for(  uint8 i = 0;  i < MAX_POLY_CLIPS;  i++  ) {
+		if(  ( cr.poly_active & ( 1 << i ) ) != 0  ) {
 			cr.poly_clips[i].build_stencil( vertices, min_x, min_y, max_x, max_y );
 		}
 	}
@@ -1570,12 +1593,14 @@ static void setupCombinedShader()
 
 	glEnable( GL_BLEND );
 	glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+	glEnable( GL_DEPTH_TEST );
+	glDepthFunc( GL_GREATER );
 
 	glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, gl_indices_buffer_name );
 	glBindBuffer( GL_ARRAY_BUFFER, gl_vertices_buffer_name );
 
 	glEnableVertexAttribArray( combined_a_position_Location );
-	glVertexAttribPointer( combined_a_position_Location, 2, GL_SHORT, GL_FALSE, sizeof(CombinedVertex), (void *)offsetof( CombinedVertex, vertex ) );
+	glVertexAttribPointer( combined_a_position_Location, 3, GL_SHORT, GL_FALSE, sizeof(CombinedVertex), (void *)offsetof( CombinedVertex, vertex ) );
 	glEnableVertexAttribArray( combined_a_alpha_coord_Location );
 	glVertexAttribPointer( combined_a_alpha_coord_Location, 2, GL_FLOAT, GL_FALSE, sizeof(CombinedVertex), (void *)offsetof( CombinedVertex, alphacoord ) );
 	glEnableVertexAttribArray( combined_a_color_coord_Location );
@@ -1613,6 +1638,7 @@ static void disableShaders()
 	glDisableVertexAttribArray( combined_a_alphaMask_Location );
 
 	glUseProgram( 0 );
+	glDisable( GL_DEPTH_TEST );
 }
 
 static void disableCopyShader()
@@ -1625,12 +1651,12 @@ static void disableCopyShader()
 
 static void runDrawCommand(DrawCommand const &cmd, GLint vertex_first, GLint vertex_count)
 {
-	if(  cmd.cr.number_of_clips > 0  ) {
+	if(  cmd.key.cr.poly_active != 0  ) {
 		disableShaders();
 
 		glUseProgram( 0 );
 
-		build_stencil( cmd.min_x, cmd.min_y, cmd.max_x, cmd.max_y, cmd.cr );
+		build_stencil( cmd.min_x, cmd.min_y, cmd.max_x, cmd.max_y, cmd.key.cr );
 
 		setupCombinedShader();
 
@@ -1639,28 +1665,29 @@ static void runDrawCommand(DrawCommand const &cmd, GLint vertex_first, GLint ver
 		glStencilFunc( GL_NOTEQUAL, 1, 1 );
 	}
 
-	if(  cmd.uses_tex  ) {
+	if(  cmd.key.uses_tex  ) {
 		glActiveTextureARB( GL_TEXTURE0_ARB );
-		glBindTexture( GL_TEXTURE_2D, cmd.tex );
+		glBindTexture( GL_TEXTURE_2D, cmd.key.tex );
 	}
-	if(  cmd.uses_rgbmap_tex  ) {
+	if(  cmd.key.uses_rgbmap_tex  ) {
 		glActiveTextureARB( GL_TEXTURE1_ARB );
-		glBindTexture( GL_TEXTURE_2D, cmd.rgbmap_tex );
+		glBindTexture( GL_TEXTURE_2D, cmd.key.rgbmap_tex );
 	}
-	if(  cmd.uses_alphatex  ) {
+	if(  cmd.key.uses_alphatex  ) {
 		glActiveTextureARB( GL_TEXTURE2_ARB );
-		glBindTexture( GL_TEXTURE_2D, cmd.alphatex );
+		glBindTexture( GL_TEXTURE_2D, cmd.key.alphatex );
 	}
 
 	glDrawElements( GL_TRIANGLE_STRIP, vertex_count, GL_UNSIGNED_SHORT, (void *)(uintptr_t)( vertex_first * sizeof(GLushort) ) );
 
-	if(  cmd.cr.number_of_clips > 0  ) {
+	if(  cmd.key.cr.poly_active != 0  ) {
 		glDisable( GL_STENCIL_TEST );
 		glStencilFunc( GL_ALWAYS, 1, 1 );
 	}
 }
 
 static std::vector<DrawCommand> drawCommands;
+static scr_coord_val drawCommandsZPos = 0;
 static unsigned int drawCommandsPos = 0;
 static std::vector<CombinedVertex> drawVertices;
 
@@ -1669,46 +1696,42 @@ static bool makeDrawCommandCompatible(DrawCommand &cm, DrawCommand const &c2)
 {
 	//these comparisons are ordered by computational effort and
 	//the probability of exiting early with them
-	if(  cm.cr.number_of_clips != c2.cr.number_of_clips  ) {
+	if(  cm.key.cr.poly_active != c2.key.cr.poly_active  ) {
 		return false;
 	}
-	if(  cm.rgbmap_tex != c2.rgbmap_tex && cm.uses_rgbmap_tex &&
-	                c2.uses_rgbmap_tex  ) {
+	if(  cm.key.rgbmap_tex != c2.key.rgbmap_tex && cm.key.uses_rgbmap_tex  &&
+	                c2.key.uses_rgbmap_tex  ) {
 		return false;
 	}
-	if(  cm.tex != c2.tex && cm.uses_tex && c2.uses_tex  ) {
+	if(  cm.key.tex != c2.key.tex && cm.key.uses_tex && c2.key.uses_tex  ) {
 		return false;
 	}
-	if(  cm.alphatex != c2.alphatex && cm.uses_alphatex && c2.uses_alphatex  ) {
+	if(  cm.key.alphatex != c2.key.alphatex && cm.key.uses_alphatex  &&
+		c2.key.uses_alphatex  ) {
 		return false;
 	}
-	if(  cm.cr.number_of_clips != 0  ) {
-		for(  int i = 0; i < cm.cr.number_of_clips; i++  ) {
-			if(  ( cm.cr.clip_ribi[i] & cm.cr.active_ribi ) == 0 &&
-			                ( c2.cr.clip_ribi[i] & c2.cr.active_ribi ) == 0  ) {
+	if(  cm.key.cr.poly_active != 0  ) {
+		for(  int i = 0;  i < MAX_POLY_CLIPS;  i++  ) {
+			if(  (cm.key.cr.poly_active & (1 << i)) == 0  ) {
 				continue;
 			}
-			if(  !( ( cm.cr.clip_ribi[i] & cm.cr.active_ribi ) != 0 &&
-			                ( c2.cr.clip_ribi[i] & c2.cr.active_ribi ) != 0 )  ) {
-				return false;
-			}
-			if(  cm.cr.poly_clips[i] != c2.cr.poly_clips[i]  ) {
+			if(  cm.key.cr.poly_clips[i] != c2.key.cr.poly_clips[i]  ) {
 				return false;
 			}
 		}
 	}
 
-	if(  !cm.uses_tex && c2.uses_tex  ) {
-		cm.tex = c2.tex;
-		cm.uses_tex = 1;
+	if(  !cm.key.uses_tex && c2.key.uses_tex  ) {
+		cm.key.tex = c2.key.tex;
+		cm.key.uses_tex = 1;
 	}
-	if(  !cm.uses_rgbmap_tex && c2.uses_rgbmap_tex  ) {
-		cm.rgbmap_tex = c2.rgbmap_tex;
-		cm.uses_rgbmap_tex = 1;
+	if(  !cm.key.uses_rgbmap_tex && c2.key.uses_rgbmap_tex  ) {
+		cm.key.rgbmap_tex = c2.key.rgbmap_tex;
+		cm.key.uses_rgbmap_tex = 1;
 	}
-	if(  !cm.uses_alphatex && c2.uses_alphatex  ) {
-		cm.alphatex = c2.alphatex;
-		cm.uses_alphatex = 1;
+	if(  !cm.key.uses_alphatex && c2.key.uses_alphatex  ) {
+		cm.key.alphatex = c2.key.alphatex;
+		cm.key.uses_alphatex = 1;
 	}
 	if(  cm.min_x > c2.min_x  ) {
 		cm.min_x = c2.min_x;
@@ -1762,6 +1785,8 @@ static void flushDrawCommands()
 		return;
 	}
 
+	glClearDepthf( 0.f );
+	glClear( GL_DEPTH_BUFFER_BIT );
 	setupCombinedShader();
 
 	auto b = drawCommands.begin();
@@ -1782,6 +1807,7 @@ static void flushDrawCommands()
 	}
 
 	drawCommandsPos = 0;
+	drawCommandsZPos = -32767;
 
 	disableShaders();
 
@@ -1791,6 +1817,19 @@ static void flushDrawCommands()
 	glDisable( GL_TEXTURE_2D );
 	glActiveTextureARB( GL_TEXTURE0_ARB );
 
+	//results: there is a shit load of small keys(4400), few inbetween(11), and then
+	//a small number of big(4), and really big(4) ones.
+	//overall, 330000 quads in 4500 keys (from 19000 batches)
+	//there may already be a benefits in getting the number of batches to quarter the
+	//current number, but the cost may outweigh the gain.
+	//the big and really big ones are probably not collected from small batches(but
+	//if they are, that would be a huge win)
+	//=> needs some more research into why there are so many small keys.
+	//   we may be better off using a different rendering approach for those,
+	//   maybe going for a ubershader that does the clipping for us.
+	//=> implement the per-key rendering.
+	//   structure for that: std::vector<Batch>, Batch: std::map<key, full commands and vertices> -- need to split everytime the z-position rolls over, therefore the vector
+	//   governing them all.
 }
 
 static void scrollDrawCommands(scr_coord_val /*start_y*/, scr_coord_val /*x_offset*/, scr_coord_val /*h*/)
@@ -1814,6 +1853,15 @@ static void queueDrawCommand(DrawCommand &&cmd,
                              GLcolorf alpha,
                              GLcolorf color)
 {
+	if(  drawCommandsZPos >= 32767  ) {
+		drawCommandsZPos = -32767;
+	}
+	else {
+		drawCommandsZPos++;
+	}
+	scr_coord_val vz = drawCommandsZPos;
+
+
 	cmd.min_x = vx1;
 	cmd.min_y = vy1;
 	cmd.max_x = vx2;
@@ -1835,6 +1883,7 @@ static void queueDrawCommand(DrawCommand &&cmd,
 	drawVertices[drawCommandsPos*4+0].alphacoord.y = ay1;
 	drawVertices[drawCommandsPos*4+0].vertex.x = vx1;
 	drawVertices[drawCommandsPos*4+0].vertex.y = vy1;
+	drawVertices[drawCommandsPos*4+0].vertex.z = vz;
 
 	drawVertices[drawCommandsPos*4+1].alpha.glcolor = alpha;
 	drawVertices[drawCommandsPos*4+1].color.glcolor = color;
@@ -1844,6 +1893,7 @@ static void queueDrawCommand(DrawCommand &&cmd,
 	drawVertices[drawCommandsPos*4+1].alphacoord.y = ay1;
 	drawVertices[drawCommandsPos*4+1].vertex.x = vx2;
 	drawVertices[drawCommandsPos*4+1].vertex.y = vy1;
+	drawVertices[drawCommandsPos*4+1].vertex.z = vz;
 
 	drawVertices[drawCommandsPos*4+2].alpha.glcolor = alpha;
 	drawVertices[drawCommandsPos*4+2].color.glcolor = color;
@@ -1853,6 +1903,7 @@ static void queueDrawCommand(DrawCommand &&cmd,
 	drawVertices[drawCommandsPos*4+2].alphacoord.y = ay2;
 	drawVertices[drawCommandsPos*4+2].vertex.x = vx1;
 	drawVertices[drawCommandsPos*4+2].vertex.y = vy2;
+	drawVertices[drawCommandsPos*4+2].vertex.z = vz;
 
 	drawVertices[drawCommandsPos*4+3].alpha.glcolor = alpha;
 	drawVertices[drawCommandsPos*4+3].color.glcolor = color;
@@ -1862,6 +1913,7 @@ static void queueDrawCommand(DrawCommand &&cmd,
 	drawVertices[drawCommandsPos*4+3].alphacoord.y = ay2;
 	drawVertices[drawCommandsPos*4+3].vertex.x = vx2;
 	drawVertices[drawCommandsPos*4+3].vertex.y = vy2;
+	drawVertices[drawCommandsPos*4+3].vertex.z = vz;
 	drawCommandsPos++;
 }
 
@@ -2701,13 +2753,13 @@ static void display_img_pc(const image_id n,
 		activate_player_color( player_nr, daynight );
 
 		DrawCommand cmd;
-		cmd.cr = CR;
-		cmd.tex = tex;
-		cmd.rgbmap_tex = rgbmap_tex;
-		cmd.alphatex = 0;
-		cmd.uses_tex = 1;
-		cmd.uses_rgbmap_tex = 1;
-		cmd.uses_alphatex = 0;
+		cmd.key.cr = CR;
+		cmd.key.tex = tex;
+		cmd.key.rgbmap_tex = rgbmap_tex;
+		cmd.key.alphatex = 0;
+		cmd.key.uses_tex = 1;
+		cmd.key.uses_rgbmap_tex = 1;
+		cmd.key.uses_alphatex = 0;
 		queueDrawCommand( std::move( cmd ),
 		                  xp,
 		                  yp,
@@ -3042,13 +3094,13 @@ void display_blend_wh_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, s
 		const float alpha = percent_blend / 100.0;
 
 		DrawCommand cmd;
-		cmd.cr.number_of_clips = 0;
-		cmd.tex = 0;
-		cmd.rgbmap_tex = 0;
-		cmd.alphatex = 0;
-		cmd.uses_tex = 1;
-		cmd.uses_rgbmap_tex = 0;
-		cmd.uses_alphatex = 0;
+		cmd.key.cr.poly_active = 0;
+		cmd.key.tex = 0;
+		cmd.key.rgbmap_tex = 0;
+		cmd.key.alphatex = 0;
+		cmd.key.uses_tex = 1;
+		cmd.key.uses_rgbmap_tex = 0;
+		cmd.key.uses_alphatex = 0;
 		queueDrawCommand( std::move( cmd ),
 		                  xp,
 		                  yp,
@@ -3088,13 +3140,13 @@ static void display_img_blend_wc(const image_id n,
 
 	if(  w > 0 && h > 0  ) {
 		DrawCommand cmd;
-		cmd.tex = tex;
-		cmd.rgbmap_tex = rgbmap_tex;
-		cmd.alphatex = 0;
-		cmd.cr.number_of_clips = 0;
-		cmd.uses_tex = 1;
-		cmd.uses_rgbmap_tex = 1;
-		cmd.uses_alphatex = 0;
+		cmd.key.cr.poly_active = 0;
+		cmd.key.tex = tex;
+		cmd.key.rgbmap_tex = rgbmap_tex;
+		cmd.key.alphatex = 0;
+		cmd.key.uses_tex = 1;
+		cmd.key.uses_rgbmap_tex = 1;
+		cmd.key.uses_alphatex = 0;
 		queueDrawCommand( std::move( cmd ),
 		                  xp,
 		                  yp,
@@ -3130,13 +3182,13 @@ static void display_img_blend_wc_colour(const image_id n,
 
 	if(  w > 0 && h > 0  ) {
 		DrawCommand cmd;
-		cmd.tex = tex;
-		cmd.rgbmap_tex = 0;
-		cmd.alphatex = 0;
-		cmd.cr.number_of_clips = 0;
-		cmd.uses_tex = 1;
-		cmd.uses_rgbmap_tex = 0;
-		cmd.uses_alphatex = 0;
+		cmd.key.cr.poly_active = 0;
+		cmd.key.tex = tex;
+		cmd.key.rgbmap_tex = 0;
+		cmd.key.alphatex = 0;
+		cmd.key.uses_tex = 1;
+		cmd.key.uses_rgbmap_tex = 0;
+		cmd.key.uses_alphatex = 0;
 		queueDrawCommand( std::move( cmd ),
 		                  xp,
 		                  yp,
@@ -3190,13 +3242,13 @@ static void display_img_alpha_wc(const image_id n, const image_id alpha_n,
 
 	if(  w > 0 && h > 0  ) {
 		DrawCommand cmd;
-		cmd.cr.number_of_clips = 0;
-		cmd.tex = tex;
-		cmd.rgbmap_tex = rgbmap_tex;
-		cmd.alphatex = alphatex;
-		cmd.uses_tex = 1;
-		cmd.uses_rgbmap_tex = 1;
-		cmd.uses_alphatex = 1;
+		cmd.key.cr.poly_active = 0;
+		cmd.key.tex = tex;
+		cmd.key.rgbmap_tex = rgbmap_tex;
+		cmd.key.alphatex = alphatex;
+		cmd.key.uses_tex = 1;
+		cmd.key.uses_rgbmap_tex = 1;
+		cmd.key.uses_alphatex = 1;
 		//todo: someone please explain to me why there is 2.0 in alpha is needed here
 		queueDrawCommand( std::move( cmd ),
 		                  xp,
@@ -3434,13 +3486,13 @@ static void display_pixel(scr_coord_val x, scr_coord_val y, PIXVAL color)
 {
 	if(  x >= CR0.clip_rect.x && x < CR0.clip_rect.xx && y >= CR0.clip_rect.y && y < CR0.clip_rect.yy  ) {
 		DrawCommand cmd;
-		cmd.cr.number_of_clips = 0;
-		cmd.tex = 0;
-		cmd.rgbmap_tex = 0;
-		cmd.alphatex = 0;
-		cmd.uses_tex = 1;
-		cmd.uses_rgbmap_tex = 0;
-		cmd.uses_alphatex = 0;
+		cmd.key.cr.poly_active = 0;
+		cmd.key.tex = 0;
+		cmd.key.rgbmap_tex = 0;
+		cmd.key.alphatex = 0;
+		cmd.key.uses_tex = 1;
+		cmd.key.uses_rgbmap_tex = 0;
+		cmd.key.uses_alphatex = 0;
 		queueDrawCommand( std::move( cmd ),
 		                  x,
 		                  y,
@@ -3465,13 +3517,13 @@ static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_va
 {
 	if(  clip_lr( &xp, &w, cL, cR ) && clip_lr( &yp, &h, cT, cB )  ) {
 		DrawCommand cmd;
-		cmd.cr.number_of_clips = 0;
-		cmd.tex = 0;
-		cmd.rgbmap_tex = 0;
-		cmd.alphatex = 0;
-		cmd.uses_tex = 1;
-		cmd.uses_rgbmap_tex = 0;
-		cmd.uses_alphatex = 0;
+		cmd.key.cr.poly_active = 0;
+		cmd.key.tex = 0;
+		cmd.key.rgbmap_tex = 0;
+		cmd.key.alphatex = 0;
+		cmd.key.uses_tex = 1;
+		cmd.key.uses_rgbmap_tex = 0;
+		cmd.key.uses_alphatex = 0;
 		queueDrawCommand( std::move( cmd ),
 		                  xp,
 		                  yp,
@@ -3518,13 +3570,13 @@ static void display_vl_internal(const scr_coord_val xp, scr_coord_val yp, scr_co
 {
 	if(  xp >= cL && xp < cR && clip_lr( &yp, &h, cT, cB )  ) {
 		DrawCommand cmd;
-		cmd.cr.number_of_clips = 0;
-		cmd.tex = 0;
-		cmd.rgbmap_tex = 0;
-		cmd.alphatex = 0;
-		cmd.uses_tex = 1;
-		cmd.uses_rgbmap_tex = 0;
-		cmd.uses_alphatex = 0;
+		cmd.key.cr.poly_active = 0;
+		cmd.key.tex = 0;
+		cmd.key.rgbmap_tex = 0;
+		cmd.key.alphatex = 0;
+		cmd.key.uses_tex = 1;
+		cmd.key.uses_rgbmap_tex = 0;
+		cmd.key.uses_alphatex = 0;
 		queueDrawCommand( std::move( cmd ),
 		                  xp,
 		                  yp,
@@ -3570,13 +3622,13 @@ void display_array_wh(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_c
 		GLuint texname = getArrayTex( arr, arr_w, arr_h,
 		                              tcx, tcy, tcw, tch );
 		DrawCommand cmd;
-		cmd.cr.number_of_clips = 0;
-		cmd.tex = texname;
-		cmd.rgbmap_tex = 0;
-		cmd.alphatex = 0;
-		cmd.uses_tex = 1;
-		cmd.uses_rgbmap_tex = 0;
-		cmd.uses_alphatex = 0;
+		cmd.key.cr.poly_active = 0;
+		cmd.key.tex = texname;
+		cmd.key.rgbmap_tex = 0;
+		cmd.key.alphatex = 0;
+		cmd.key.uses_tex = 1;
+		cmd.key.uses_rgbmap_tex = 0;
+		cmd.key.uses_alphatex = 0;
 		queueDrawCommand( std::move( cmd ),
 		                  xp,
 		                  yp,
@@ -3893,13 +3945,13 @@ scr_coord_val display_text_proportional_len_clip_rgb(scr_coord_val x, scr_coord_
 				                              glw, glh );
 
 				DrawCommand cmd;
-				cmd.cr.number_of_clips = 0;
-				cmd.tex = texname;
-				cmd.rgbmap_tex = 0;
-				cmd.alphatex = 0;
-				cmd.uses_tex = 1;
-				cmd.uses_rgbmap_tex = 0;
-				cmd.uses_alphatex = 0;
+				cmd.key.cr.poly_active = 0;
+				cmd.key.tex = texname;
+				cmd.key.rgbmap_tex = 0;
+				cmd.key.alphatex = 0;
+				cmd.key.uses_tex = 1;
+				cmd.key.uses_rgbmap_tex = 0;
+				cmd.key.uses_alphatex = 0;
 				queueDrawCommand( std::move( cmd ),
 				                  sx,
 				                  sy,
