@@ -433,7 +433,7 @@ resolution dr_query_screen_resolution()
 
 GLfloat gl_MVP_mat[16] = {  1, 0,  0, 0,
                             0, 1,  0, 0,
-                            0, 0, 1, 0,
+                            0, 0, 1./65536, 0,
                            -1, 1, 0, 1
                          };
 
