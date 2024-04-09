@@ -2458,22 +2458,6 @@ static void createIndexImgTex(unsigned int image_idx)
 	image.index_tex = tex;
 }
 
-static TextureAtlas_Texname getIndexImgTex(unsigned int image_idx,
-                            GLfloat &tcx, GLfloat &tcy, GLfloat &tcw, GLfloat &tch)
-{
-	struct imd &image = images[image_idx];
-
-	if(  !isValidTexname( image.index_tex )  ) {
-		createIndexImgTex( image_idx );
-	}
-
-	tcx = image.index_x1;
-	tcy = image.index_y1;
-	tcw = image.index_tex_w;
-	tch = image.index_tex_h;
-	return image.index_tex;
-}
-
 
 static void createBaseImgTex(unsigned int image_idx)
 {
@@ -2541,24 +2525,6 @@ static void createBaseImgTex(unsigned int image_idx)
 
 	image.base_tex = tex;
 }
-
-
-static TextureAtlas_Texname getBaseImgTex(unsigned int image_idx,
-                            GLfloat &tcx, GLfloat &tcy, GLfloat &tcw, GLfloat &tch)
-{
-	struct imd &image = images[image_idx];
-
-	if(  !isValidTexname( image.base_tex )  ) {
-		createBaseImgTex( image_idx );
-	}
-
-	tcx = image.base_x1;
-	tcy = image.base_y1;
-	tcw = image.base_tex_w;
-	tch = image.base_tex_h;
-	return image.base_tex;
-}
-
 
 
 static image_id simgraphgl_register_image(const image_t *image_in)
@@ -2918,13 +2884,11 @@ static void simgraphgl_draw_img_aux(const image_id n, scr_coord_val xp, scr_coor
 		// only use player images if needed
 		const sint8 use_player = player_nr_raw;
 		// need to go to nightmode and or re-zoomed?
-		TextureAtlas_Texname tex;
 
 		rezoom_img( n );
-		GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-		tex = getIndexImgTex( n, x1, y1, tcw, tch );
-		x2 = x1 + tcw;
-		y2 = y1 + tch;
+		if(  !isValidTexname( images[n].index_tex )  ) {
+			createIndexImgTex( n );
+		}
 
 		activate_player_color( use_player, true );
 		// now, since zooming may have change this image
@@ -3139,11 +3103,10 @@ void simgraphgl_draw_color_img(const image_id n, scr_coord_val xp, scr_coord_val
 				// no player
 				activate_player_color( 0, daynight );
 			}
-
-			GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-			TextureAtlas_Texname tex = getIndexImgTex( n, x1, y1, tcw, tch );
-			x2 = x1 + tcw;
-			y2 = y1 + tch;
+			// color replacement needs the original data => sp points to non-cached data
+			if(  !isValidTexname( images[n].index_tex )  ) {
+				createIndexImgTex(n);
+			}
 			display_img_pc( n,
 			                x, y,
 			                images[n].base_w, images[n].base_h,
@@ -3184,10 +3147,11 @@ static void simgraphgl_draw_base_img(const image_id n, scr_coord_val xp, scr_coo
 			activate_player_color( 0, daynight );
 		}
 
-		GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-		TextureAtlas_Texname tex = getIndexImgTex( n, x1, y1, tcw, tch );
-		x2 = x1 + tcw;
-		y2 = y1 + tch;
+		// color replacement needs the original data => sp points to non-cached data
+
+		if(  !isValidTexname( images[n].index_tex )  ) {
+			createIndexImgTex(n);
+		}
 		display_img_pc( n,
 		                x, y, images[n].base_w, images[n].base_h,
 		                rgbmap_current_tex  CLIP_NUM_PAR );
@@ -3445,11 +3409,10 @@ static void simgraphgl_draw_rezoomed_img_blend(const image_id n, scr_coord_val x
 		const PIXVAL color = color_index & 0xFFFF;
 		float alpha = ( color_index & TRANSPARENT_FLAGS ) / TRANSPARENT25_FLAG / 4.0;
 
-		if(  color_index & OUTLINE_FLAG  ) {
-			GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-			TextureAtlas_Texname tex = getIndexImgTex( n, x1, y1, tcw, tch );
-			x2 = x1 + tcw;
-			y2 = y1 + tch;
+		if(  !isValidTexname( images[n].index_tex )  ) {
+			createIndexImgTex( n );
+		}
+		if(  color_index&OUTLINE_FLAG  ) {
 			display_img_blend_wc_colour( n,
 			                             xp, yp,
 			                             ceil( images[n].base_w * zoom ),
@@ -3458,10 +3421,6 @@ static void simgraphgl_draw_rezoomed_img_blend(const image_id n, scr_coord_val x
 			                             CLIP_NUM_PAR );
 		}
 		else {
-			GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-			TextureAtlas_Texname tex = getIndexImgTex( n, x1, y1, tcw, tch );
-			x2 = x1 + tcw;
-			y2 = y1 + tch;
 			display_img_blend_wc( n,
 			                      xp, yp,
 			                      ceil( images[n].base_w * zoom ),
@@ -3479,6 +3438,7 @@ static void simgraphgl_draw_rezoomed_img_alpha(const image_id n, const image_id 
 		// need to go to nightmode and or rezoomed?
 		rezoom_img( n );
 		rezoom_img( alpha_n );
+		// alphamap image uses base data as we don't want to recode
 
 		// now, since zooming may have change this image
 		float zoom = get_img_zoom( n );
@@ -3489,14 +3449,13 @@ static void simgraphgl_draw_rezoomed_img_alpha(const image_id n, const image_id 
 		// get the real color
 		const PIXVAL color = color_index & 0xFFFF;
 
-		GLfloat tx1 = 0, ty1 = 0, tx2 = 1, ty2 = 1, tw = 1, th = 1;
-		GLfloat ax1 = 0, ay1 = 0, ax2 = 1, ay2 = 1, aw = 1, ah = 1;
-		TextureAtlas_Texname tex = getIndexImgTex( n, tx1, ty1, tw, th );
-		tx2 = tx1 + tw;
-		ty2 = ty1 + th;
-		TextureAtlas_Texname alphatex = getBaseImgTex( alpha_n,  ax1, ay1, aw, ah );
-		ax2 = ax1 + aw;
-		ay2 = ay1 + ah;
+		if(  !isValidTexname( images[n].index_tex )  ) {
+			createIndexImgTex( n );
+		}
+		if(  !isValidTexname( images[alpha_n].base_tex )  ) {
+			createBaseImgTex( alpha_n );
+		}
+
 		display_img_alpha_wc( n, alpha_n,
 		                      xp, yp,
 		                      ceil( images[n].base_w * zoom ),
@@ -3531,9 +3490,11 @@ static void simgraphgl_draw_base_img_blend(const image_id n, scr_coord_val xp, s
 			const PIXVAL color = color_index & 0xFFFF;
 
 			float alpha = ( color_index & TRANSPARENT_FLAGS ) / TRANSPARENT25_FLAG / 4.0;
-			TextureAtlas_Texname tex;
 
 			// recode is needed only for blending
+			if(  !isValidTexname( images[n].index_tex )  ) {
+				createIndexImgTex( n );
+			}
 			if(  !( color_index & OUTLINE_FLAG )  ) {
 				// colors for 2nd company color
 				if(  player_nr >= 0  ) {
@@ -3543,10 +3504,6 @@ static void simgraphgl_draw_base_img_blend(const image_id n, scr_coord_val xp, s
 					// no player
 					activate_player_color( 0, daynight );
 				}
-				GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-				tex = getIndexImgTex( n, x1, y1, tcw, tch );
-				x2 = x1 + tcw;
-				y2 = y1 + tch;
 				display_img_blend_wc( n,
 				                      x, y,
 				                      images[n].base_w,
@@ -3555,10 +3512,6 @@ static void simgraphgl_draw_base_img_blend(const image_id n, scr_coord_val xp, s
 				                      CLIP_NUM_PAR );
 			}
 			else {
-				GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-				tex = getIndexImgTex( n, x1, y1, tcw, tch );
-				x2 = x1 + tcw;
-				y2 = y1 + tch;
 				display_img_blend_wc_colour( n,
 				                             x, y,
 				                             images[n].base_w,
@@ -3601,14 +3554,12 @@ static void simgraphgl_draw_base_img_alpha(const image_id n, const image_id alph
 				// no player
 				activate_player_color( 0, daynight );
 			}
-			GLfloat tx1 = 0, ty1 = 0, tx2 = 1, ty2 = 1, tw = 1, th = 1;
-			GLfloat ax1 = 0, ay1 = 0, ax2 = 1, ay2 = 1, aw = 1, ah = 1;
-			TextureAtlas_Texname tex = getIndexImgTex( n, tx1, ty1, tw, th );
-			tx2 = tx1 + tw;
-			ty2 = ty1 + th;
-			TextureAtlas_Texname alphatex = getBaseImgTex( n, ax1, ay1, aw, ah );
-			ax2 = ax1 + aw;
-			ay2 = ay1 + ah;
+			if(  !isValidTexname( images[n].index_tex )  ) {
+				createIndexImgTex( n );
+			}
+			if(  !isValidTexname( images[alpha_n].base_tex )  ) {
+				createBaseImgTex( alpha_n );
+			}
 
 			display_img_alpha_wc( n, alpha_n,
 			                      x, y,
