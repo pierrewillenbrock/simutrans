@@ -135,6 +135,19 @@ private:
 	bool non_convex;
 
 public:
+	bool operator ==(clip_line_t const &oth) const
+	{
+		return x0 == oth.x0 &&
+		       y0 == oth.y0 &&
+		       x1 == oth.x1 &&
+		       y1 == oth.y1 &&
+		       non_convex == oth.non_convex;
+	}
+	bool operator !=(clip_line_t const &oth) const
+	{
+		return ! (*this == oth);
+	}
+
 	void clip_from_to(scr_coord_val x0_, scr_coord_val y0_, scr_coord_val x1_, scr_coord_val y1_, bool non_convex_)
 	{
 		x0 = x0_;
@@ -1383,8 +1396,7 @@ int zoom_factor_down()
 	return false;
 }
 
-
-static void runDrawCommand(DrawCommand const &cmd)
+static void runDrawCommand(DrawCommand const &cmd, GLint vertex_first, GLint vertex_count)
 {
 	if(  cmd.cr.number_of_clips > 0  ) {
 		build_stencil( 0, 0, disp_width, disp_height, cmd.cr );
@@ -1400,6 +1412,36 @@ static void runDrawCommand(DrawCommand const &cmd)
 	glActiveTextureARB( GL_TEXTURE2_ARB );
 	glBindTexture( GL_TEXTURE_2D, cmd.alphatex );
 
+	glDrawElements( GL_TRIANGLE_STRIP, vertex_count, GL_UNSIGNED_SHORT, (void *)(uintptr_t)( vertex_first * sizeof(GLushort) ) );
+
+	if(  cmd.cr.number_of_clips > 0  ){
+		glDisable( GL_STENCIL_TEST );
+		glStencilFunc( GL_ALWAYS, 1, 1 );
+	}
+}
+
+static std::vector<DrawCommand> drawCommands;
+
+static void flushDrawCommands()
+{
+	if(  drawCommands.empty()  ) {
+		return;
+	}
+
+	glUseProgram( combined_program );
+
+	//this tells opengl which texture object to use
+	//these cannot be moved into vertex attributes until
+	//bindless textures are available
+	glUniform1i( combined_s_texColor_Location, 0 );
+	glUniform1i( combined_s_texRGBMap_Location, 1 );
+	glUniform1i( combined_s_texAlpha_Location, 2 );
+
+	//the rest should be vertex attributes.
+
+	glEnable( GL_BLEND );
+	glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+
 	GLuint vertices_name;
 	GLuint indices_name;
 
@@ -1407,48 +1449,59 @@ static void runDrawCommand(DrawCommand const &cmd)
 	glGenBuffers( 1, &indices_name );
 	std::vector<Vertex> vertices;
 	std::vector<GLushort> indices;
-	vertices.reserve( 4 );
-	indices.reserve( 4 );
+	vertices.reserve( drawCommands.size() * 4 );
+	indices.reserve( drawCommands.size() * 6 - 2 );
 
-	Vertex v;
-	v.alpha.glcolor = cmd.alpha;
-	v.color.glcolor = cmd.color;
-	v.texcoord.x = cmd.tx1;
-	v.texcoord.y = cmd.ty1;
-	v.alphacoord.x = cmd.ax1;
-	v.alphacoord.y = cmd.ay1;
-	v.vertex.x = cmd.vx1;
-	v.vertex.y = cmd.vy1;
-	indices.push_back( vertices.size() );
-	vertices.push_back( v );
+	for(  auto it = drawCommands.begin(); it != drawCommands.end(); it++  ) {
+		if(  it != drawCommands.begin()  ) {
+			//readd the previous vertices to make the triangles invalid
+			//this results in the last valid tri being -3,-2,-1
+			//then follow -2,-1,-1; -1,-1,0; -1,0,0; 0,0,1
+			//then the first valid tri again: 0,1,2
 
-	v.texcoord.x = cmd.tx2;
-	v.texcoord.y = cmd.ty1;
-	v.alphacoord.x = cmd.ax2;
-	v.alphacoord.y = cmd.ay1;
-	v.vertex.x = cmd.vx2;
-	v.vertex.y = cmd.vy1;
-	indices.push_back( vertices.size() );
-	vertices.push_back( v );
+			indices.push_back( vertices.size() - 1 );
+			indices.push_back( vertices.size() );
+		}
 
-	v.texcoord.x = cmd.tx1;
-	v.texcoord.y = cmd.ty2;
-	v.alphacoord.x = cmd.ax1;
-	v.alphacoord.y = cmd.ay2;
-	v.vertex.x = cmd.vx1;
-	v.vertex.y = cmd.vy2;
-	indices.push_back( vertices.size() );
-	vertices.push_back( v );
+		Vertex v;
+		v.alpha.glcolor = it->alpha;
+		v.color.glcolor = it->color;
+		v.texcoord.x = it->tx1;
+		v.texcoord.y = it->ty1;
+		v.alphacoord.x = it->ax1;
+		v.alphacoord.y = it->ay1;
+		v.vertex.x = it->vx1;
+		v.vertex.y = it->vy1;
+		indices.push_back( vertices.size() );
+		vertices.push_back( v );
 
-	v.texcoord.x = cmd.tx2;
-	v.texcoord.y = cmd.ty2;
-	v.alphacoord.x = cmd.ax2;
-	v.alphacoord.y = cmd.ay2;
-	v.vertex.x = cmd.vx2;
-	v.vertex.y = cmd.vy2;
-	indices.push_back( vertices.size() );
-	vertices.push_back( v );
+		v.texcoord.x = it->tx2;
+		v.texcoord.y = it->ty1;
+		v.alphacoord.x = it->ax2;
+		v.alphacoord.y = it->ay1;
+		v.vertex.x = it->vx2;
+		v.vertex.y = it->vy1;
+		indices.push_back( vertices.size() );
+		vertices.push_back( v );
 
+		v.texcoord.x = it->tx1;
+		v.texcoord.y = it->ty2;
+		v.alphacoord.x = it->ax1;
+		v.alphacoord.y = it->ay2;
+		v.vertex.x = it->vx1;
+		v.vertex.y = it->vy2;
+		indices.push_back( vertices.size() );
+		vertices.push_back( v );
+
+		v.texcoord.x = it->tx2;
+		v.texcoord.y = it->ty2;
+		v.alphacoord.x = it->ax2;
+		v.alphacoord.y = it->ay2;
+		v.vertex.x = it->vx2;
+		v.vertex.y = it->vy2;
+		indices.push_back( vertices.size() );
+		vertices.push_back( v );
+	}
 	glBindBuffer( GL_ARRAY_BUFFER, vertices_name );
 	//when keeping the buffer around, we want GL_DYNAMIC_DRAW.
 	glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STREAM_DRAW );
@@ -1470,49 +1523,70 @@ static void runDrawCommand(DrawCommand const &cmd)
 	glEnableVertexAttribArray( combined_a_alphaMask_Location );
 	glVertexAttribPointer( combined_a_alphaMask_Location, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof( Vertex, alpha ) );
 
-	glDrawElements( GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_SHORT, ( void * )0 );
+	int vertex_current = 0;
 
-	if(  cmd.cr.number_of_clips > 0  ) {
-		glDisable( GL_STENCIL_TEST );
-		glStencilFunc( GL_ALWAYS, 1, 1 );
-	}
+	for(  auto it = drawCommands.begin(); it != drawCommands.end();  ) {
+		int vertex_first = vertex_current;
+		int vertex_count = 4;
+		std::vector<DrawCommand>::iterator it2 = it;
+		it2++;
+		vertex_current += 6;
+		while(  it2 != drawCommands.end()  ) {
+			//for now, check if the basic setup is identical.
+			//later, we should try and find a setup that can be used for
+			//the most number of commands
+			if(  it2->tex != it->tex  ) {
+				break;
+			}
+			if(  it2->rgbmap_tex != it->rgbmap_tex  ) {
+				break;
+			}
+			if(  it2->alphatex != it->alphatex  ) {
+				break;
+			}
+			if(  it2->cr.number_of_clips != it->cr.number_of_clips  ) {
+				break;
+			}
+			if(  it->cr.number_of_clips != 0  ) {
+				bool differ = false;
+				for(  int i = 0; i < it->cr.number_of_clips; i++  ) {
+					if(  ( it2->cr.clip_ribi[i] & it2->cr.active_ribi ) == 0 &&
+					                ( it->cr.clip_ribi[i] & it->cr.active_ribi ) == 0  ) {
+						continue;
+					}
+					if(  !( ( it2->cr.clip_ribi[i] & it2->cr.active_ribi ) != 0 && ( it->cr.clip_ribi[i] & it->cr.active_ribi ) != 0 )  ) {
+						differ = true;
+						break;
+					}
+					if(  it2->cr.poly_clips[i] != it->cr.poly_clips[i]  ) {
+						differ = true;
+						break;
+					}
+				}
+				if(  differ  ) {
+					break;
+				}
+			}
 
-	glDeleteBuffers( 1, &vertices_name );
-	glDeleteBuffers( 1, &indices_name );
-}
-
-static std::vector<DrawCommand> drawCommands;
-
-static void flushDrawCommands()
-{
-	glUseProgram( combined_program );
-
-	//this tells opengl which texture object to use
-	//these cannot be moved into vertex attributes until
-	//bindless textures are available
-	glUniform1i( combined_s_texColor_Location, 0 );
-	glUniform1i( combined_s_texRGBMap_Location, 1 );
-	glUniform1i( combined_s_texAlpha_Location, 2 );
-
-	glActiveTextureARB( GL_TEXTURE0_ARB );
-	glEnable( GL_TEXTURE_2D );
-	glActiveTextureARB( GL_TEXTURE1_ARB );
-	glEnable( GL_TEXTURE_2D );
-	glActiveTextureARB( GL_TEXTURE2_ARB );
-	glEnable( GL_TEXTURE_2D );
-
-	glEnable( GL_BLEND );
-	glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-
-	for(  auto it = drawCommands.begin(); it != drawCommands.end(); it++  ) {
-		runDrawCommand( *it );
+			it2++;
+			vertex_count += 6;
+			vertex_current += 6;
+		}
+		runDrawCommand( *it, vertex_first, vertex_count );
+		it = it2;
 	}
 	drawCommands.clear();
 
 	glDisableClientState( GL_VERTEX_ARRAY );
+	glClientActiveTexture( GL_TEXTURE1 );
+	glDisableClientState( GL_TEXTURE_COORD_ARRAY );
+	glClientActiveTexture( GL_TEXTURE0 );
 	glDisableClientState( GL_TEXTURE_COORD_ARRAY );
 	glDisableClientState( GL_COLOR_ARRAY );
 	glDisableVertexAttribArray( combined_a_alphaMask_Location );
+
+	glDeleteBuffers( 1, &vertices_name );
+	glDeleteBuffers( 1, &indices_name );
 
 	glUseProgram( 0 );
 
@@ -2072,7 +2146,7 @@ void register_image(image_t *image_in)
 
 	/* valid image? */
 	if(  image_in->len == 0 || image_in->h == 0  ) {
-		dbg->warning( "register_image", "Warning: ignoring image %lu because of missing data", images.size() );
+		dbg->warning( "register_image", "Ignoring image %lu because of missing data", images.size() );
 		image_in->imageid = IMG_EMPTY;
 		return;
 	}
