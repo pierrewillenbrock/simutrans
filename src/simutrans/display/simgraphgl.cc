@@ -994,7 +994,7 @@ static char const combined_fragmentShaderText[] =
 	"}\n";
 
 //vertex shader
-static char const vertexShaderText[] =
+static char const combined_vertexShaderText[] =
 	"attribute vec3 a_position;\n"
 	"attribute vec2 a_alpha_coord;\n"
 	"varying vec2 v_alpha_coord;\n"
@@ -1023,6 +1023,24 @@ static GLuint combined_a_alpha_coord_Location;
 static GLuint combined_a_color_coord_Location;
 static GLuint combined_a_color_Location;
 static GLuint combined_a_alphaMask_Location;
+
+static char const stencil_fragmentShaderText[] =
+	"void main () {\n"
+	"   gl_FragColor.rgba = vec4(0,0,0,0);\n"
+	"}\n";
+
+//vertex shader
+static char const stencil_vertexShaderText[] =
+	"attribute vec3 a_position;\n"
+	"uniform mat4 u_MVP;\n"
+	"void main () {\n"
+	"   gl_Position = u_MVP * vec4(a_position,1);\n"
+	"}\n";
+
+
+static GLuint stencil_program;
+static GLuint stencil_u_MVP_Location;
+static GLuint stencil_a_position_Location;
 
 static char const copy_fragmentShaderText[] =
 	"uniform sampler2D s_texColor;\n"
@@ -1492,16 +1510,6 @@ static void build_stencil_for(std::vector<GLvec2s> &vertices,
 static void build_stencil(int min_x, int min_y, int max_x, int max_y,
                           constant_clipping_info_t const &cr)
 {
-	//using most of the "default" shader here, so the model/view/projection
-	//matrices must be setup.
-	glMatrixMode( GL_PROJECTION );
-	glLoadMatrixf( gl_MVP_mat );
-	glColorMask( 0, 0, 0, 0 );
-	glBindTexture( GL_TEXTURE_2D, 0 );
-	glEnable( GL_STENCIL_TEST );
-	glStencilFunc( GL_ALWAYS, 0, 1 );
-	glStencilOp( GL_KEEP, GL_KEEP, GL_REPLACE );
-
 	std::vector<GLvec2s> vertices;
 
 	vertices.emplace_back( make_GLvec2s( min_x, min_y ) );
@@ -1509,11 +1517,9 @@ static void build_stencil(int min_x, int min_y, int max_x, int max_y,
 	vertices.emplace_back( make_GLvec2s( min_x, max_y ) );
 	vertices.emplace_back( make_GLvec2s( max_x, max_y ) );
 
-	glUseProgram( 0 );
-	glBindBuffer( GL_ARRAY_BUFFER, gl_stencil_vertices_buffer_name );
+	glStencilFunc( GL_ALWAYS, 0, 1 );
+
 	glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof(GLvec2s), vertices.data(), GL_DYNAMIC_DRAW );
-	glEnableClientState( GL_VERTEX_ARRAY );
-	glVertexPointer( 2, GL_SHORT, sizeof(GLvec2s), (void *)0 );
 
 	glDrawArrays( GL_TRIANGLE_STRIP, 0, vertices.size() );
 
@@ -1529,16 +1535,9 @@ static void build_stencil(int min_x, int min_y, int max_x, int max_y,
 		glStencilFunc( GL_ALWAYS, 1, 1 );
 
 		glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof(GLvec2s), vertices.data(), GL_DYNAMIC_DRAW );
-		glEnableClientState( GL_VERTEX_ARRAY );
-		glVertexPointer( 2, GL_SHORT, sizeof(GLvec2s), (void *)0 );
 
 		glDrawArrays( GL_TRIANGLE_STRIP, 0, vertices.size() );
 	}
-
-	glDisable( GL_STENCIL_TEST );
-	glColorMask( 1, 1, 1, 1 );
-	glMatrixMode( GL_PROJECTION );
-	glLoadIdentity();
 }
 
 /*
@@ -1665,14 +1664,6 @@ static void setupCombinedShader()
 {
 	glUseProgram( combined_program );
 
-	//this tells opengl which texture object to use
-	//these cannot be moved into vertex attributes until
-	//bindless textures are available
-	glUniform1i( combined_s_texColor_Location, 0 );
-	glUniform1i( combined_s_texRGBMap_Location, 1 );
-	glUniform1i( combined_s_texAlpha_Location, 2 );
-	glUniformMatrix4fv( combined_u_MVP_Location, 1, GL_FALSE, &gl_MVP_mat[0] );
-
 	//the rest should be vertex attributes.
 
 	glEnable( GL_BLEND );
@@ -1695,6 +1686,19 @@ static void setupCombinedShader()
 	glVertexAttribPointer( combined_a_alphaMask_Location, 4, GL_FLOAT, GL_FALSE, sizeof(CombinedVertex), (void *)offsetof( CombinedVertex, alpha ) );
 }
 
+static void setupStencilShader()
+{
+	glUseProgram( stencil_program );
+
+	//the rest should be vertex attributes.
+
+	glBindBuffer( GL_ARRAY_BUFFER, gl_stencil_vertices_buffer_name );
+
+	glEnableVertexAttribArray( stencil_a_position_Location );
+	glVertexAttribPointer( stencil_a_position_Location, 2, GL_SHORT,
+	                       GL_FALSE, sizeof(GLvec2s), (void *)0 );
+}
+
 static void setupCopyShader()
 {
 
@@ -1713,7 +1717,7 @@ static void setupCopyShader()
 	glVertexAttribPointer( copy_a_color_coord_Location, 2, GL_FLOAT, GL_FALSE, sizeof(CopyVertex), (void *)offsetof( CopyVertex, tx1 ) );
 }
 
-static void disableShaders()
+static void disableCombinedShader()
 {
 	glDisableVertexAttribArray( combined_a_position_Location );
 	glDisableVertexAttribArray( combined_a_alpha_coord_Location );
@@ -1723,6 +1727,13 @@ static void disableShaders()
 
 	glUseProgram( 0 );
 	glDisable( GL_DEPTH_TEST );
+}
+
+static void disableStencilShader()
+{
+	glDisableVertexAttribArray( stencil_a_position_Location );
+
+	glUseProgram( 0 );
 }
 
 static void disableCopyShader()
@@ -1736,15 +1747,22 @@ static void disableCopyShader()
 static void runDrawCommand(DrawCommand const &cmd, GLint vertex_first, GLint vertex_count)
 {
 	if(  cmd.key.cr.poly_active != 0  ) {
-		disableShaders();
+		disableCombinedShader();
 
-		glUseProgram( 0 );
+		setupStencilShader();
+
+		glColorMask( 0, 0, 0, 0 );
+		glEnable( GL_STENCIL_TEST );
+		glStencilOp( GL_KEEP, GL_KEEP, GL_REPLACE );
 
 		build_stencil( cmd.min_x, cmd.min_y, cmd.max_x, cmd.max_y, cmd.key.cr );
 
+		glColorMask( 1, 1, 1, 1 );
+
+		disableStencilShader();
+
 		setupCombinedShader();
 
-		glEnable( GL_STENCIL_TEST );
 		glStencilOp( GL_KEEP, GL_KEEP, GL_KEEP );
 		glStencilFunc( GL_NOTEQUAL, 1, 1 );
 	}
@@ -2056,8 +2074,28 @@ static void flushDrawCommands(DrawCommandKey const &key,
 
 static void flushDrawCommands()
 {
-	glClearDepthf( 0.f );
+
+	//setup uniforms that stay static for the duration of the flush
+	//uniforms are properties of the program, not global information like
+	//the glVertexAttribPointer information
+	glUseProgram( combined_program );
+	//this tells opengl which texture object to use
+	//these cannot be moved into vertex attributes until
+	//bindless textures are available
+	glUniform1i( combined_s_texColor_Location, 0 );
+	glUniform1i( combined_s_texRGBMap_Location, 1 );
+	glUniform1i( combined_s_texAlpha_Location, 2 );
+	glUniformMatrix4fv( combined_u_MVP_Location, 1, GL_FALSE, &gl_MVP_mat[0] );
+
+	disableCombinedShader();
+	glUseProgram( stencil_program );
+
+	glUniformMatrix4fv( stencil_u_MVP_Location, 1, GL_FALSE, &gl_MVP_mat[0] );
+
+	disableStencilShader();
 	setupCombinedShader();
+
+	glClearDepthf( 0.f );
 
 	for(  unsigned int batchno = 0;
 	                batchno <= drawCommandBatches.batchesPos  &&
@@ -2101,7 +2139,7 @@ static void flushDrawCommands()
 		}
 	}
 
-	disableShaders();
+	disableCombinedShader();
 
 	glActiveTextureARB( GL_TEXTURE2_ARB );
 	glDisable( GL_TEXTURE_2D );
@@ -4823,26 +4861,26 @@ bool simgraph_init(scr_size window_size, sint16 full_screen)
 
 
 	GLuint combined_fragmentShader;
-	GLuint vertexShader;
+	GLuint combined_vertexShader;
 
 	combined_fragmentShader = compileShader(
 	                GL_FRAGMENT_SHADER,
 	                combined_fragmentShaderText,
 	                sizeof(combined_fragmentShaderText),
 	                "combined fragment shader" );
-	vertexShader = compileShader(
+	combined_vertexShader = compileShader(
 	                GL_VERTEX_SHADER,
-	                vertexShaderText,
-	                sizeof(vertexShaderText),
-	                "vertex shader" );
+	                combined_vertexShaderText,
+	                sizeof(combined_vertexShaderText),
+	                "combined vertex shader" );
 
 
-	combined_program = linkProgram( vertexShader,
+	combined_program = linkProgram( combined_vertexShader,
 	                                combined_fragmentShader,
 	                                "combined program" );
 
 	glDeleteShader( combined_fragmentShader );
-	glDeleteShader( vertexShader );
+	glDeleteShader( combined_vertexShader );
 
 	combined_s_texColor_Location = glGetUniformLocation( combined_program, "s_texColor" );
 	combined_s_texRGBMap_Location = glGetUniformLocation( combined_program, "s_texRGBMap" );
@@ -4853,6 +4891,32 @@ bool simgraph_init(scr_size window_size, sint16 full_screen)
 	combined_a_color_coord_Location = glGetAttribLocation( combined_program, "a_color_coord" );
 	combined_a_color_Location = glGetAttribLocation( combined_program, "a_color" );
 	combined_a_alphaMask_Location = glGetAttribLocation( combined_program, "a_alphaMask" );
+
+
+	GLuint stencil_fragmentShader;
+	GLuint stencil_vertexShader;
+
+	stencil_fragmentShader = compileShader(
+	                GL_FRAGMENT_SHADER,
+	                stencil_fragmentShaderText,
+	                sizeof(stencil_fragmentShaderText),
+	                "stencil fragment shader" );
+	stencil_vertexShader = compileShader(
+	                GL_VERTEX_SHADER,
+	                stencil_vertexShaderText,
+	                sizeof(stencil_vertexShaderText),
+	                "stencil vertex shader" );
+
+
+	stencil_program = linkProgram( stencil_vertexShader,
+	                               stencil_fragmentShader,
+				       "stencil program" );
+
+	glDeleteShader( stencil_fragmentShader );
+	glDeleteShader( stencil_vertexShader );
+
+	stencil_u_MVP_Location = glGetUniformLocation( stencil_program, "u_MVP" );
+	stencil_a_position_Location = glGetAttribLocation( stencil_program, "a_position" );
 
 
 	GLuint copy_fragmentShader;
