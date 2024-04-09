@@ -301,18 +301,7 @@ static scr_coord_val disp_height        = 480; // window height
 /*
  * Image table
  */
-static struct imd* images = NULL;
-
-/*
- * Number of loaded images
- */
-static image_id anz_images = 0;
-
-/*
- * Number of allocated entries for images
- * (>= anz_images)
- */
-static image_id alloc_images = 0;
+static std::vector<imd> images;
 
 static std::unordered_map<uint64_t, GLuint> rgbmap_cache;
 static std::map<uint64_t,GLuint> arrayCache;
@@ -1202,12 +1191,13 @@ static void updateRGBMap(GLuint &tex, PIXVAL *rgbmap, uint64_t code)
 	glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
 	glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
 
-	PIX32 *tmp = (PIX32 *)malloc( w * h * sizeof(PIX32) );
-	memset( tmp, 0, 256 * 256 * sizeof(PIX32) );
+	std::vector<PIX32> tmp;
+	tmp.resize( w * h );
+	memset( tmp.data(), 0, w * h * sizeof(PIX32) );
 
 	/* the reference for these conversions must be
 	 * descriptor/writer/image_writer.cc: pixrgb_to_pixval() */
-	PIX32 *dst = tmp;
+	PIX32 *dst = tmp.data();
 	PIXVAL *src = rgbmap;
 	/* the rgbmap is converted straight to opaque colors */
 	for(  unsigned i = 0; i < RGBMAPSIZE; i++  ) {
@@ -1221,7 +1211,7 @@ static void updateRGBMap(GLuint &tex, PIXVAL *rgbmap, uint64_t code)
 	/* todo: transparent color handling should be moved to the callers.(still?) */
 	/* transparent special colors */
 	src = rgbmap + 0x8000;
-	dst = tmp + 0x8020;
+	dst = tmp.data() + 0x8020;
 	for(  unsigned i = 0; i < SPECIAL; i++  ) {
 		PIXVAL col = *src++;
 		for(  unsigned a = 0; a < 31; a++  ) {
@@ -1233,7 +1223,7 @@ static void updateRGBMap(GLuint &tex, PIXVAL *rgbmap, uint64_t code)
 		}
 	}
 	//these probably are not supported in simgraph16.cc, but image_writer.cc: pixrgb_to_pixval() generates them.
-	dst = tmp + 0x8020 + 31 * 31;
+	dst = tmp.data() + 0x8020 + 31 * 31;
 	/* regular transparent colors. mapping by replicating bits. */
 	for(  unsigned i = 0; i < 0x400; i++  ) {
 		//convert from RGB 343 to RGB 555 to index into rgbmap
@@ -1253,8 +1243,8 @@ static void updateRGBMap(GLuint &tex, PIXVAL *rgbmap, uint64_t code)
 
 	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0,
 	              GL_RGBA, GL_UNSIGNED_BYTE,
-	              tmp );
-	free( tmp );
+	              tmp.data() );
+
 	rgbmap_cache[code] = tex;
 }
 
@@ -1305,7 +1295,7 @@ static void activate_player_color(sint8 player_nr, bool daynight)
 
 static image_id simgraphgl_get_image_count()
 {
-	return anz_images;
+	return images.size();
 }
 
 
@@ -1317,7 +1307,7 @@ static image_id simgraphgl_get_image_count()
 static void rezoom_img(const image_id n)
 {
 	// may this image be zoomed
-	if(  n >= anz_images || images[n].base_h == 0  ) {
+	if(  n >= images.size() || images[n].base_h == 0  ) {
 		return;
 	}
 	if(  images[n].flags & FLAG_ZOOMABLE  ) {
@@ -1368,7 +1358,7 @@ static float get_img_zoom(image_id n) {
 	if(  n == IMG_EMPTY  ) {
 		return 1.0;
 	}
-	if(  n >= anz_images  ) {
+	if(  n >= images.size()  ) {
 		return 1.0;
 	}
 	return images[n].zoom;
@@ -1378,7 +1368,7 @@ static float get_img_zoom(image_id n) {
 // get next smallest size when scaling to percent
 static scr_size simgraphgl_get_best_matching_size(const image_id n, sint16 zoom_percent)
 {
-	if (n < anz_images  &&  images[n].base_h > 0) {
+	if (n < images.size()  &&  images[n].base_h > 0) {
 		int new_w = (images[n].base_w * zoom_percent + 1) / 100;
 		for (int i = 0; i <= MAX_ZOOM_FACTOR; i++) {
 			int zoom_w = (images[n].base_w * g_simgraphgl.zoom_num[i]) / g_simgraphgl.zoom_den[i];
@@ -1398,7 +1388,7 @@ static scr_size simgraphgl_get_best_matching_size(const image_id n, sint16 zoom_
 static void simgraphgl_fit_img_to_width(const image_id n, sint16 new_w)
 {
 	float zoom = get_img_zoom( n );
-	if(  n < anz_images && images[n].base_h > 0 &&
+	if(  n < images.size() && images[n].base_h > 0 &&
 	                ceil( images[n].base_w * zoom ) != new_w  ) {
 		int old_zoom_factor = zoom_factor;
 		for(  int i = 0; i <= MAX_ZOOM_FACTOR; i++  ) {
@@ -1584,9 +1574,10 @@ static GLuint getIndexImgTex(struct imd &image,
 	glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
 	glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
 
-	PIX32 *tmp = (PIX32 *)malloc( w * h * sizeof(PIX32) );
-	memset( tmp, 0, w * h * sizeof(PIX32) );
-	PIX32 *p = tmp;
+	std::vector<PIX32> tmp;
+	tmp.resize( w * h );
+	memset( tmp.data(), 0, w * h * sizeof(PIX32) );
+	PIX32 *p = tmp.data();
 	scr_coord_val y;
 	for(  y = 0; y < h; y++  ) {
 		scr_coord_val xpos = 0;
@@ -1620,8 +1611,7 @@ static GLuint getIndexImgTex(struct imd &image,
 
 	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0,
 	              GL_RGBA, GL_UNSIGNED_BYTE,
-	              tmp );
-	free( tmp );
+	              tmp.data() );
 
 	image.index_tex = ret;
 
@@ -1654,9 +1644,10 @@ static GLuint getBaseImgTex(struct imd &image,
 	glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
 	glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
 
-	PIX32 *tmp = (PIX32 *)malloc( w * h * 4 );
-	memset( tmp, 0, w * h * 4 );
-	PIX32 *p = tmp;
+	std::vector<PIX32> tmp;
+	tmp.resize( w * h );
+	memset( tmp.data(), 0, w * h * sizeof(PIX32) );
+	PIX32 *p = tmp.data();
 	scr_coord_val y;
 	for(  y = 0; y < h; y++  ) {
 		scr_coord_val xpos = 0;
@@ -1691,8 +1682,7 @@ static GLuint getBaseImgTex(struct imd &image,
 
 	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0,
 	              GL_RGBA, GL_UNSIGNED_BYTE,
-	              tmp );
-	free( tmp );
+	              tmp.data() );
 
 	image.base_tex = ret;
 
@@ -1707,27 +1697,13 @@ static image_id simgraphgl_register_image(const image_t *image_in)
 
 	/* valid image? */
 	if(  image_in->len == 0 || image_in->h == 0  ) {
-		dbg->warning( "register_image()", "Ignoring image %d because of missing data", anz_images );
+		dbg->warning( "register_image()", "Ignoring image %d because of missing data", images.size() );
 		return IMG_EMPTY;
 	}
 
-	if(  anz_images == alloc_images  ) {
-		if(  images == NULL  ) {
-			alloc_images = 510;
-		}
-		else {
-			alloc_images += 512;
-		}
-		if(  anz_images > alloc_images  ) {
-			// overflow
-			dbg->fatal( "register_image", "*** Out of images (more than %li!) ***", anz_images );
-		}
-		images = REALLOC( images, imd, alloc_images );
-	}
-
-	const image_id id = anz_images;
-	image = &images[anz_images];
-	anz_images++;
+	const image_id id = images.size();
+	images.resize( id + 1 );
+	image = &images.back();
 
 	image->len = image_in->len;
 
@@ -1758,22 +1734,22 @@ static image_id simgraphgl_register_image(const image_t *image_in)
 // (mostly needed when changing climate zones)
 static void simgraphgl_free_all_images_above(image_id above)
 {
-	while(  above < anz_images  ) {
-		anz_images--;
-		if(  images[anz_images].base_tex  ) {
-			glDeleteTextures( 1, &( images[anz_images].base_tex ) );
+	for(  auto it = images.begin() + above; it != images.end(); it++  ) {
+		if(  it->base_tex  ) {
+			glDeleteTextures( 1, &( it->base_tex ) );
 		}
-		if(  images[anz_images].index_tex  ) {
-			glDeleteTextures( 1, &( images[anz_images].index_tex ) );
+		if(  it->index_tex  ) {
+			glDeleteTextures( 1, &( it->index_tex ) );
 		}
 	}
+	images.resize( above );
 }
 
 
 // query offsets
 static scr_rect simgraphgl_get_image_offset(image_id image)
 {
-	if(  image < anz_images  ) {
+	if(  image < images.size()  ) {
 		float zoom = get_img_zoom( image );
 		return scr_rect{
 			(scr_coord_val)floor( images[image].base_x * zoom ),
@@ -1791,7 +1767,7 @@ static scr_rect simgraphgl_get_image_offset(image_id image)
 // query un-zoomed offsets
 static scr_rect simgraphgl_get_base_image_offset(image_id image)
 {
-	if(  image < anz_images  ) {
+	if(  image < images.size()  ) {
 		return scr_rect{
 			images[image].base_x,
 			images[image].base_y,
@@ -2046,7 +2022,7 @@ static void display_img_pc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, 
 // only used for GUI
 static void simgraphgl_draw_img_aligned(const image_id n, scr_rect area, int align, const bool dirty)
 {
-	if(  n < anz_images  ) {
+	if(  n < images.size()  ) {
 		scr_coord_val x, y;
 
 		float zoom = get_img_zoom( n );
@@ -2080,7 +2056,7 @@ static void simgraphgl_draw_img_aligned(const image_id n, scr_rect area, int ali
  */
 static void simgraphgl_draw_img_aux(const image_id n, scr_coord_val xp, scr_coord_val yp, const sint8 player_nr_raw, const bool /*daynight*/, const bool /*dirty*/  CLIP_NUM_DEF)
 {
-	if(  n < anz_images  ) {
+	if(  n < images.size()  ) {
 		// only use player images if needed
 		const sint8 use_player = player_nr_raw;
 		// need to go to nightmode and or re-zoomed?
@@ -2271,7 +2247,7 @@ static void simgraphgl_draw_stretch_map_blend(const stretch_map_t &imag, scr_rec
  */
 void simgraphgl_draw_color_img(const image_id n, scr_coord_val xp, scr_coord_val yp, sint8 player_nr_raw, const bool daynight, const bool dirty  CLIP_NUM_DEF)
 {
-	if(  n < anz_images  ) {
+	if(  n < images.size()  ) {
 		// do we have to use a player nr?
 		const sint8 player_nr = player_nr_raw;
 
@@ -2324,7 +2300,7 @@ static void simgraphgl_draw_base_img(const image_id n, scr_coord_val xp, scr_coo
 		// same size => use standard routine
 		simgraphgl_draw_color_img( n, xp, yp, player_nr, daynight, dirty  CLIP_NUM_PAR );
 	}
-	else if(  n < anz_images  ) {
+	else if(  n < images.size()  ) {
 		// now test if visible and clipping needed
 		const scr_coord_val x = images[n].base_x + xp;
 		const scr_coord_val y = images[n].base_y + yp;
@@ -2602,7 +2578,7 @@ static void display_img_alpha_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_v
  */
 static void simgraphgl_draw_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp, const signed char /*player_nr*/, const FLAGGED_PIXVAL color_index, const bool /*daynight*/, const bool /*dirty*/  CLIP_NUM_DEF)
 {
-	if(  n < anz_images  ) {
+	if(  n < images.size()  ) {
 		// need to go to nightmode and or rezoomed?
 		rezoom_img( n );
 		PIXVAL *sp = images[n].base_data;
@@ -2637,7 +2613,7 @@ static void simgraphgl_draw_rezoomed_img_blend(const image_id n, scr_coord_val x
 
 static void simgraphgl_draw_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const unsigned alpha_flags, scr_coord_val xp, scr_coord_val yp, const sint8 /*player_nr*/, const FLAGGED_PIXVAL color_index, const bool /*daynight*/, const bool /*dirty*/  CLIP_NUM_DEF)
 {
-	if(  n < anz_images && alpha_n < anz_images  ) {
+	if(  n < images.size() && alpha_n < images.size()  ) {
 		// need to go to nightmode and or rezoomed?
 		rezoom_img( n );
 		rezoom_img( alpha_n );
@@ -2673,7 +2649,7 @@ static void simgraphgl_draw_base_img_blend(const image_id n, scr_coord_val xp, s
 		// same size => use standard routine
 		simgraphgl_draw_rezoomed_img_blend( n, xp, yp, player_nr, color_index, daynight, dirty  CLIP_NUM_PAR );
 	}
-	else if(  n < anz_images  ) {
+	else if(  n < images.size()  ) {
 		// now test if visible and clipping needed
 		scr_coord_val x = images[n].base_x + xp;
 		scr_coord_val y = images[n].base_y + yp;
@@ -2727,7 +2703,7 @@ static void simgraphgl_draw_base_img_alpha(const image_id n, const image_id alph
 		// same size => use standard routine
 		simgraphgl_draw_rezoomed_img_alpha( n, alpha_n, alpha_flags, xp, yp, player_nr, color_index, daynight, dirty  CLIP_NUM_PAR );
 	}
-	else if(  n < anz_images  ) {
+	else if(  n < images.size()  ) {
 		// now test if visible and clipping needed
 		scr_coord_val x = images[n].base_x + xp;
 		scr_coord_val y = images[n].base_y + yp;
@@ -3931,7 +3907,7 @@ static bool simgraphgl_init(scr_size window_size, sint16 full_screen)
  */
 static bool simgraphgl_is_display_init()
 {
-	return inited && default_font.is_loaded() && images != NULL;
+	return inited && default_font.is_loaded();
 }
 
 
@@ -3941,9 +3917,7 @@ static bool simgraphgl_is_display_init()
 static void simgraphgl_exit()
 {
 	gfx->free_all_images_above( 0 );
-	free( images );
-
-	images = NULL;
+	images.clear();
 
 	dr_os_close();
 }
