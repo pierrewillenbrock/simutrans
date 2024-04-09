@@ -109,9 +109,13 @@ static SDL_Window *window;
 static SDL_GLContext glcontext;
 static GLuint fb_color_tex, fb_depth_rb;
 static GLuint framebuffer;
+static GLuint sdl_draw_framebuffer;
+static GLuint sdl_read_framebuffer;
 
 static int width = 16;
 static int height = 16;
+static int tex_w = 16;
+static int tex_h = 16;
 
 static int sync_blit = 0;
 static sint16 fullscreen = WINDOWED;
@@ -427,23 +431,26 @@ resolution dr_query_screen_resolution()
 	return res;
 }
 
+GLfloat gl_MVP_mat[16] = {  1, 0,  0, 0,
+                            0, 1,  0, 0,
+                            0, 0, 1, 0,
+                           -1, 1, 0, 1
+                         };
+
 // open the window
 int dr_os_open(const scr_size window_size, sint16 fs)
 {
 	// scale up
 	resolution res = dr_query_screen_resolution();
-	const int tex_w = clamp( res.w, 1, SCREEN_TO_TEX_X(window_size.w) );
-	const int tex_h = clamp( res.h, 1, SCREEN_TO_TEX_Y(window_size.h) );
+	tex_w = clamp( res.w, 1, SCREEN_TO_TEX_X(window_size.w) );
+	tex_h = clamp( res.h, 1, SCREEN_TO_TEX_Y(window_size.h) );
 
 	DBG_MESSAGE("dr_os_open()", "Screen requested %i,%i, available max %i,%i", tex_w, tex_h, res.w, res.h);
 
 	fullscreen = fs ? BORDERLESS : WINDOWED;	// SDL2 has no real fullscreen mode
 
-	// some cards need those alignments
-	// especially 64bit want a border of 8bytes
-	const int tex_pitch = (tex_w + 15) & 0x7FF0;
-	width = tex_pitch;
-	height = tex_h;
+	width = TEX_TO_SCREEN_X(tex_w);
+	height = TEX_TO_SCREEN_Y(tex_h);
 
 	// SDL2 only works with borderless fullscreen (SDL_WINDOW_FULLSCREEN_DESKTOP)
 	Uint32 flags = fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : SDL_WINDOW_RESIZABLE;
@@ -481,6 +488,9 @@ int dr_os_open(const scr_size window_size, sint16 fs)
 	SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0"); // no mouse emulation for touch
 #endif
 
+	glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, (GLint*)&sdl_draw_framebuffer);
+	glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, (GLint*)&sdl_read_framebuffer);
+
 	glEnable(GL_TEXTURE_2D);
 
 	check_for_extensions();
@@ -502,12 +512,24 @@ int dr_os_open(const scr_size window_size, sint16 fs)
         glGenFramebuffers(1, &framebuffer);
         glGenRenderbuffers(1, &fb_depth_rb);
 
-        glBindTexture(GL_TEXTURE_2D, fb_color_tex);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, window_size.w, window_size.h, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
+	glViewport(0, 0, tex_w, tex_h);
+	//map x[0,width] to x[-1,1]: X(x) = x/width*2-1
+	//map y[0,height] to y[1,-1]: Y(x) = -x/height*2+1
+	gl_MVP_mat[0] = 2.0/tex_w;
+	gl_MVP_mat[5] = -2.0/tex_h;
+
+	glBindTexture(GL_TEXTURE_2D, fb_color_tex);
+	glTexParameteri( GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,
+	                 GL_CLAMP_TO_EDGE );
+	glTexParameteri( GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,
+	                 GL_CLAMP_TO_EDGE );
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, tex_w, tex_h, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
         glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fb_color_tex, 0);
         glBindRenderbuffer(GL_RENDERBUFFER, fb_depth_rb);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, window_size.w, window_size.h);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, tex_w, tex_h);
         glFramebufferRenderbufferEXT(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, fb_depth_rb);
         //-------------------------
         //Does the GPU support current FBO configuration?
@@ -521,9 +543,9 @@ int dr_os_open(const scr_size window_size, sint16 fs)
 		dbg->fatal( "dr_os_open()", "could not create framebuffer object" );
         }
 
-	display_set_actual_width( window_size.w );
-	display_set_height( window_size.h );
-	return window_size.w;
+	display_set_actual_width( tex_w );
+	display_set_height( tex_h );
+	return tex_w;
 }
 
 
@@ -544,15 +566,8 @@ void dr_os_close()
 	SDL_StopTextInput();
 }
 
-GLfloat gl_MVP_mat[16] = { 1,0,0,0,0,1,0,0,0,0,1,0,-1,1,0,1 };
-
 static void setupGL()
 {
-	glViewport(0,0,width,height);
-	//map x[0,width] to x[-1,1]: X(x) = x/width*2-1
-	//map y[0,height] to y[1,-1]: Y(x) = -x/height*2+1
-	gl_MVP_mat[0] = 2.0/width;
-	gl_MVP_mat[5] = -2.0/height;
 	glClear(GL_COLOR_BUFFER_BIT);
 
 	glFlush();
@@ -561,21 +576,28 @@ static void setupGL()
 
 
 // resizes screen
-int dr_textur_resize(unsigned short** const textur, int tex_w, int const tex_h)
+int dr_textur_resize(unsigned short** const textur, int _tex_w, int const _tex_h)
 {
 	// enforce multiple of 16 pixels, or there are likely mismatches
 //	w = (w + 15 ) & 0x7FF0;
 
 	// w, h are the width in pixel, we calculate now the scree size
+	tex_w = _tex_w;
+	tex_h = _tex_h;
 	width = TEX_TO_SCREEN_X(tex_w);
 	height = TEX_TO_SCREEN_Y(tex_h);
-	display_set_actual_width( width );
-	display_set_height( height );
+	display_set_actual_width( tex_w );
+	display_set_height( tex_h );
 	if(  textur  ) {
 		*textur = dr_textur_init();
 	}
 	setupGL();
 
+	glViewport(0,0,width,height);
+	//map x[0,width] to x[-1,1]: X(x) = x/width*2-1
+	//map y[0,height] to y[1,-1]: Y(x) = -x/height*2+1
+	gl_MVP_mat[0] = 2.0/tex_w;
+	gl_MVP_mat[5] = -2.0/tex_h;
         glBindTexture(GL_TEXTURE_2D, fb_color_tex);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, tex_w, tex_h, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
         glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
@@ -595,7 +617,9 @@ int dr_textur_resize(unsigned short** const textur, int tex_w, int const tex_h)
 		dbg->fatal( "dr_os_open()", "could not create framebuffer object" );
         }
 
-        return width;
+	DBG_MESSAGE( "dr_textur_resize(SDL2+GL)", "SDL realized screen size width=%d, height=%d (internal w=%d, h=%d)", tex_w, tex_h, width, height );
+
+        return tex_w;
 }
 
 
@@ -625,21 +649,22 @@ void dr_prepare_flush()
 	return;
 }
 
+void simgraphgl_CopyTexBufferToBuffer( GLuint dstBuffer, GLuint srcBuffer, GLuint srcTex,
+				       int width, int height, float x_scale, float y_scale );
 
 void dr_flush()
 {
 	display_flush_buffer();
-
-	glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer);
-	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-	glDisable(GL_TEXTURE_2D);
-	glDisable(GL_BLEND);
-	glRasterPos2f(-1,-1);
-	glCopyPixels(0,0,width,height,GL_COLOR);
-	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+	glViewport(0, 0, width, height);
+	simgraphgl_CopyTexBufferToBuffer( sdl_draw_framebuffer, framebuffer,
+	                                  fb_color_tex, width, height, x_scale / SCALE_NEUTRAL_X, y_scale / SCALE_NEUTRAL_Y );
+	glViewport(0, 0, tex_w, tex_h);
 	glFlush();
 	glFinish();
-	SDL_GL_SwapWindow(window);
+	glBindFramebuffer( GL_DRAW_FRAMEBUFFER, sdl_draw_framebuffer );
+	glBindFramebuffer( GL_READ_FRAMEBUFFER, sdl_read_framebuffer );
+	SDL_GL_SwapWindow( window );
+	glBindFramebuffer( GL_FRAMEBUFFER, framebuffer );
 }
 
 
@@ -763,6 +788,9 @@ static void internal_GetEvents()
 			if(  event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED  ) {
 				sys_event.new_window_size_w = max(1, SCREEN_TO_TEX_X(event.window.data1));
 				sys_event.new_window_size_h = max(1, SCREEN_TO_TEX_Y(event.window.data2));
+				DBG_MESSAGE("SDL Resize event", "Window is %dx%d, which is reported as %dx%d",
+					    event.window.data1, event.window.data2,
+					    sys_event.new_window_size_w,sys_event.new_window_size_h);
 				sys_event.type = SIM_SYSTEM;
 				sys_event.code = SYSTEM_RESIZE;
 			}

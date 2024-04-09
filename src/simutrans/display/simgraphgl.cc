@@ -556,6 +556,14 @@ struct CombinedVertex
 	GLvec2s vertex;
 };
 
+struct  CopyVertex
+{
+	GLfloat vx1;
+	GLfloat vy1;
+	GLfloat tx1;
+	GLfloat ty1;
+};
+
 }
 
 using namespace simgraphgl;
@@ -723,6 +731,14 @@ static int const gl_max_commands = 16384;
 static GLuint gl_indices_buffer_name;
 static GLuint gl_vertices_buffer_name;
 static GLuint gl_stencil_vertices_buffer_name;
+static GLuint gl_copy_vertices_buffer_name;
+
+static CopyVertex gl_copy_vertices[4] = {
+	{ 0.0,      1.0 * 100, 0.0, 0.0},
+	{ 0.0,      0.0,     0.0, 1.0},
+	{ 1.0 * 100,  1.0 * 100, 1.0, 0.0},
+	{ 1.0 * 100,  0.0,     1.0, 1.0}
+};
 
 
 /*
@@ -883,6 +899,31 @@ static GLuint combined_a_alpha_coord_Location;
 static GLuint combined_a_color_coord_Location;
 static GLuint combined_a_color_Location;
 static GLuint combined_a_alphaMask_Location;
+
+static char const copy_fragmentShaderText[] =
+	"uniform sampler2D s_texColor;\n"
+	"varying vec2 v_color_coord;\n"
+	"void main () {\n"
+	"   gl_FragColor.rgba = texture2D(s_texColor,v_color_coord);\n"
+	"}\n";
+
+//vertex shader
+static char const copy_vertexShaderText[] =
+	"attribute vec3 a_position;\n"
+	"attribute vec2 a_color_coord;\n"
+	"varying vec2 v_color_coord;\n"
+	"uniform mat4 u_MVP;\n"
+	"void main () {\n"
+	"   gl_Position = u_MVP * vec4(a_position,1);\n"
+	"   v_color_coord = a_color_coord;\n"
+	"}\n";
+
+
+static GLuint copy_program;
+static GLuint copy_s_texColor_Location;
+static GLuint copy_u_MVP_Location;
+static GLuint copy_a_color_coord_Location;
+static GLuint copy_a_position_Location;
 
 extern GLfloat gl_MVP_mat[];
 
@@ -1528,6 +1569,24 @@ static void setupCombinedShader()
 	glVertexAttribPointer( combined_a_alphaMask_Location, 4, GL_FLOAT, GL_FALSE, sizeof(CombinedVertex), (void *)offsetof( CombinedVertex, alpha ) );
 }
 
+static void setupCopyShader()
+{
+
+	glUseProgram( copy_program );
+
+	//the rest should be vertex attributes.
+
+	glDisable( GL_BLEND );
+	glDisable( GL_DEPTH_TEST );
+
+	glBindBuffer( GL_ARRAY_BUFFER, gl_copy_vertices_buffer_name );
+
+	glEnableVertexAttribArray( copy_a_position_Location );
+	glVertexAttribPointer( copy_a_position_Location, 2, GL_FLOAT, GL_FALSE, sizeof(CopyVertex), (void *)offsetof( CopyVertex, vx1 ) );
+	glEnableVertexAttribArray( copy_a_color_coord_Location );
+	glVertexAttribPointer( copy_a_color_coord_Location, 2, GL_FLOAT, GL_FALSE, sizeof(CopyVertex), (void *)offsetof( CopyVertex, tx1 ) );
+}
+
 static void disableShaders()
 {
 	glDisableVertexAttribArray( combined_a_position_Location );
@@ -1535,6 +1594,14 @@ static void disableShaders()
 	glDisableVertexAttribArray( combined_a_color_coord_Location );
 	glDisableVertexAttribArray( combined_a_color_Location );
 	glDisableVertexAttribArray( combined_a_alphaMask_Location );
+
+	glUseProgram( 0 );
+}
+
+static void disableCopyShader()
+{
+	glDisableVertexAttribArray( copy_a_position_Location );
+	glDisableVertexAttribArray( copy_a_color_coord_Location );
 
 	glUseProgram( 0 );
 }
@@ -4485,6 +4552,7 @@ bool simgraph_init(scr_size window_size, sint16 full_screen)
 	dr_textur_init();
 	inited = true;
 
+
 	GLuint combined_fragmentShader;
 	GLuint vertexShader;
 
@@ -4516,6 +4584,34 @@ bool simgraph_init(scr_size window_size, sint16 full_screen)
 	combined_a_color_coord_Location = glGetAttribLocation( combined_program, "a_color_coord" );
 	combined_a_color_Location = glGetAttribLocation( combined_program, "a_color" );
 	combined_a_alphaMask_Location = glGetAttribLocation( combined_program, "a_alphaMask" );
+
+
+	GLuint copy_fragmentShader;
+	GLuint copy_vertexShader;
+
+	copy_fragmentShader = compileShader(
+	                GL_FRAGMENT_SHADER,
+	                copy_fragmentShaderText,
+	                sizeof( copy_fragmentShaderText ),
+	                "copy fragment shader" );
+	copy_vertexShader = compileShader(
+	                GL_VERTEX_SHADER,
+	                copy_vertexShaderText,
+	                sizeof( copy_vertexShaderText ),
+	                "copy vertex shader" );
+
+	copy_program = linkProgram( copy_vertexShader,
+	                            copy_fragmentShader,
+	                            "copy program" );
+
+	glDeleteShader( copy_fragmentShader );
+	glDeleteShader( copy_vertexShader );
+
+	copy_s_texColor_Location = glGetUniformLocation( copy_program, "s_texColor" );
+	copy_u_MVP_Location = glGetUniformLocation( copy_program, "u_MVP" );
+	copy_a_color_coord_Location = glGetAttribLocation( copy_program, "a_color_coord" );
+	copy_a_position_Location = glGetAttribLocation( copy_program, "a_position" );
+
 
 	// init, load, and check fonts
 	if(  !display_load_font( env_t::fontname.c_str() )  ) {
@@ -4571,6 +4667,7 @@ bool simgraph_init(scr_size window_size, sint16 full_screen)
 
 	glGenBuffers( 1, &gl_vertices_buffer_name );
 	glGenBuffers( 1, &gl_stencil_vertices_buffer_name );
+	glGenBuffers( 1, &gl_copy_vertices_buffer_name );
 
 	drawCommandsPos = 0;
 
@@ -4601,10 +4698,13 @@ void simgraph_exit()
 	display_free_all_images_above( 0 );
 	images.clear();
 
+	glDeleteBuffers( 1, &gl_copy_vertices_buffer_name );
 	glDeleteBuffers( 1, &gl_indices_buffer_name );
 	glDeleteBuffers( 1, &gl_vertices_buffer_name );
 	glDeleteBuffers( 1, &gl_stencil_vertices_buffer_name );
+	glDeleteProgram( stencil_program );
 	glDeleteProgram( combined_program );
+	glDeleteProgram( copy_program );
 
 	dr_os_close();
 }
@@ -4671,6 +4771,46 @@ bool display_snapshot( const scr_rect &area )
 	return img.write_png( filename );
 }
 
+void simgraphgl_CopyTexBufferToBuffer( GLuint dstBuffer, GLuint srcBuffer,
+                                       GLuint srcTex, int width, int height,
+                                       float /*x_scale*/, float /*y_scale*/ )
+{
+	glBindFramebuffer( GL_READ_FRAMEBUFFER, srcBuffer );
+	glBindFramebuffer( GL_DRAW_FRAMEBUFFER, dstBuffer );
+	glDisable( GL_BLEND );
+#if 1
+	(void)width;
+	(void)height;
+	glEnable( GL_TEXTURE_2D );
+	glActiveTextureARB( GL_TEXTURE0_ARB );
+	glBindTexture( GL_TEXTURE_2D, srcTex );
+	glClear( GL_COLOR_BUFFER_BIT );
+	glDisable( GL_DEPTH_TEST );
+	setupCopyShader();
+	gl_copy_vertices[0].vx1 = 0;
+	gl_copy_vertices[0].vy1 = disp_height;
+	gl_copy_vertices[1].vx1 = 0;
+	gl_copy_vertices[1].vy1 = 0;
+	gl_copy_vertices[2].vx1 = disp_width;
+	gl_copy_vertices[2].vy1 = disp_height;
+	gl_copy_vertices[3].vx1 = disp_width;
+	gl_copy_vertices[3].vy1 = 0;
+	glBufferData( GL_ARRAY_BUFFER, sizeof(gl_copy_vertices), &gl_copy_vertices, GL_DYNAMIC_DRAW );
+
+	glUniform1i( copy_s_texColor_Location, 0 );
+	glUniformMatrix4fv( copy_u_MVP_Location, 1, GL_FALSE, &gl_MVP_mat[0] );
+
+	glDrawArrays( GL_TRIANGLE_STRIP, 0, 4 );
+
+	disableCopyShader();
+	glBindTexture( GL_TEXTURE_2D, 0 );
+#else
+	( void )srcTex;
+	glDisable( GL_TEXTURE_2D );
+	glRasterPos2f( -1, -1 );
+	glCopyPixels( 0, 0, width, height, GL_COLOR );
+#endif
+}
 
 /* context info
  *
