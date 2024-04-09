@@ -542,6 +542,11 @@ struct DrawCommand
 	GLfloat ay2;
 	GLcolorf alpha;
 	GLcolorf color;
+	//for stencil
+	scr_coord_val min_x;
+	scr_coord_val min_y;
+	scr_coord_val max_x;
+	scr_coord_val max_y;
 	unsigned int uses_tex: 1;
 	unsigned int uses_rgbmap_tex: 1;
 	unsigned int uses_alphatex: 1;
@@ -1478,7 +1483,7 @@ static void runDrawCommand(DrawCommand const &cmd, GLint vertex_first, GLint ver
 
 		glUseProgram( 0 );
 
-		build_stencil( 0, 0, disp_width, disp_height, cmd.cr );
+		build_stencil( cmd.min_x, cmd.min_y, cmd.max_x, cmd.max_y, cmd.cr );
 
 		setupCombinedShader();
 
@@ -1545,6 +1550,18 @@ static bool makeDrawCommandCompatible(DrawCommand &cm, DrawCommand const &c2)
 		}
 	}
 
+	if(  cm.min_x > c2.min_x  ) {
+		cm.min_x = c2.min_x;
+	}
+	if(  cm.min_y > c2.min_y  ) {
+		cm.min_y = c2.min_y;
+	}
+	if(  cm.max_x < c2.max_x  ) {
+		cm.max_x = c2.max_x;
+	}
+	if(  cm.max_y < c2.max_y  ) {
+		cm.max_y = c2.max_y;
+	}
 	return true;
 }
 
@@ -1687,6 +1704,10 @@ static void queueDrawCommand(DrawCommand cmd,
 	cmd.ay2 = ay2;
 	cmd.alpha = alpha;
 	cmd.color = color;
+	cmd.min_x = vx1;
+	cmd.min_y = vy1;
+	cmd.max_x = vx2;
+	cmd.max_y = vy2;
 
 	if(drawCommands.size() <= drawCommandsPos)
 		drawCommands.resize(drawCommandsPos+1);
