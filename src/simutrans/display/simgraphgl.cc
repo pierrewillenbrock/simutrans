@@ -175,6 +175,13 @@ struct PIX32
 	uint8_t B;
 	uint8_t A;
 };
+struct ArrayInfo
+{
+	GLuint tex;
+	uint64_t hash;
+	int change_ctr;
+	int use_ctr;
+};
 }
 
 using namespace simgraphgl;
@@ -317,7 +324,7 @@ static scr_coord_val disp_height        = 480; // window height
 static std::vector<imd> images;
 
 static std::unordered_map<uint64_t, GLuint> rgbmap_cache;
-static std::map<uint64_t,GLuint> arrayCache;
+static std::unordered_map<void const *,ArrayInfo> arrayInfo;
 static std::map<uint32_t,CharInfo> chartex;
 static std::vector<CharPageInfo> charpage;
 
@@ -1628,20 +1635,44 @@ static uint64_t tex_hash(const void *ptr, size_t size)
 }
 
 
+//these do change relatively often and keep their data around, so we can
+//key our internal data off their data pointer
 static GLuint getArrayTex(const PIXVAL *arr, scr_coord_val w, scr_coord_val h)
 {
 	if(  w * h == 0  ) {
 		return 0;
 	}
-	size_t size = w * h;
-	uint64_t hash = tex_hash( arr, size );
-	auto it = arrayCache.find( hash );
-	if(  it != arrayCache.end()  ) {
-		return it->second;
+	size_t byte_size = w * h * sizeof(PIXVAL);
+	auto it = arrayInfo.find( (void const *)arr );
+	if(  it != arrayInfo.end()  ) {
+		//check if it has been changed, but only if it is not
+		//changing often(then we avoid the hash function overhead
+		//and go straight to reuploading)
+		if(  it->second.use_ctr > 100 &&
+		                it->second.use_ctr / 3 < it->second.change_ctr  ) {
+			uint64_t hash = tex_hash( arr, byte_size );
+			if(  hash == it->second.hash  ) {
+				it->second.use_ctr++;
+				return it->second.tex;
+			}
+			else {
+				it->second.hash = hash;
+			}
+			it->second.change_ctr++;
+		}
+	}
+	else {
+		it = arrayInfo.insert( std::make_pair
+		                       ( (void const *)arr, ArrayInfo() ) ).first;
+		GLuint texname;
+		glGenTextures( 1, &texname );
+		it->second.tex = texname;
+		it->second.hash = tex_hash( arr, byte_size );
+		it->second.use_ctr = 1;
+		it->second.change_ctr = 1;
 	}
 
-	GLuint texname;
-	glGenTextures( 1, &texname );
+	GLuint texname = arrayInfo[(const void *)arr].tex;
 	glBindTexture( GL_TEXTURE_2D, texname );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
@@ -1658,7 +1689,6 @@ static GLuint getArrayTex(const PIXVAL *arr, scr_coord_val w, scr_coord_val h)
 	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGB, w, h, 0,
 	              GL_RGB, GL_UNSIGNED_SHORT_5_6_5,
 	              arr );
-	arrayCache[hash] = texname;
 
 	return texname;
 }
