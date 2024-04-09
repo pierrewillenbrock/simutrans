@@ -2158,22 +2158,6 @@ static void createIndexImgTex(unsigned int image_idx)
 	image.index_tex = tex;
 }
 
-static GLuint getIndexImgTex(unsigned int image_idx,
-                            GLfloat &tcx, GLfloat &tcy, GLfloat &tcw, GLfloat &tch)
-{
-	struct imd &image = images[image_idx];
-
-	if(  image.index_tex == 0  ) {
-		createIndexImgTex( image_idx );
-	}
-
-	tcx = image.index_x1;
-	tcy = image.index_y1;
-	tcw = image.index_tex_w;
-	tch = image.index_tex_h;
-	return image.index_tex;
-}
-
 
 static void createBaseImgTex(unsigned int image_idx)
 {
@@ -2248,23 +2232,6 @@ static void createBaseImgTex(unsigned int image_idx)
 	                 tmp.data() );
 
 	image.base_tex = tex;
-}
-
-
-static GLuint getBaseImgTex(unsigned int image_idx,
-                            GLfloat &tcx, GLfloat &tcy, GLfloat &tcw, GLfloat &tch)
-{
-	struct imd &image = images[image_idx];
-
-	if(  image.base_tex == 0  ) {
-		createBaseImgTex( image_idx );
-	}
-
-	tcx = image.base_x1;
-	tcy = image.base_y1;
-	tcw = image.base_tex_w;
-	tch = image.base_tex_h;
-	return image.base_tex;
 }
 
 
@@ -2620,13 +2587,11 @@ void display_img_aux(const image_id n, scr_coord_val xp, scr_coord_val yp, const
 		// only use player images if needed
 		const sint8 use_player = player_nr_raw;
 		// need to go to nightmode and or re-zoomed?
-		GLuint tex;
 
 		rezoom_img( n );
-		GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-		tex = getIndexImgTex( n, x1, y1, tcw, tch );
-		x2 = x1 + tcw;
-		y2 = y1 + tch;
+		if(  images[n].index_tex == 0  ) {
+			createIndexImgTex( n );
+		}
 
 		activate_player_color( use_player, true );
 		// now, since zooming may have change this image
@@ -2840,11 +2805,10 @@ void display_color_img(const image_id n, scr_coord_val xp, scr_coord_val yp, sin
 				// no player
 				activate_player_color( 0, daynight );
 			}
-
-			GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-			GLuint tex = getIndexImgTex( n, x1, y1, tcw, tch );
-			x2 = x1 + tcw;
-			y2 = y1 + tch;
+			// color replacement needs the original data => sp points to non-cached data
+			if(  images[n].index_tex == 0  ) {
+				createIndexImgTex(n);
+			}
 			display_img_pc( n,
 			                x, y,
 			                images[n].base_w, images[n].base_h,
@@ -2885,10 +2849,11 @@ void display_base_img(const image_id n, scr_coord_val xp, scr_coord_val yp, cons
 			activate_player_color( 0, daynight );
 		}
 
-		GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-		GLuint tex = getIndexImgTex( n, x1, y1, tcw, tch );
-		x2 = x1 + tcw;
-		y2 = y1 + tch;
+		// color replacement needs the original data => sp points to non-cached data
+
+		if(  images[n].index_tex == 0  ) {
+			createIndexImgTex(n);
+		}
 		display_img_pc( n,
 		                x, y, images[n].base_w, images[n].base_h,
 		                rgbmap_current_tex  CLIP_NUM_PAR );
@@ -3146,11 +3111,10 @@ void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_va
 		const PIXVAL color = color_index & 0xFFFF;
 		float alpha = ( color_index & TRANSPARENT_FLAGS ) / TRANSPARENT25_FLAG / 4.0;
 
-		if(  color_index & OUTLINE_FLAG  ) {
-			GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-			GLuint tex = getIndexImgTex( n, x1, y1, tcw, tch );
-			x2 = x1 + tcw;
-			y2 = y1 + tch;
+		if(  images[n].index_tex == 0  ) {
+			createIndexImgTex( n );
+		}
+		if(  color_index&OUTLINE_FLAG  ) {
 			display_img_blend_wc_colour( n,
 			                             xp, yp,
 			                             ceil( images[n].base_w * zoom ),
@@ -3159,10 +3123,6 @@ void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_va
 			                             CLIP_NUM_PAR );
 		}
 		else {
-			GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-			GLuint tex = getIndexImgTex( n, x1, y1, tcw, tch );
-			x2 = x1 + tcw;
-			y2 = y1 + tch;
 			display_img_blend_wc( n,
 			                      xp, yp,
 			                      ceil( images[n].base_w * zoom ),
@@ -3180,6 +3140,7 @@ void display_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const 
 		// need to go to nightmode and or rezoomed?
 		rezoom_img( n );
 		rezoom_img( alpha_n );
+		// alphamap image uses base data as we don't want to recode
 
 		// now, since zooming may have change this image
 		float zoom = get_img_zoom( n );
@@ -3190,14 +3151,13 @@ void display_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const 
 		// get the real color
 		const PIXVAL color = color_index & 0xFFFF;
 
-		GLfloat tx1 = 0, ty1 = 0, tx2 = 1, ty2 = 1, tw = 1, th = 1;
-		GLfloat ax1 = 0, ay1 = 0, ax2 = 1, ay2 = 1, aw = 1, ah = 1;
-		GLuint tex = getIndexImgTex( n, tx1, ty1, tw, th );
-		tx2 = tx1 + tw;
-		ty2 = ty1 + th;
-		GLuint alphatex = getBaseImgTex( alpha_n,  ax1, ay1, aw, ah );
-		ax2 = ax1 + aw;
-		ay2 = ay1 + ah;
+		if(  images[n].index_tex == 0  ) {
+			createIndexImgTex( n );
+		}
+		if(  images[alpha_n].base_tex == 0  ) {
+			createBaseImgTex( alpha_n );
+		}
+
 		display_img_alpha_wc( n, alpha_n,
 		                      xp, yp,
 		                      ceil( images[n].base_w * zoom ),
@@ -3232,9 +3192,11 @@ void display_base_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp
 			const PIXVAL color = color_index & 0xFFFF;
 
 			float alpha = ( color_index & TRANSPARENT_FLAGS ) / TRANSPARENT25_FLAG / 4.0;
-			GLuint tex;
 
 			// recode is needed only for blending
+			if(  images[n].index_tex == 0  ) {
+				createIndexImgTex( n );
+			}
 			if(  !( color_index & OUTLINE_FLAG )  ) {
 				// colors for 2nd company color
 				if(  player_nr >= 0  ) {
@@ -3244,10 +3206,6 @@ void display_base_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp
 					// no player
 					activate_player_color( 0, daynight );
 				}
-				GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-				tex = getIndexImgTex( n, x1, y1, tcw, tch );
-				x2 = x1 + tcw;
-				y2 = y1 + tch;
 				display_img_blend_wc( n,
 				                      x, y,
 				                      images[n].base_w,
@@ -3256,10 +3214,6 @@ void display_base_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp
 				                      CLIP_NUM_PAR );
 			}
 			else {
-				GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-				tex = getIndexImgTex( n, x1, y1, tcw, tch );
-				x2 = x1 + tcw;
-				y2 = y1 + tch;
 				display_img_blend_wc_colour( n,
 				                             x, y,
 				                             images[n].base_w,
@@ -3302,14 +3256,12 @@ void display_base_img_alpha(const image_id n, const image_id alpha_n, const unsi
 				// no player
 				activate_player_color( 0, daynight );
 			}
-			GLfloat tx1 = 0, ty1 = 0, tx2 = 1, ty2 = 1, tw = 1, th = 1;
-			GLfloat ax1 = 0, ay1 = 0, ax2 = 1, ay2 = 1, aw = 1, ah = 1;
-			GLuint tex = getIndexImgTex( n, tx1, ty1, tw, th );
-			tx2 = tx1 + tw;
-			ty2 = ty1 + th;
-			GLuint alphatex = getBaseImgTex( n, ax1, ay1, aw, ah );
-			ax2 = ax1 + aw;
-			ay2 = ay1 + ah;
+			if(  images[n].index_tex == 0  ) {
+				createIndexImgTex( n );
+			}
+			if(  images[alpha_n].base_tex == 0  ) {
+				createBaseImgTex( alpha_n );
+			}
 
 			display_img_alpha_wc( n, alpha_n,
 			                      x, y,
