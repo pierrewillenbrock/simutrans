@@ -159,6 +159,17 @@ MSVC_ALIGN(64) struct clipping_info_t {
 	clip_line_t poly_clips[MAX_POLY_CLIPS];
 } GCC_ALIGN(64); // aligned to separate cachelines
 
+//todo: use char pages and cache used glyphs there
+struct CharInfo {
+	GLuint texture;
+	GLfloat x, y, w, h;
+};
+struct CharPageInfo {
+	GLuint texture;
+	GLuint width, height;
+	GLuint curx, cury, lineheight;
+};
+
 #ifdef MULTI_THREAD
 clipping_info_t clips[MAX_THREADS];
 #define CR0 clips[0]
@@ -320,6 +331,8 @@ static image_id anz_images = 0;
 static image_id alloc_images = 0;
 
 static std::map<uint64_t,GLuint> arrayCache;
+static std::map<uint32_t,CharInfo> chartex;
+static std::vector<CharPageInfo> charpage;
 
 static uint8 player_night=0xFF;
 static uint8 player_day=0xFF;
@@ -1817,6 +1830,116 @@ static GLuint getArrayTex(const PIXVAL *arr, scr_coord_val w, scr_coord_val h)
 }
 
 
+static GLuint getGlyphTex(uint32_t c, const font_t *fnt,
+                          GLfloat &tcx, GLfloat &tcy,
+                          GLfloat &tcw, GLfloat &tch)
+{
+	auto it = chartex.find( c );
+	if(  it != chartex.end()  ) {
+		tcx = it->second.x;
+		tcy = it->second.y;
+		tcw = it->second.w;
+		tch = it->second.h;
+		return it->second.texture;
+	}
+
+	const font_t::glyph_t &glyph = fnt->get_glyph( c );
+	sint16 glyph_width = glyph.width;
+	sint16 glyph_height = glyph.height;
+	//we ignore the y_offset.
+
+	//check if we have space in the current charpage
+	if(  charpage.empty()  ||
+	                !( /* does it fit at the current position? */
+	                                ( charpage.back().curx + glyph_width <= charpage.back().width  &&
+	                                  charpage.back().cury + glyph_height <= charpage.back().height )  ||
+	                                /* does it fit at the first positon of the next line? */
+	                                ( charpage.back().cury + charpage.back().lineheight +
+	                                  unsigned( glyph_height ) <= charpage.back().height  &&
+	                                  unsigned( glyph_width ) <= charpage.back().width ) )  ) {
+		GLuint texname;
+		glGenTextures( 1, &texname );
+		glBindTexture( GL_TEXTURE_2D, texname );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
+		                 GL_CLAMP_TO_EDGE );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
+		                 GL_CLAMP_TO_EDGE );
+		glTexImage2D( GL_TEXTURE_2D, 0, GL_ALPHA, 256, 256, 0,
+		              GL_ALPHA, GL_UNSIGNED_BYTE,
+		              NULL );
+		CharPageInfo pi = {texname,
+		                   256, 256,
+		                   0, 0, 0
+		                  };
+		charpage.emplace_back( pi );
+	}
+	else {
+		glBindTexture( GL_TEXTURE_2D, charpage.back().texture );
+	}
+
+	/* does it fit on the current line? */
+	if(  !( charpage.back().curx + glyph_width <= charpage.back().width  &&
+	                charpage.back().cury + glyph_height <= charpage.back().height )  ) {
+		/* move to next line */
+		charpage.back().curx = 0;
+		charpage.back().cury += charpage.back().lineheight;
+		charpage.back().lineheight = glyph_height;
+	}
+
+	//now upload the array
+	glPixelStorei( GL_UNPACK_ROW_LENGTH, glyph_width );
+	glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
+	glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
+	glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
+
+	const uint8 *d = glyph.bitmap;
+	uint8_t tmp[glyph_width * glyph_height];
+	uint8_t *p = tmp;
+	unsigned int i;
+	for(  i = 0;  i < unsigned(glyph_height * glyph_width);  i++  ) {
+		int alpha = *d++;
+		if(  alpha > 31  ) {
+			alpha = 0xff;
+		}
+		else {
+			alpha = ( alpha * 0x21 ) / 4;
+		}
+		*p++ = alpha;
+	}
+
+	glTexSubImage2D( GL_TEXTURE_2D, 0,
+	                 charpage.back().curx, charpage.back().cury,
+	                 glyph_width, glyph_height, GL_ALPHA, GL_UNSIGNED_BYTE,
+	                 tmp );
+
+	CharInfo ci = { charpage.back().texture,
+	                charpage.back().curx / float( charpage.back().width ),
+	                charpage.back().cury / float( charpage.back().height ),
+	                glyph_width / float( charpage.back().width ),
+	                glyph_height / float( charpage.back().height )
+	              };
+	chartex[c] = ci;
+
+	if(  charpage.back().lineheight < unsigned( glyph_height )  ) {
+		charpage.back().lineheight = glyph_height;
+	}
+	charpage.back().curx += glyph_width;
+	if(  charpage.back().curx >= charpage.back().width  ) {
+		charpage.back().curx = 0;
+		charpage.back().cury += charpage.back().lineheight;
+		charpage.back().lineheight = 0;
+	}
+
+	tcx = ci.x;
+	tcy = ci.y;
+	tcw = ci.w;
+	tch = ci.h;
+	return ci.texture;
+}
+
+
 static void display_img_pc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h,
                            GLuint tex  CLIP_NUM_DEF)
 {
@@ -2930,6 +3053,11 @@ bool display_load_font(const char *fname, bool reload)
 
 		env_t::fontname = fname;
 
+		for(  auto it = charpage.begin(); it != charpage.end(); it++  ) {
+			glDeleteTextures( 1, &it->texture );
+		}
+		chartex.clear();
+		charpage.clear();
 		return default_font.is_loaded();
 	}
 
@@ -3155,47 +3283,69 @@ scr_coord_val display_text_proportional_len_clip_rgb(scr_coord_val x, scr_coord_
 			c = 0;
 		}
 
-		// get the data from the font
-		const font_t::glyph_t &glyph = fnt->get_glyph( c );
-		const uint8 *p = glyph.bitmap;
+		//todo: what are we supposed to do with it? seems to be the upper border of valid glyph data
+		//const uint8 glyph_yoffset = std::min(fnt->get_glyph_yoffset(c), (uint8)y_offset);
+		// do the display
 
-		int screen_pos = ( y + glyph.top ) * disp_width + x + glyph.left;
-
-		// glyph x clipping
-		int g_left  = max( cL - x - glyph.left, 0 );
-		int g_right = min( cR - x - glyph.left, glyph.width );
-
-		// all visible rows
-		for(  int h = 0; h < glyph.height; h++  ) {
-			const int line = y + glyph.top + h;
-			if(  line >= cT && line < cB  ) {
-
-				PIXVAL *dst = textur + screen_pos + g_left;
-
-				// all columns
-				for(  int gx = g_left; gx < g_right; gx++  ) {
-					int alpha = p[h * glyph.width + gx];
-
-					if(  alpha > 31  ) {
-						// opaque
-						*dst++ = color;
-					}
-					else {
-						// partially transparent -> blend it
-						PIXVAL old_color = *dst;
-						*dst++ = colors_blend_alpha32( old_color, color, alpha );
-					}
-				}
+		{
+			const font_t::glyph_t &glyph = fnt->get_glyph( c );
+			scr_coord_val tx = 0;
+			scr_coord_val sx = x + glyph.left;
+			scr_coord_val w = glyph.width;
+			scr_coord_val rw = w;
+			if(  sx < cL  ) {
+				tx += cL - sx;
+				w -= cL - sx;
+				sx += cL - sx;
 			}
-			screen_pos += disp_width;
+			if(  sx + w > cR  ) {
+				w = cR - sx;
+			}
+			scr_coord_val ty = 0;
+			scr_coord_val sy = y + glyph.top;
+			scr_coord_val h = glyph.height;
+			scr_coord_val rh = h;
+
+			if(  sy < cT  ) {
+				ty += cT - sy;
+				h -= cT - sy;
+				sy += cT - sy;
+			}
+			if(  sy + h > cB  ) {
+				h = cB - sy;
+			}
+
+			if(  w > 0 && h > 0  ) {
+				GLfloat glx = 0, gly = 0, glw = 0, glh = 0;
+				GLuint texname = getGlyphTex( c, fnt,
+				                              glx, gly,
+				                              glw, glh );
+
+				glBindTexture( GL_TEXTURE_2D, texname );
+				glColor3f( ( color & 0xf800 ) / float( 0x10000 ),
+				           ( color & 0x07e0 ) / float( 0x00800 ),
+				           ( color & 0x001f ) / float( 0x00020 ) );
+				glEnable( GL_BLEND );
+				glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+				glBegin( GL_QUADS );
+				glTexCoord2f( glx + tx / float( rw ) * glw,
+				              gly + ty / float( rh ) * glh );
+				glVertex2i( sx,         sy );
+				glTexCoord2f( glx + ( tx + w ) / float( rw ) * glw,
+				              gly + ty / float( rh ) * glh );
+				glVertex2i( sx + w,     sy );
+				glTexCoord2f( glx + ( tx + w ) / float( rw ) * glw,
+				              gly + ( ty + h ) / float( rh ) * glh );
+				glVertex2i( sx + w,     sy + h );
+				glTexCoord2f( glx + tx / float( rw ) * glw,
+				              gly + ( ty + h ) / float( rh ) * glh );
+				glVertex2i( sx,         sy + h );
+				glEnd();
+			}
 		}
 
 		x += fnt->get_glyph_advance( c );
-	}
 
-	if(  dirty  ) {
-		// here, because only now we know the length also for ALIGN_LEFT text
-		mark_rect_dirty_clip( x0, y, x - 1, y + LINESPACE - 1  CLIP_NUM_PAR );
 	}
 
 	// warning: actual len might be longer, due to clipping!
