@@ -1990,26 +1990,23 @@ void display_set_player_color_scheme(const int player, const uint8 col1, const u
 }
 
 
-static GLuint getIndexImgTex(unsigned int image_idx,
-                             const PIXVAL *sp,
-                             GLfloat &tcx, GLfloat &tcy, GLfloat &tcw, GLfloat &tch)
+static void createIndexImgTex(unsigned int image_idx)
 {
 	struct imd &image = images[image_idx];
 	scr_coord_val w = image.base_w;
 	scr_coord_val h = image.base_h;
 
 	if(  h <= 0 || w <= 0  ) {
-		tcx = 0;
-		tcy = 0;
-		tcw = 1;
-		tch = 1;
-		return 0;
+		image.index_x1 = 0;
+		image.index_y1 = 0;
+		image.index_tex_w = 1;
+		image.index_tex_h = 1;
+		image.index_tex = 0;
+		return;
 	}
-	GLuint tex = rgbaatlas.getTexture( image_idx * 16 + 2, tcx, tcy, tcw, tch );
-	if(  tex != 0  ) {
-		return tex;
-	}
+	rgbaatlas.destroyTexture( image_idx * 16 + 2 );
 
+	const PIXVAL * sp = image.base_data;
 	std::vector<PIX32> tmp;
 	tmp.resize( w * h );
 	memset( tmp.data(), 0, w * h * sizeof(PIX32) );
@@ -2046,8 +2043,10 @@ static GLuint getIndexImgTex(unsigned int image_idx,
 	}
 
 	unsigned int tex_x, tex_y;
-	tex = rgbaatlas.createTexture( image_idx * 16 + 2,
-	                               w, h, tex_x, tex_y, tcx, tcy, tcw, tch );
+	GLuint tex = rgbaatlas.createTexture( image_idx * 16 + 2,
+	                                      w, h, tex_x, tex_y,
+	                                      image.index_x1, image.index_y1,
+	                                      image.index_tex_w, image.index_tex_h );
 
 	glBindTexture( GL_TEXTURE_2D, tex );
 
@@ -2063,29 +2062,42 @@ static GLuint getIndexImgTex(unsigned int image_idx,
 	                 GL_RGBA, GL_UNSIGNED_BYTE,
 	                 tmp.data() );
 
-	return tex;
+	image.index_tex = tex;
 }
 
-static GLuint getBaseImgTex(unsigned int image_idx,
-                            const PIXVAL *sp,
+static GLuint getIndexImgTex(unsigned int image_idx,
                             GLfloat &tcx, GLfloat &tcy, GLfloat &tcw, GLfloat &tch)
+{
+	struct imd &image = images[image_idx];
+
+	if(  image.index_tex == 0  ) {
+		createIndexImgTex( image_idx );
+	}
+
+	tcx = image.index_x1;
+	tcy = image.index_y1;
+	tcw = image.index_tex_w;
+	tch = image.index_tex_h;
+	return image.index_tex;
+}
+
+
+static void createBaseImgTex(unsigned int image_idx)
 {
 	struct imd &image = images[image_idx];
 	scr_coord_val w = image.base_w;
 	scr_coord_val h = image.base_h;
 	if(  h <= 0 || w <= 0  ) {
-		tcx = 0;
-		tcy = 0;
-		tcw = 1;
-		tch = 1;
-		return 0;
+		image.base_x1 = 0;
+		image.base_y1 = 0;
+		image.base_tex_w = 1;
+		image.base_tex_h = 1;
+		image.base_tex = 0;
+		return;
 	}
+	rgbaatlas.destroyTexture( image_idx * 16 + 1 );
 
-	GLuint tex = rgbaatlas.getTexture( image_idx * 16 + 1, tcx, tcy, tcw, tch );
-	if(  tex != 0  ) {
-		return tex;
-	}
-
+	const PIXVAL * sp = images[image_idx].base_data;
 	std::vector<PIX32> tmp;
 	tmp.resize( w * h );
 	memset( tmp.data(), 0, w * h * sizeof(PIX32) );
@@ -2123,8 +2135,10 @@ static GLuint getBaseImgTex(unsigned int image_idx,
 	}
 
 	unsigned int tex_x, tex_y;
-	tex = rgbaatlas.createTexture( image_idx * 16 + 1,
-	                               w, h, tex_x, tex_y, tcx, tcy, tcw, tch );
+	GLuint tex = rgbaatlas.createTexture( image_idx * 16 + 1,
+	                                      w, h, tex_x, tex_y,
+	                                      image.base_x1, image.base_y1,
+	                                      image.base_tex_w, image.base_tex_h );
 
 	glBindTexture( GL_TEXTURE_2D, tex );
 
@@ -2140,7 +2154,24 @@ static GLuint getBaseImgTex(unsigned int image_idx,
 	                 GL_RGBA, GL_UNSIGNED_BYTE,
 	                 tmp.data() );
 
-	return tex;
+	image.base_tex = tex;
+}
+
+
+static GLuint getBaseImgTex(unsigned int image_idx,
+                            GLfloat &tcx, GLfloat &tcy, GLfloat &tcw, GLfloat &tch)
+{
+	struct imd &image = images[image_idx];
+
+	if(  image.base_tex == 0  ) {
+		createBaseImgTex( image_idx );
+	}
+
+	tcx = image.base_x1;
+	tcy = image.base_y1;
+	tcw = image.base_tex_w;
+	tch = image.base_tex_h;
+	return image.base_tex;
 }
 
 
@@ -2494,13 +2525,11 @@ void display_img_aux(const image_id n, scr_coord_val xp, scr_coord_val yp, const
 		// only use player images if needed
 		const sint8 use_player = player_nr_raw;
 		// need to go to nightmode and or re-zoomed?
-		PIXVAL *sp;
 		GLuint tex;
 
 		rezoom_img( n );
-		sp = images[n].base_data;
 		GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-		tex = getIndexImgTex( n, sp, x1, y1, tcw, tch );
+		tex = getIndexImgTex( n, x1, y1, tcw, tch );
 		x2 = x1 + tcw;
 		y2 = y1 + tch;
 
@@ -2716,11 +2745,9 @@ void display_color_img(const image_id n, scr_coord_val xp, scr_coord_val yp, sin
 				// no player
 				activate_player_color( 0, daynight );
 			}
-			// color replacement needs the original data => sp points to non-cached data
-			const PIXVAL *sp = images[n].base_data;
 
 			GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-			GLuint tex = getIndexImgTex( n, sp, x1, y1, tcw, tch );
+			GLuint tex = getIndexImgTex( n, x1, y1, tcw, tch );
 			x2 = x1 + tcw;
 			y2 = y1 + tch;
 			display_img_pc( x, y,
@@ -2764,11 +2791,8 @@ void display_base_img(const image_id n, scr_coord_val xp, scr_coord_val yp, cons
 			activate_player_color( 0, daynight );
 		}
 
-		// color replacement needs the original data => sp points to non-cached data
-		const PIXVAL *sp = images[n].base_data;
-
 		GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-		GLuint tex = getIndexImgTex( n, sp, x1, y1, tcw, tch );
+		GLuint tex = getIndexImgTex( n, x1, y1, tcw, tch );
 		x2 = x1 + tcw;
 		y2 = y1 + tch;
 		display_img_pc( x, y,
@@ -2988,7 +3012,6 @@ void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_va
 	if(  n < images.size()  ) {
 		// need to go to nightmode and or rezoomed?
 		rezoom_img( n );
-		PIXVAL *sp = images[n].base_data;
 
 		// now, since zooming may have change this image
 		float zoom = get_img_zoom( n );
@@ -3002,7 +3025,7 @@ void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_va
 
 		if(  color_index & OUTLINE_FLAG  ) {
 			GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-			GLuint tex = getIndexImgTex( n, sp, x1, y1, tcw, tch );
+			GLuint tex = getIndexImgTex( n, x1, y1, tcw, tch );
 			x2 = x1 + tcw;
 			y2 = y1 + tch;
 			display_img_blend_wc_colour( xp, yp,
@@ -3013,7 +3036,7 @@ void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_va
 		}
 		else {
 			GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-			GLuint tex = getIndexImgTex( n, sp, x1, y1, tcw, tch );
+			GLuint tex = getIndexImgTex( n, x1, y1, tcw, tch );
 			x2 = x1 + tcw;
 			y2 = y1 + tch;
 			display_img_blend_wc( xp, yp,
@@ -3032,9 +3055,6 @@ void display_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const 
 		// need to go to nightmode and or rezoomed?
 		rezoom_img( n );
 		rezoom_img( alpha_n );
-		PIXVAL *sp = images[n].base_data;
-		// alphamap image uses base data as we don't want to recode
-		PIXVAL *alphamap = images[alpha_n].base_data;
 
 		// now, since zooming may have change this image
 		float zoom = get_img_zoom( n );
@@ -3047,10 +3067,10 @@ void display_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const 
 
 		GLfloat tx1 = 0, ty1 = 0, tx2 = 1, ty2 = 1, tw = 1, th = 1;
 		GLfloat ax1 = 0, ay1 = 0, ax2 = 1, ay2 = 1, aw = 1, ah = 1;
-		GLuint tex = getIndexImgTex( n, sp, tx1, ty1, tw, th );
+		GLuint tex = getIndexImgTex( n, tx1, ty1, tw, th );
 		tx2 = tx1 + tw;
 		ty2 = ty1 + th;
-		GLuint alphatex = getBaseImgTex( alpha_n, alphamap, ax1, ay1, aw, ah );
+		GLuint alphatex = getBaseImgTex( alpha_n,  ax1, ay1, aw, ah );
 		ax2 = ax1 + aw;
 		ay2 = ay1 + ah;
 		display_img_alpha_wc( xp, yp,
@@ -3084,8 +3104,6 @@ void display_base_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp
 			return;
 		}
 
-		PIXVAL *sp = images[n].base_data;
-
 		// new block for new variables
 		{
 			const PIXVAL color = color_index & 0xFFFF;
@@ -3104,7 +3122,7 @@ void display_base_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp
 					activate_player_color( 0, daynight );
 				}
 				GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-				tex = getIndexImgTex( n, sp, x1, y1, tcw, tch );
+				tex = getIndexImgTex( n, x1, y1, tcw, tch );
 				x2 = x1 + tcw;
 				y2 = y1 + tch;
 				display_img_blend_wc( x, y,
@@ -3114,7 +3132,7 @@ void display_base_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp
 			}
 			else {
 				GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
-				tex = getIndexImgTex( n, sp, x1, y1, tcw, tch );
+				tex = getIndexImgTex( n, x1, y1, tcw, tch );
 				x2 = x1 + tcw;
 				y2 = y1 + tch;
 				display_img_blend_wc_colour( x, y,
@@ -3146,9 +3164,6 @@ void display_base_img_alpha(const image_id n, const image_id alpha_n, const unsi
 			return;
 		}
 
-		PIXVAL *sp = images[n].base_data;
-		PIXVAL *alphamap = images[alpha_n].base_data;
-
 		// new block for new variables
 		{
 			const PIXVAL color = color_index & 0xFFFF;
@@ -3163,10 +3178,10 @@ void display_base_img_alpha(const image_id n, const image_id alpha_n, const unsi
 			}
 			GLfloat tx1 = 0, ty1 = 0, tx2 = 1, ty2 = 1, tw = 1, th = 1;
 			GLfloat ax1 = 0, ay1 = 0, ax2 = 1, ay2 = 1, aw = 1, ah = 1;
-			GLuint tex = getIndexImgTex( n, sp, tx1, ty1, tw, th );
+			GLuint tex = getIndexImgTex( n, tx1, ty1, tw, th );
 			tx2 = tx1 + tw;
 			ty2 = ty1 + th;
-			GLuint alphatex = getBaseImgTex( n, alphamap, ax1, ay1, aw, ah );
+			GLuint alphatex = getBaseImgTex( n, ax1, ay1, aw, ah );
 			ax2 = ax1 + aw;
 			ay2 = ay1 + ah;
 
