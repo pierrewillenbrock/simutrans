@@ -2016,7 +2016,7 @@ void display_img_aligned(const image_id n, scr_rect area, int align, const bool 
 /**
  * Draw image with vertical clipping (quickly) and horizontal (slowly)
  */
-void display_img_aux(const image_id n, scr_coord_val xp, scr_coord_val yp, const sint8 player_nr_raw, const bool /*daynight*/, const bool dirty  CLIP_NUM_DEF)
+void display_img_aux(const image_id n, scr_coord_val xp, scr_coord_val yp, const sint8 player_nr_raw, const bool /*daynight*/, const bool /*dirty*/  CLIP_NUM_DEF)
 {
 	if(  n < anz_images  ) {
 		// only use player images if needed
@@ -2231,84 +2231,6 @@ void display_img_stretch_blend(const stretch_map_t &imag, scr_rect area, FLAGGED
 
 
 /**
- * Draw Image, replace player color,
- * assumes height is ok and valid data are calculated.
- * color replacement needs the original data => sp points to non-cached data
- */
-static void display_color_img_wc(const PIXVAL* sp, scr_coord_val x, scr_coord_val y, scr_coord_val h  CLIP_NUM_DEF)
-{
-	PIXVAL* tp = textur + y * disp_width;
-
-	do { // line decoder
-		int xpos = x;
-
-		// Display image
-
-		uint16 runlen = *sp++;
-
-		do {
-			// we start with a clear run
-			xpos += ( runlen & ~TRANSPARENT_RUN );
-
-			// now get colored pixels
-			runlen = ( *sp++ ) & ~TRANSPARENT_RUN; // we recode anyway, so no need to do it explicitely
-
-			// something to display?
-			if(  xpos + runlen > CR.clip_rect.x && xpos < CR.clip_rect.xx  ) {
-				const int left = ( xpos >= CR.clip_rect.x ? 0 : CR.clip_rect.x - xpos );
-				const int len = ( CR.clip_rect.xx - xpos > runlen ? runlen : CR.clip_rect.xx - xpos );
-
-				colorpixcopy( tp + xpos + left, sp + left, sp + len );
-			}
-
-			sp += runlen;
-			xpos += runlen;
-		} while(  ( runlen = *sp++ )  );
-
-		tp += disp_width;
-	} while(  --h  );
-}
-
-
-/**
- * Draw Image, replace player color, as above, but uses daytime colors for transparent pixels
- */
-static void display_color_img_wc_daytime(const PIXVAL* sp, scr_coord_val x, scr_coord_val y, scr_coord_val h  CLIP_NUM_DEF)
-{
-	PIXVAL* tp = textur + y * disp_width;
-
-	do { // line decoder
-		int xpos = x;
-
-		// Display image
-
-		uint16 runlen = *sp++;
-
-		do {
-			// we start with a clear run
-			xpos += ( runlen & ~TRANSPARENT_RUN );
-
-			// now get colored pixels
-			runlen = ( *sp++ ) & ~TRANSPARENT_RUN; // we recode anyway, so no need to do it explicitely
-
-			// something to display?
-			if(  xpos + runlen > CR.clip_rect.x && xpos < CR.clip_rect.xx  ) {
-				const int left = ( xpos >= CR.clip_rect.x ? 0 : CR.clip_rect.x - xpos );
-				const int len = ( CR.clip_rect.xx - xpos > runlen ? runlen : CR.clip_rect.xx - xpos );
-
-				colorpixcopydaytime( tp + xpos + left, sp + left, sp + len );
-			}
-
-			sp += runlen;
-			xpos += runlen;
-		} while(  ( runlen = *sp++ )  );
-
-		tp += disp_width;
-	} while(  --h  );
-}
-
-
-/**
  * Draw Image, replaced player color
  */
 void display_color_img(const image_id n, scr_coord_val xp, scr_coord_val yp, sint8 player_nr_raw, const bool daynight, const bool dirty  CLIP_NUM_DEF)
@@ -2440,62 +2362,6 @@ PIXVAL display_blend_colors(PIXVAL background, PIXVAL foreground, int percent_bl
 	return display_blend_colors_alpha32( background, foreground, ( percent_blend * 32 ) / 100 );
 }
 
-
-/* from here code for transparent images */
-typedef void (*blend_proc)(PIXVAL *dest, const PIXVAL *src, const PIXVAL colour, const PIXVAL len);
-
-// templated structures to specialize for the different blend modes: 25/50/75 percent
-struct blend25_t { static inline PIXVAL blend(PIXVAL background, PIXVAL foreground) { return 3 * rgb_shr2(background) + rgb_shr2(foreground); } };
-struct blend50_t { static inline PIXVAL blend(PIXVAL background, PIXVAL foreground) { return rgb_shr1(background) + rgb_shr1(foreground); }     };
-struct blend75_t { static inline PIXVAL blend(PIXVAL background, PIXVAL foreground) { return rgb_shr2(background) + 3 * rgb_shr2(foreground); } };
-
-template<class F> void pix_blend_tpl(PIXVAL *dest, const PIXVAL *src, const PIXVAL , const PIXVAL len)
-{
-	const PIXVAL *const end = dest + len;
-	while(  dest < end  ) {
-		*dest = F::blend( *dest, *src );
-		dest++;
-		src++;
-	}
-}
-
-// the following 6 functions are for display_base_img_blend()
-template<class F> void pix_blend_recode_tpl(PIXVAL *dest, const PIXVAL *src, const PIXVAL , const PIXVAL len)
-{
-	const PIXVAL *const end = dest + len;
-	while(  dest < end  ) {
-		*dest = F::blend( *dest, rgbmap_current[*src] );
-		dest++;
-		src++;
-	}
-}
-
-template<class F> void pix_outline_tpl(PIXVAL *dest, const PIXVAL *, const PIXVAL colour, const PIXVAL len)
-{
-	const PIXVAL *const end = dest + len;
-	while(  dest < end  ) {
-		*dest = F::blend( *dest, colour );
-		dest++;
-	}
-}
-
-// save them for easier access
-static blend_proc blend[3] = {
-	pix_blend_tpl<blend25_t>,
-	pix_blend_tpl<blend50_t>,
-	pix_blend_tpl<blend75_t> };
-
-static blend_proc blend_recode[3] = {
-	pix_blend_recode_tpl<blend25_t>,
-	pix_blend_recode_tpl<blend50_t>,
-	pix_blend_recode_tpl<blend75_t>};
-
-static blend_proc outline[3] = {
-	pix_outline_tpl<blend25_t>,
-	pix_outline_tpl<blend50_t>,
-	pix_outline_tpl<blend75_t>};
-
-
 /**
  * Blends a rectangular region with a color
  */
@@ -2583,73 +2449,6 @@ static void display_img_blend_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 
 /* from here code for transparent images */
 
-static PIXVAL get_alpha_mask(const unsigned alpha_flags)
-{
-	PIXVAL mask = alpha_flags & ALPHA_RED ? 0x7c00 : 0;
-	if(  alpha_flags & ALPHA_GREEN  ) {
-		mask |= 0x03e0;
-	}
-	if(  alpha_flags & ALPHA_BLUE  ) {
-		mask |= 0x001f;
-	}
-	return mask;
-}
-
-
-typedef void (*alpha_proc)(PIXVAL *dest, const PIXVAL *src, const PIXVAL *alphamap, const PIXVAL alpha_mask, const PIXVAL colour, const PIXVAL len);
-
-static void alpha(PIXVAL *dest, const PIXVAL *src, const PIXVAL *alphamap, const PIXVAL alpha_mask, const PIXVAL , const PIXVAL len)
-{
-	const PIXVAL *const end = dest + len;
-
-	while(  dest < end  ) {
-		// read mask components - always 15bpp
-		uint16 masked = *alphamap & alpha_mask;
-		uint16 alpha_value = ( masked & 0x1f ) + ( ( masked >> 5 ) & 0x1f ) + ( ( masked >> 10 ) & 0x1f );
-
-		if(  alpha_value > 30  ) {
-			// opaque, just copy source
-			*dest = *src;
-		}
-		else if(  alpha_value > 0  ) {
-			alpha_value = alpha_value > 15 ? alpha_value + 1 : alpha_value;
-
-			*dest = colors_blend_alpha32( *dest, *src, alpha_value );
-		}
-
-		dest++;
-		src++;
-		alphamap++;
-	}
-}
-
-
-static void alpha_recode(PIXVAL *dest, const PIXVAL *src, const PIXVAL *alphamap, const PIXVAL alpha_mask, const PIXVAL , const PIXVAL len)
-{
-	const PIXVAL *const end = dest + len;
-
-	while(  dest < end  ) {
-		// read mask components - always 15bpp
-		uint16 masked = *alphamap & alpha_mask;
-		uint16 alpha_value = ( masked & 0x1f ) + ( ( masked >> 5 ) & 0x1f ) + ( ( masked >> 10 ) & 0x1f );
-
-		if(  alpha_value > 30  ) {
-			// opaque, just copy source
-			*dest = rgbmap_current[*src];
-		}
-		else if(  alpha_value > 0  ) {
-			alpha_value = alpha_value > 15 ? alpha_value + 1 : alpha_value;
-
-			*dest = colors_blend_alpha32( *dest, rgbmap_current[*src], alpha_value );
-		}
-
-		dest++;
-		src++;
-		alphamap++;
-	}
-}
-
-
 static void display_img_alpha_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, GLuint tex, GLuint alphatex, const uint8 alpha_flags, PIXVAL  CLIP_NUM_DEF )
 {
 	//more exact: r/g/b channel from alphatex is selected by alpha_flags
@@ -2706,7 +2505,7 @@ static void display_img_alpha_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 /**
  * draws the transparent outline of an image
  */
-void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp, const signed char /*player_nr*/, const FLAGGED_PIXVAL color_index, const bool /*daynight*/, const bool dirty  CLIP_NUM_DEF)
+void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp, const signed char /*player_nr*/, const FLAGGED_PIXVAL color_index, const bool /*daynight*/, const bool /*dirty*/  CLIP_NUM_DEF)
 {
 	if(  n < anz_images  ) {
 		// need to go to nightmode and or rezoomed?
@@ -2740,7 +2539,7 @@ void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_va
 }
 
 
-void display_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const unsigned alpha_flags, scr_coord_val xp, scr_coord_val yp, const sint8 /*player_nr*/, const FLAGGED_PIXVAL color_index, const bool /*daynight*/, const bool dirty  CLIP_NUM_DEF)
+void display_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const unsigned alpha_flags, scr_coord_val xp, scr_coord_val yp, const sint8 /*player_nr*/, const FLAGGED_PIXVAL color_index, const bool /*daynight*/, const bool /*dirty*/  CLIP_NUM_DEF)
 {
 	if(  n < anz_images && alpha_n < anz_images  ) {
 		// need to go to nightmode and or rezoomed?
@@ -2919,7 +2718,7 @@ static void display_pixel(scr_coord_val x, scr_coord_val y, PIXVAL color)
 /**
  * Draw filled rectangle
  */
-static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL colval, bool dirty, scr_coord_val cL, scr_coord_val cR, scr_coord_val cT, scr_coord_val cB)
+static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL colval, bool /*dirty*/, scr_coord_val cL, scr_coord_val cR, scr_coord_val cT, scr_coord_val cB)
 {
 	if(  clip_lr( &xp, &w, cL, cR ) && clip_lr( &yp, &h, cT, cB )  ) {
 		glColor3f( ( colval & 0xf800 ) / float( 0x10000 ),
@@ -2961,7 +2760,7 @@ void display_filled_roundbox_clip(scr_coord_val xp, scr_coord_val yp, scr_coord_
 /**
  * Draw vertical line
  */
-static void display_vl_internal(const scr_coord_val xp, scr_coord_val yp, scr_coord_val h, const PIXVAL colval, int dirty, scr_coord_val cL, scr_coord_val cR, scr_coord_val cT, scr_coord_val cB)
+static void display_vl_internal(const scr_coord_val xp, scr_coord_val yp, scr_coord_val h, const PIXVAL colval, int /*dirty*/, scr_coord_val cL, scr_coord_val cR, scr_coord_val cT, scr_coord_val cB)
 {
 	if(  xp >= cL && xp < cR && clip_lr( &yp, &h, cT, cB )  ) {
 		glColor3f( ( colval & 0xf800 ) / float( 0x10000 ),
@@ -3216,7 +3015,7 @@ void display_calc_proportional_multiline_string_len_width(int &xw, int &yh, cons
  * len parameter added - use -1 for previous behaviour.
  * completely renovated for unicode and 10 bit width and variable height
  */
-scr_coord_val display_text_proportional_len_clip_rgb(scr_coord_val x, scr_coord_val y, const char* txt, control_alignment_t flags, const PIXVAL color, bool dirty, sint32 len  CLIP_NUM_DEF)
+scr_coord_val display_text_proportional_len_clip_rgb(scr_coord_val x, scr_coord_val y, const char* txt, control_alignment_t flags, const PIXVAL color, bool /*dirty*/, sint32 len  CLIP_NUM_DEF)
 {
 	scr_coord_val cL, cR, cT, cB;
 
