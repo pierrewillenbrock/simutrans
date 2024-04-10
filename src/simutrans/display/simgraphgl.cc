@@ -2779,8 +2779,6 @@ static void simgraphgl_draw_base_img_alpha(const image_id n, const image_id alph
 // scrolls horizontally, will ignore clipping etc.
 static void simgraphgl_move_scroll_band(scr_coord_val start_y, scr_coord_val x_offset, scr_coord_val h)
 {
-	glReadBuffer( GL_BACK );
-	glDrawBuffer( GL_BACK );
 	glDisable( GL_TEXTURE_2D );
 	glDisable( GL_BLEND );
 	if(  x_offset > 0  ) {
