@@ -107,6 +107,8 @@ static Uint8 blank_cursor[] = {
 
 static SDL_Window *window;
 static SDL_GLContext glcontext;
+static GLuint fb_color_tex, fb_depth_rb;
+static GLuint framebuffer;
 
 static int width = 16;
 static int height = 16;
@@ -494,6 +496,31 @@ int dr_os_open(const scr_size window_size, sint16 fs)
 		return 0;
 	}
 
+
+        //RGBA8 2D texture, 24 bit depth texture, 256x256
+        glGenTextures(1, &fb_color_tex);
+        glGenFramebuffers(1, &framebuffer);
+        glGenRenderbuffers(1, &fb_depth_rb);
+
+        glBindTexture(GL_TEXTURE_2D, fb_color_tex);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, window_size.w, window_size.h, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
+        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fb_color_tex, 0);
+        glBindRenderbuffer(GL_RENDERBUFFER, fb_depth_rb);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, window_size.w, window_size.h);
+        glFramebufferRenderbufferEXT(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, fb_depth_rb);
+        //-------------------------
+        //Does the GPU support current FBO configuration?
+        GLenum status;
+        status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        switch(status)
+        {
+            case GL_FRAMEBUFFER_COMPLETE:
+            break;
+        default:
+		dbg->fatal( "dr_os_open()", "could not create framebuffer object" );
+        }
+
 	display_set_actual_width( window_size.w );
 	display_set_height( window_size.h );
 	return window_size.w;
@@ -503,6 +530,13 @@ int dr_os_open(const scr_size window_size, sint16 fs)
 // shut down SDL
 void dr_os_close()
 {
+        //Delete resources
+        glDeleteTextures(1, &fb_color_tex);
+        glDeleteRenderbuffers(1, &fb_depth_rb);
+        //Bind 0, which means render to back buffer, as a result, fb is unbound
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteFramebuffers(1, &framebuffer);
+
 	SDL_FreeCursor( blank );
 	SDL_FreeCursor( hourglass );
 	SDL_GL_DeleteContext( glcontext );
@@ -523,10 +557,6 @@ static void setupGL()
 	glMatrixMode(GL_PROJECTION);
 	glLoadTransposeMatrixd(mat);
 
-	//this is needed (at least on mesa/i965) to get the first frame into
-	//the back buffer
-	glDrawBuffer(GL_FRONT);
-	glDrawBuffer(GL_BACK);
 	glClear(GL_COLOR_BUFFER_BIT);
 
 	glFlush();
@@ -549,7 +579,27 @@ int dr_textur_resize(unsigned short** const textur, int tex_w, int const tex_h)
 		*textur = dr_textur_init();
 	}
 	setupGL();
-	return width;
+
+        glBindTexture(GL_TEXTURE_2D, fb_color_tex);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, tex_w, tex_h, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
+        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fb_color_tex, 0);
+        glBindRenderbuffer(GL_RENDERBUFFER, fb_depth_rb);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, tex_w, tex_h);
+        glFramebufferRenderbufferEXT(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, fb_depth_rb);
+        //-------------------------
+        //Does the GPU support current FBO configuration?
+        GLenum status;
+        status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        switch(status)
+        {
+            case GL_FRAMEBUFFER_COMPLETE:
+            break;
+        default:
+		dbg->fatal( "dr_os_open()", "could not create framebuffer object" );
+        }
+
+        return width;
 }
 
 
@@ -584,15 +634,16 @@ void dr_flush()
 {
 	display_flush_buffer();
 
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 	glDisable(GL_TEXTURE_2D);
 	glDisable(GL_BLEND);
-	glReadBuffer(GL_BACK);
-	glDrawBuffer(GL_FRONT);
 	glRasterPos2i(0,height);
 	glCopyPixels(0,0,width,height,GL_COLOR);
-	glDrawBuffer(GL_BACK);
+        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 	glFlush();
 	glFinish();
+	SDL_GL_SwapWindow(window);
 }
 
 
