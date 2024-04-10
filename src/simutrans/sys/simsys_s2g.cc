@@ -107,6 +107,10 @@ static Uint8 blank_cursor[] = {
 
 static SDL_Window *window;
 static SDL_GLContext glcontext;
+static GLuint fb_color_tex, fb_depth_rb;
+static GLuint framebuffer;
+static GLuint sdl_draw_framebuffer;
+static GLuint sdl_read_framebuffer;
 
 static int width = 16;
 static int height = 16;
@@ -494,6 +498,9 @@ int dr_os_open(const scr_size window_size, sint16 fs)
 	SDL_SetHint( SDL_HINT_TOUCH_MOUSE_EVENTS, "0" ); // no mouse emulation for touch
 #endif
 
+	glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, (GLint*)&sdl_draw_framebuffer);
+	glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, (GLint*)&sdl_read_framebuffer);
+
 	glEnable( GL_TEXTURE_2D );
 
 	check_for_extensions();
@@ -509,6 +516,30 @@ int dr_os_open(const scr_size window_size, sint16 fs)
 		return 0;
 	}
 
+
+	//RGBA8 2D texture, 24 bit depth texture, 256x256
+	glGenTextures( 1, &fb_color_tex );
+	glGenFramebuffers( 1, &framebuffer );
+	glGenRenderbuffers( 1, &fb_depth_rb );
+
+	glBindTexture( GL_TEXTURE_2D, fb_color_tex );
+	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA8, tex_w, tex_h, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL );
+	glBindFramebuffer( GL_FRAMEBUFFER, framebuffer );
+	glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fb_color_tex, 0 );
+	glBindRenderbuffer( GL_RENDERBUFFER, fb_depth_rb );
+	glRenderbufferStorage( GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, tex_w, tex_h );
+	glFramebufferRenderbufferEXT( GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, fb_depth_rb );
+	//-------------------------
+	//Does the GPU support current FBO configuration?
+	GLenum status;
+	status = glCheckFramebufferStatus( GL_FRAMEBUFFER );
+	switch(  status  ) {
+	case GL_FRAMEBUFFER_COMPLETE:
+		break;
+	default:
+		dbg->fatal( "dr_os_open()", "could not create framebuffer object" );
+	}
+
 	gfx->set_screen_actual_width( tex_w );
 	gfx->set_screen_height( tex_h );
 	return tex_w;
@@ -518,6 +549,13 @@ int dr_os_open(const scr_size window_size, sint16 fs)
 // shut down SDL
 void dr_os_close()
 {
+	//Delete resources
+	glDeleteTextures( 1, &fb_color_tex );
+	glDeleteRenderbuffers( 1, &fb_depth_rb );
+	//Bind 0, which means render to back buffer, as a result, fb is unbound
+	glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+	glDeleteFramebuffers( 1, &framebuffer );
+
 	SDL_FreeCursor( blank );
 	SDL_FreeCursor( hourglass );
 	SDL_GL_DeleteContext( glcontext );
@@ -535,10 +573,6 @@ static void setupGL()
 	glMatrixMode( GL_PROJECTION );
 	glLoadMatrixf( gl_MVP_mat );
 
-	//this is needed (at least on mesa/i965) to get the first frame into
-	//the back buffer
-	glDrawBuffer( GL_FRONT );
-	glDrawBuffer( GL_BACK );
 	glClear( GL_COLOR_BUFFER_BIT );
 
 	glFlush();
@@ -559,6 +593,24 @@ int dr_textur_resize(unsigned short** const textur, int _tex_w, int const _tex_h
 	height = TEX_TO_SCREEN_Y( tex_h );
 	gfx->set_screen_actual_width( tex_w );
 	gfx->set_screen_height( tex_h );
+
+	glBindTexture( GL_TEXTURE_2D, fb_color_tex );
+	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA8, tex_w, tex_h, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL );
+	glBindFramebuffer( GL_FRAMEBUFFER, framebuffer );
+	glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fb_color_tex, 0 );
+	glBindRenderbuffer( GL_RENDERBUFFER, fb_depth_rb );
+	glRenderbufferStorage( GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, tex_w, tex_h );
+	glFramebufferRenderbufferEXT( GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, fb_depth_rb );
+	//-------------------------
+	//Does the GPU support current FBO configuration?
+	GLenum status;
+	status = glCheckFramebufferStatus( GL_FRAMEBUFFER );
+	switch(  status  ) {
+	case GL_FRAMEBUFFER_COMPLETE:
+		break;
+	default:
+		dbg->fatal( "dr_os_open()", "could not create framebuffer object" );
+	}
 
 	setupGL();
 
@@ -600,17 +652,21 @@ void dr_flush()
 	gfx->flush_framebuffer();
 
 	glViewport( 0, 0, width, height );
-	glDisable(GL_TEXTURE_2D);
-	glDisable(GL_BLEND);
-	glReadBuffer(GL_BACK);
-	glDrawBuffer(GL_FRONT);
-	glRasterPos2i(0,height);
-	glCopyPixels(0,0,width,height,GL_COLOR);
-	glDrawBuffer(GL_BACK);
+	glBindFramebuffer( GL_READ_FRAMEBUFFER, framebuffer );
+	glBindFramebuffer( GL_DRAW_FRAMEBUFFER, sdl_draw_framebuffer );
+	glDisable( GL_TEXTURE_2D );
+	glDisable( GL_BLEND );
+	glRasterPos2i( 0, height );
+	glCopyPixels( 0, 0, width, height, GL_COLOR );
+	glBindFramebuffer( GL_FRAMEBUFFER, framebuffer );
 	glViewport( 0, 0, tex_w, tex_h );
 
 	glFlush();
 	glFinish();
+	glBindFramebuffer( GL_DRAW_FRAMEBUFFER, sdl_draw_framebuffer );
+	glBindFramebuffer( GL_READ_FRAMEBUFFER, sdl_read_framebuffer );
+	SDL_GL_SwapWindow( window );
+	glBindFramebuffer( GL_FRAMEBUFFER, framebuffer );
 }
 
 
