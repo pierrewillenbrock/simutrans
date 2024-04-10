@@ -9,6 +9,7 @@
 #include <math.h>
 
 #include <map>
+#include <unordered_map>
 #include <vector>
 
 #include "../simtypes.h"
@@ -57,13 +58,8 @@ extern const sint32 zoom_den[MAX_ZOOM_FACTOR + 1] = { 1, 2, 3, 1, 4, 8, 2, 8, 4,
 #endif
 
 #ifdef MULTI_THREAD
-#include "../utils/simthread.h"
-
-// currently just redrawing/rezooming
-static pthread_mutex_t recode_img_mutex;
 #error simgraphgl does not support MULTI_THREAD drawing
 #endif
-
 // to pass the extra clipnum when not needed use this
 #ifdef MULTI_THREAD
 #define CLIPNUM_IGNORE , 0
@@ -238,19 +234,21 @@ inline PIXVAL rgb_shr2(PIXVAL c) { return (c >> 2) & TWO_OUT; }
  * see also descriptor/writer/image_writer.cc: pixrgb_to_pixval() for the generator
  */
 static PIXVAL rgbmap_day_night[RGBMAPSIZE];
+static GLuint rgbmap_day_night_tex;
 
 
 /*
  * same as rgbmap_day_night, but always daytime colors
  */
 static PIXVAL rgbmap_all_day[RGBMAPSIZE];
-
+static GLuint rgbmap_all_day_tex;
 
 /*
  * used by pixel copy functions, is one of rgbmap_day_night
  * rgbmap_all_day
  */
 static PIXVAL *rgbmap_current = 0;
+static GLuint rgbmap_current_tex;
 
 
 /*
@@ -276,16 +274,6 @@ static uint8 player_offsets[MAX_PLAYER_COUNT][2];
  * Image map descriptor structure
  */
 struct imd {
-	uint8 recode_flags;
-	uint16 player_flags; // bit # is player number, ==1 cache image needs recoding
-	uint16 plain_tex_flags;
-
-	PIXVAL* data[MAX_PLAYER_COUNT]; // current data - zoomed and recolored (player + daynight)
-
-	PIXVAL* player_data; // current data coded for player1 (since many building belong to him)
-
-	uint32 len; // base image data size (used for allocation purposes only)
-
 	sint16 base_x; // min x offset
 	sint16 base_y; // min y offset
 	sint16 base_w; // width
@@ -294,19 +282,15 @@ struct imd {
 	PIXVAL* base_data; // original image data
 
 	GLuint base_tex;
-	GLuint plain_tex[MAX_PLAYER_COUNT];
+	GLuint index_tex;
 
 	sint32 zoom_num;
 	sint32 zoom_den;
 	float zoom;
+	uint32 flags;
 };
 
-// Flags for recoding
-#define FLAG_HAS_PLAYER_COLOR (1)
-#define FLAG_HAS_TRANSPARENT_COLOR (2)
 #define FLAG_ZOOMABLE (4)
-#define FLAG_REZOOM (8)
-//#define FLAG_POSITION_CHANGED (16)
 
 #define TRANSPARENT_RUN (0x8000u)
 
@@ -331,6 +315,7 @@ static image_id anz_images = 0;
  */
 static image_id alloc_images = 0;
 
+static std::unordered_map<uint64_t, GLuint> rgbmap_cache;
 static std::map<uint64_t,GLuint> arrayCache;
 static std::map<uint32_t,CharInfo> chartex;
 static std::vector<CharPageInfo> charpage;
@@ -436,17 +421,28 @@ signed short current_tile_raster_width = 0;
 
 
 // Pierre : glsl shaders for img_alpha
-static char const img_alpha_fragmentShaderText[] =
-	"uniform sampler2D texColor,texAlpha;\n"
+
+// combined shader
+// note about gl_Color.a: selects between indexed color(0.0),
+// texture color(0.5) and gl_Color.rgb(1.0)
+static char const combined_fragmentShaderText[] =
+	"uniform sampler2D texColor,texAlpha,texRGBMap;\n"
 	"uniform vec4 alphaMask;\n"
 	"void main () {\n"
 	"   vec4 alpha = texture2D(texAlpha,gl_TexCoord[0].st);\n"
-	"   gl_FragColor = texture2D(texColor,gl_TexCoord[0].st);\n"
-	"   gl_FragColor.a = clamp((alpha.r * alphaMask.r) +\n"
-	"                          (alpha.g * alphaMask.g) +\n"
-	"                          (alpha.b * alphaMask.b), 0.0, 1.0);\n"
+	"   vec4 index = texture2D(texColor,gl_TexCoord[0].st);\n"
+	"   vec3 indexedrgb = texture2D(texRGBMap,index.st).rgb;\n"
+	"   vec3 rgb = indexedrgb;\n"
+	"   rgb = mix(rgb,gl_Color.rgb,gl_Color.a);\n" //handle gl_Color.a = 0 and 1
+	"   rgb = mix(index.rgb,rgb,abs(2.0*gl_Color.a-1.0));\n" //handle gl_Color.a = 0.5
+	"   gl_FragColor.rgb = rgb;\n"
+	"   gl_FragColor.a = clamp(alpha.r * alphaMask.r +\n"
+	"                          alpha.g * alphaMask.g +\n"
+	"                          alpha.b * alphaMask.b +\n"
+	"                          index.a * alphaMask.a, 0.0, 1.0);\n"
 	"}\n";
 
+//vertex shader
 static char const vertexShaderText[] =
 	"void main () {\n"
 	"   gl_Position = ftransform();\n"
@@ -454,10 +450,11 @@ static char const vertexShaderText[] =
 	"   gl_FrontColor = gl_Color;\n"
 	"}\n";
 
-static GLuint img_alpha_program;
-static GLuint img_alpha_alphaMask_Location;
-static GLuint img_alpha_texColor_Location;
-static GLuint img_alpha_texAlpha_Location;
+static GLuint combined_program;
+static GLuint combined_texColor_Location;
+static GLuint combined_texRGBMap_Location;
+static GLuint combined_texAlpha_Location;
+static GLuint combined_alphaMask_Location;
 
 static inline rgb888_t pixval_to_rgb888(PIXVAL colour)
 {
@@ -979,19 +976,6 @@ void display_mark_img_dirty(image_id image, scr_coord_val xp, scr_coord_val yp)
  * They are derived from a base image, which may need zooming too
  */
 
-/**
- * Flag all images for rezoom on next draw
- */
-static void rezoom()
-{
-	for(  image_id n = 0; n < anz_images; n++  ) {
-		if(  ( images[n].recode_flags & FLAG_ZOOMABLE ) != 0 && images[n].base_h > 0  ) {
-			images[n].recode_flags |= FLAG_REZOOM;
-		}
-	}
-}
-
-
 void set_zoom_factor(int z)
 {
 	// do not zoom beyond 4 pixels
@@ -999,7 +983,6 @@ void set_zoom_factor(int z)
 		zoom_factor = z;
 		tile_raster_width = ( base_tile_raster_width * zoom_num[zoom_factor] ) / zoom_den[zoom_factor];
 		dbg->message( "set_zoom_factor()", "Zoom level now %d (%i/%i)", zoom_factor, zoom_num[zoom_factor], zoom_den[zoom_factor] );
-		rezoom();
 	}
 }
 
@@ -1024,10 +1007,97 @@ int zoom_factor_down()
 	return false;
 }
 
+static void updateRGBMap(GLuint &tex, PIXVAL *rgbmap, uint64_t code)
+{
+	if(  rgbmap_cache[code] != 0  ) {
+		tex = rgbmap_cache[code];
+		return;
+	}
+	glGenTextures( 1, &tex );
+
+	scr_coord_val w = 256;
+	scr_coord_val h = 256;
+
+	glBindTexture( GL_TEXTURE_2D, tex );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+
+	//now upload the array
+	glPixelStorei( GL_UNPACK_ROW_LENGTH, w );
+	glPixelStorei( GL_UNPACK_ALIGNMENT, 4 );
+	glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
+	glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
+
+	struct PIX32 {
+		uint8_t R;
+		uint8_t G;
+		uint8_t B;
+		uint8_t A;
+	};
+
+	PIX32 *tmp = (PIX32 *)malloc( w * h * sizeof(PIX32) );
+	memset( tmp, 0, 256 * 256 * sizeof(PIX32) );
+
+	/* the reference for these conversions must be
+	 * descriptor/writer/image_writer.cc: pixrgb_to_pixval() */
+	PIX32 *dst = tmp;
+	PIXVAL *src = rgbmap;
+	/* the rgbmap is converted straight to opaque colors */
+	for(  unsigned i = 0; i < RGBMAPSIZE; i++  ) {
+		PIXVAL col = *src++;
+		dst->R = ( ( ( col & 0xf800 ) * 0x21 ) >> 13 ) & 0xff;
+		dst->G = ( ( ( col & 0x07e0 ) * 0x41 ) >> 9 ) & 0xff;
+		dst->B = ( ( ( col & 0x001f ) * 0x21 ) >> 2 ) & 0xff;
+		dst->A = 0xff;
+		dst++;
+	}
+	/* todo: transparent color handling should be moved to the callers.(still?) */
+	/* transparent special colors */
+	src = rgbmap + 0x8000;
+	dst = tmp + 0x8020;
+	for(  unsigned i = 0; i < SPECIAL; i++  ) {
+		PIXVAL col = *src++;
+		for(  unsigned a = 0; a < 31; a++  ) {
+			dst->R = ( ( ( col & 0xf800 ) * 0x21 ) >> 13 ) & 0xff;
+			dst->G = ( ( ( col & 0x07e0 ) * 0x41 ) >> 9 ) & 0xff;
+			dst->B = ( ( ( col & 0x001f ) * 0x21 ) >> 2 ) & 0xff;
+			dst->A = ( a + 1 ) * 255 / 32;
+			dst++;
+		}
+	}
+	//these probably are not supported in simgraph16.cc, but image_writer.cc: pixrgb_to_pixval() generates them.
+	dst = tmp + 0x8020 + 31 * 31;
+	/* regular transparent colors. mapping by replicating bits. */
+	for(  unsigned i = 0; i < 0x400; i++  ) {
+		//convert from RGB 343 to RGB 555 to index into rgbmap
+		int r = ( ( ( i & 0x380 ) * 0x9 ) << 4 ) & 0x7c00;
+		int g = ( ( ( i & 0x078 ) * 0x11 ) >> 1 ) & 0x03e0;
+		int b = ( ( ( i & 0x007 ) * 0x9 ) >> 1 ) & 0x001f;
+		PIXVAL col = rgbmap[r | g | b];
+		//convert from RGB 555 to RGB 888, add alpha
+		for(  unsigned a = 0; a < 31; a++  ) {
+			dst->R = ( ( ( col & 0xf800 ) * 0x21 ) >> 13 ) & 0xff;
+			dst->G = ( ( ( col & 0x07e0 ) * 0x41 ) >> 9 ) & 0xff;
+			dst->B = ( ( ( col & 0x001f ) * 0x21 ) >> 2 ) & 0xff;
+			dst->A = ( a + 1 ) * 255 / 32;
+			dst++;
+		}
+	}
+
+	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0,
+	              GL_RGBA, GL_UNSIGNED_BYTE,
+	              tmp );
+	free( tmp );
+	rgbmap_cache[code] = tex;
+}
 
 static void activate_player_color(sint8 player_nr, bool daynight)
 {
 	// caches the last settings
+	//specialcolormap_all_day is constant
+	//specialcolormap_day_night depends on light_level, night_shift
 	if(  !daynight  ) {
 		if(  player_day != player_nr  ) {
 			int i;
@@ -1036,8 +1106,14 @@ static void activate_player_color(sint8 player_nr, bool daynight)
 				rgbmap_all_day[0x8000 + i] = specialcolormap_all_day[player_offsets[player_day][0] + i];
 				rgbmap_all_day[0x8008 + i] = specialcolormap_all_day[player_offsets[player_day][1] + i];
 			}
+			updateRGBMap( rgbmap_all_day_tex, rgbmap_all_day,
+			              0x8000000000000000ULL |
+			              player_offsets[player_day][0] |
+			              ( player_offsets[player_day][1] << 8 )
+			            );
 		}
 		rgbmap_current = rgbmap_all_day;
+		rgbmap_current_tex = rgbmap_all_day_tex;
 	}
 	else {
 		// changing color table
@@ -1048,42 +1124,16 @@ static void activate_player_color(sint8 player_nr, bool daynight)
 				rgbmap_day_night[0x8000 + i] = specialcolormap_day_night[player_offsets[player_night][0] + i];
 				rgbmap_day_night[0x8008 + i] = specialcolormap_day_night[player_offsets[player_night][1] + i];
 			}
+			updateRGBMap( rgbmap_day_night_tex, rgbmap_day_night,
+			              0x4000000000000000ULL |
+			              ( ( light_level & 0xffULL ) << 16 ) |
+			              ( ( night_shift & 0xffULL ) << 24 ) |
+			              player_offsets[player_night][0] |
+			              ( player_offsets[player_night][1] << 8 )
+			            );
 		}
 		rgbmap_current = rgbmap_day_night;
-	}
-}
-
-
-/**
- * Flag all images to recode colors on next draw
- */
-static void recode()
-{
-	for(  image_id n = 0; n < anz_images; n++  ) {
-		images[n].player_flags = 0xFFFF;  // recode all player colors
-	}
-}
-
-
-/**
- * Convert a certain image data to actual output data
- */
-static void recode_img_src_target(scr_coord_val h, PIXVAL *src, PIXVAL *target)
-{
-	if(  h > 0  ) {
-		do {
-			uint16 runlen = *target++ = *src++;
-			// decode rows
-			do {
-				// clear run is always ok
-				runlen = *target++ = *src++;
-				while(  runlen--  ) {
-					// now just convert the color pixels
-					*target++ = rgbmap_day_night[*src++];
-				}
-				// next clear run or zero = end
-			} while(  ( runlen = *target++ = *src++ )  );
-		} while(  --h  );
+		rgbmap_current_tex = rgbmap_day_night_tex;
 	}
 }
 
@@ -1093,51 +1143,6 @@ image_id get_image_count()
 	return anz_images;
 }
 
-
-/**
- * Handles the conversion of an image to the output color
- */
-static void recode_img(const image_id n, const sint8 player_nr)
-{
-	// may this image be zoomed
-#ifdef MULTI_THREAD
-	pthread_mutex_lock( &recode_img_mutex );
-	if(  ( images[n].player_flags & ( 1 << player_nr ) ) == 0  ) {
-		// other thread did already the re-code...
-		pthread_mutex_unlock( &recode_img_mutex );
-		return;
-	}
-#endif
-	PIXVAL *src = images[n].base_data;
-
-	if(  images[n].data[player_nr] == NULL  ) {
-		images[n].data[player_nr] = MALLOCN( PIXVAL, images[n].len );
-	}
-	// now do normal recode
-	activate_player_color( player_nr, true );
-	recode_img_src_target( images[n].base_h, src, images[n].data[player_nr] );
-	images[n].player_flags &= ~( 1 << player_nr );
-	images[n].plain_tex_flags |= ( 1 << player_nr );
-#ifdef MULTI_THREAD
-	pthread_mutex_unlock( &recode_img_mutex );
-#endif
-}
-
-
-// for zoom out
-#define SumSubpixel(p)                               \
-	if(  *(p)<255 && valid<255  ) {              \
-		if(  *(p) == 1  ) {                  \
-			valid = 255;                 \
-			r = g = b = 0;               \
-		}                                    \
-		else {                               \
-			valid++;                     \
-		} /* mark special colors */          \
-		r += (p)[1];                         \
-		g += (p)[2];                         \
-		b += (p)[3];                         \
-	}
 
 /**
  * Convert base image data to actual image size
@@ -1150,7 +1155,7 @@ static void rezoom_img(const image_id n)
 	if(  n >= anz_images || images[n].base_h == 0  ) {
 		return;
 	}
-	if(  images[n].recode_flags & FLAG_ZOOMABLE  ) {
+	if(  images[n].flags & FLAG_ZOOMABLE  ) {
 		if(  images[n].zoom_den == zoom_den[zoom_factor] &&
 		                images[n].zoom_num == zoom_num[zoom_factor]  ) {
 			return;
@@ -1192,8 +1197,6 @@ static void rezoom_img(const image_id n)
 		images[n].zoom_num = 1;
 		images[n].zoom = 1.0f;
 	}
-
-	images[n].recode_flags &= ~FLAG_REZOOM;
 }
 
 static float get_img_zoom(image_id n) {
@@ -1236,12 +1239,12 @@ void display_fit_img_to_width(const image_id n, sint16 new_w)
 		for(  int i = 0; i <= MAX_ZOOM_FACTOR; i++  ) {
 			int zoom_w = ( images[n].base_w * zoom_num[i] ) / zoom_den[i];
 			if(  zoom_w <= new_w  ) {
-				uint8 old_zoom_flag = images[n].recode_flags & FLAG_ZOOMABLE;
-				images[n].recode_flags |= FLAG_REZOOM | FLAG_ZOOMABLE;
+				uint8 old_zoom_flag = images[n].flags & FLAG_ZOOMABLE;
+				images[n].flags |= FLAG_ZOOMABLE;
 				zoom_factor = i;
 				rezoom_img( n );
-				images[n].recode_flags &= ~FLAG_ZOOMABLE;
-				images[n].recode_flags |= old_zoom_flag;
+				images[n].flags &= ~FLAG_ZOOMABLE;
+				images[n].flags |= old_zoom_flag;
 				zoom_factor = old_zoom_factor;
 				return;
 			}
@@ -1341,9 +1344,13 @@ static void calc_base_pal_from_night_shift(const int night)
 		PIXVAL color = get_system_color( { (uint8)max( R, 0 ), (uint8)max( G, 0 ), (uint8)max( B, 0 ) } );
 		rgbmap_day_night[0x8000 + MAX_PLAYER_COUNT + i] = color;
 	}
-
-	// convert to RGB xxx
-	recode();
+	updateRGBMap( rgbmap_day_night_tex,  rgbmap_day_night,
+	              0x4000000000000000ULL |
+	              ( ( light_level & 0xffULL ) << 16 ) |
+	              ( ( night_shift & 0xffULL ) << 24 ) |
+	              player_offsets[0][0] |
+	              ( player_offsets[0][1] << 8 )
+	            );
 }
 
 
@@ -1373,189 +1380,32 @@ void display_set_player_color_scheme(const int player, const uint8 col1, const u
 			}
 			// calc_base_pal_from_night_shift resets player_night to 0
 			player_day = player_night;
+			updateRGBMap( rgbmap_all_day_tex, rgbmap_all_day,
+			              0x8000000000000000ULL |
+			              player_offsets[player][0] |
+			              ( player_offsets[player][1] << 8 )
+			            );
 		}
-		recode();
 		mark_screen_dirty();
 	}
 }
 
 
-
-void register_image(image_t *image_in)
-{
-	struct imd *image;
-
-	/* valid image? */
-	if(  image_in->len == 0 || image_in->h == 0  ) {
-		dbg->warning( "register_image", "Warning: ignoring image %lu because of missing data", anz_images );
-		image_in->imageid = IMG_EMPTY;
-		return;
-	}
-
-	if(  anz_images == alloc_images  ) {
-		if(  images == NULL  ) {
-			alloc_images = 510;
-		}
-		else {
-			alloc_images += 512;
-		}
-		if(  anz_images > alloc_images  ) {
-			// overflow
-			dbg->fatal( "register_image", "*** Out of images (more than %li!) ***", anz_images );
-		}
-		images = REALLOC( images, imd, alloc_images );
-	}
-
-	image_in->imageid = anz_images;
-	image = &images[anz_images];
-	anz_images++;
-
-	image->recode_flags = FLAG_REZOOM;
-	if(  image_in->zoomable  ) {
-		image->recode_flags |= FLAG_ZOOMABLE;
-	}
-	image->player_flags = 0xFFFF; // recode all player colors
-
-	// find out if there are really player colors
-	for(  PIXVAL *src = image_in->data, y = 0; y < image_in->h; ++y  ) {
-		uint16 runlen;
-
-		// decode line
-		runlen = *src++;
-		do {
-			// clear run .. nothing to do
-			runlen = *src++;
-			// no this many color pixel
-			while(  runlen--  ) {
-				// get rgb components
-				PIXVAL s = *src++;
-				if(  s >= 0x8000 && s < 0x8010  ) {
-					image->recode_flags |= FLAG_HAS_PLAYER_COLOR;
-					goto has_it;
-				}
-			}
-			runlen = *src++;
-		} while(  runlen != 0  );   // end of row: runlen == 0
-	}
-	has_it:
-
-	for(  uint8 i = 0; i < MAX_PLAYER_COUNT; i++  ) {
-		image->data[i] = NULL;
-		image->plain_tex[i] = 0;
-	}
-
-	image->plain_tex_flags = 0;
-
-	image->len = image_in->len;
-
-	image->base_x = image_in->x;
-	image->base_w = image_in->w;
-	image->base_y = image_in->y;
-	image->base_h = image_in->h;
-
-	// since we do not recode them, we can work with the original data
-	image->base_data = image_in->data;
-
-	image->base_tex = 0;
-
-	image->zoom_num = 1;
-	image->zoom_den = 1;
-	image->zoom = 1.0f;
-}
-
-
-// delete all images above a certain number ...
-// (mostly needed when changing climate zones)
-void display_free_all_images_above(image_id above)
-{
-	while(  above < anz_images  ) {
-		anz_images--;
-		for(  uint8 i = 0; i < MAX_PLAYER_COUNT; i++  ) {
-			if(  images[anz_images].data[i] != NULL  ) {
-				free( images[anz_images].data[i] );
-			}
-		}
-	}
-}
-
-
-// query offsets
-void display_get_image_offset(image_id image, scr_coord_val *xoff, scr_coord_val *yoff, scr_coord_val *xw, scr_coord_val *yw)
-{
-	if(  image < anz_images  ) {
-		float zoom = get_img_zoom( image );
-		*xoff = floor( images[image].base_x * zoom );
-		*yoff = floor( images[image].base_y * zoom );
-		*xw   = ceil( images[image].base_w * zoom );
-		*yw   = ceil( images[image].base_h * zoom );
-	}
-}
-
-
-// query un-zoomed offsets
-void display_get_base_image_offset(image_id image, scr_coord_val *xoff, scr_coord_val *yoff, scr_coord_val *xw, scr_coord_val *yw)
-{
-	if(  image < anz_images  ) {
-		*xoff = images[image].base_x;
-		*yoff = images[image].base_y;
-		*xw   = images[image].base_w;
-		*yw   = images[image].base_h;
-	}
-}
-
-// ------------------ display all kind of images from here on ------------------------------
-
-// forward declaration, implementation is further below
-PIXVAL colors_blend_alpha32(PIXVAL background, PIXVAL foreground, int alpha);
-
-static uint64_t tex_hash(const void *ptr, size_t size)
-{
-	//take max max_samples samples
-	const char *p = (const char*)ptr;
-	unsigned int smps = size / 8;
-	unsigned int off = 8;
-	if(  smps > 5000  ) {
-		off = ( size + 4999 ) / 5000;
-		if(  off & 7  ) {
-			off &= ~7;
-			off += 8;
-		}
-		smps = size / off;
-	}
-	uint64_t h = uint64_t( ptr );
-	while(  smps > 0  ) {
-		h ^= h >> 3;
-		h ^= h << 61;
-		h ^= *(const uint64_t*)p;
-		p += off;
-		smps--;
-	}
-	return h;
-}
-
-
-static GLuint getPlainImgTex(struct imd &image,
-                             const PIXVAL *sp,
-                             unsigned player_nr)
+static GLuint getIndexImgTex(struct imd &image,
+                             const PIXVAL *sp)
 {
 	scr_coord_val w = image.base_w;
 	scr_coord_val h = image.base_h;
 
-	if(  image.plain_tex[player_nr] != 0 &&
-	                !( image.plain_tex_flags & ( 1 << player_nr ) )  ) {
-		return image.plain_tex[player_nr];
+	if(  image.index_tex != 0  ) {
+		return image.index_tex;
 	}
 	if(  h <= 0 || w <= 0  ) {
 		return 0;
 	}
 
 	GLuint ret;
-	if(  image.plain_tex[player_nr] != 0  ) {
-		ret = image.plain_tex[player_nr];
-	}
-	else {
-		glGenTextures( 1, &ret );
-	}
+	glGenTextures( 1, &ret );
 	glBindTexture( GL_TEXTURE_2D, ret );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
@@ -1598,9 +1448,9 @@ static GLuint getPlainImgTex(struct imd &image,
 				 here and map the the correct colors or do
 				 it in or around updateRGBMap() */
 				PIXVAL col = sp[x];
-				p[x + xpos].R = ( ( ( col & 0xf800 ) * 0x21 ) >> 13 ) & 0xff;
-				p[x + xpos].G = ( ( ( col & 0x07e0 ) * 0x41 ) >> 9 ) & 0xff;
-				p[x + xpos].B = ( ( ( col & 0x001f ) * 0x21 ) >> 2 ) & 0xff;
+				p[x + xpos].R = col & 0xff;
+				p[x + xpos].G = col >> 8;
+				p[x + xpos].B = 0;
 				p[x + xpos].A = 0xff;
 			}
 			sp += runlen;
@@ -1614,8 +1464,7 @@ static GLuint getPlainImgTex(struct imd &image,
 	              tmp );
 	free( tmp );
 
-	image.plain_tex[player_nr] = ret;
-	image.plain_tex_flags &= ~( 1 << player_nr );
+	image.index_tex = ret;
 
 	return ret;
 }
@@ -1698,100 +1547,119 @@ static GLuint getBaseImgTex(struct imd &image,
 	return ret;
 }
 
-std::map<uint64_t,GLuint> colorGLuint;
 
-static GLuint getColorImgTex(const struct imd &image,
-                             const PIXVAL *sp)
+void register_image(image_t *image_in)
 {
-	scr_coord_val w = image.base_w;
-	scr_coord_val h = image.base_h;
-	if(  h <= 0 ||  w <= 0  ) {
-		return 0;
+	struct imd *image;
+
+	/* valid image? */
+	if(  image_in->len == 0 || image_in->h == 0  ) {
+		dbg->warning( "register_image", "Warning: ignoring image %lu because of missing data", anz_images );
+		image_in->imageid = IMG_EMPTY;
+		return;
 	}
 
-	//now parse sp for the first time to
-	//1) get the length (in PIXVALs) and
-	//2) get the width
-	const PIXVAL *spp = sp;
-	scr_coord_val y;
-	for(  y = 0; y < h; y++  ) {
-		uint16 runlen;
-		spp++;
-		do {
-			// now get colored pixels
-			runlen = *spp++;
-
-			spp += runlen;
-		} while(  (runlen = *spp++)  );
+	if(  anz_images == alloc_images  ) {
+		if(  images == NULL  ) {
+			alloc_images = 510;
+		}
+		else {
+			alloc_images += 512;
+		}
+		if(  anz_images > alloc_images  ) {
+			// overflow
+			dbg->fatal( "register_image", "*** Out of images (more than %li!) ***", anz_images );
+		}
+		images = REALLOC( images, imd, alloc_images );
 	}
 
-	size_t size = ( spp - sp ) * 2;
+	image_in->imageid = anz_images;
+	image = &images[anz_images];
+	anz_images++;
 
-	uint64_t hash = tex_hash( sp, size ) ^ size;
-	//also hash the current rgbmap
-	hash ^= tex_hash( rgbmap_current, RGBMAPSIZE * 2 );
+	image->base_x = image_in->x;
+	image->base_w = image_in->w;
+	image->base_y = image_in->y;
+	image->base_h = image_in->h;
 
-	auto it = colorGLuint.find( hash );
-	if(  it != colorGLuint.end()  ) {
-		return it->second;
+	// since we do not recode them, we can work with the original data
+	image->base_data = image_in->data;
+
+	image->base_tex = 0;
+	image->index_tex = 0;
+
+	image->zoom_num = 1;
+	image->zoom_den = 1;
+	image->zoom = 1.0f;
+	image->flags = 0;
+	if(  image_in->zoomable  ) {
+		image->flags |= FLAG_ZOOMABLE;
 	}
+}
 
-	GLuint ret;
-	glGenTextures( 1, &ret );
-	glBindTexture( GL_TEXTURE_2D, ret );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
 
-	//now upload the array
-	glPixelStorei( GL_UNPACK_ROW_LENGTH, w );
-	glPixelStorei( GL_UNPACK_ALIGNMENT, 4 );
-	glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
-	glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
-
-	struct PIX32 {
-		uint8_t R;
-		uint8_t G;
-		uint8_t B;
-		uint8_t A;
-	};
-
-	PIX32 *tmp = (PIX32 *)malloc( w * h * 4 );
-	memset( tmp, 0, w * h * 4 );
-	PIX32 *p = tmp;
-	for(  y = 0; y < h; y++  ) {
-		scr_coord_val xpos = 0;
-		uint16 runlen = *sp++;
-		do {
-			// we start with a clear run
-			xpos += runlen;
-
-			// now get colored pixels
-			runlen = *sp++;
-
-			scr_coord_val x;
-			for(  x = 0; x < runlen; x++  ) {
-				PIXVAL col = rgbmap_current[sp[x]];
-				p[x + xpos].R = ( ( ( col & 0xf800 ) * 0x21 ) >> 13 ) & 0xff;
-				p[x + xpos].G = ( ( ( col & 0x07e0 ) * 0x41 ) >> 9 ) & 0xff;
-				p[x + xpos].B = ( ( ( col & 0x001f ) * 0x21 ) >> 2 ) & 0xff;
-				p[x + xpos].A = 0xff;
-			}
-			sp += runlen;
-			xpos += runlen;
-		} while(  ( runlen = *sp++ )  );
-		p += w;
+// delete all images above a certain number ...
+// (mostly needed when changing climate zones)
+void display_free_all_images_above(image_id above)
+{
+	while(  above < anz_images  ) {
+		anz_images--;
 	}
+}
 
-	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0,
-	              GL_RGBA, GL_UNSIGNED_BYTE,
-	              tmp );
 
-	colorGLuint[hash] = ret;
-	free( tmp );
+// query offsets
+void display_get_image_offset(image_id image, scr_coord_val *xoff, scr_coord_val *yoff, scr_coord_val *xw, scr_coord_val *yw)
+{
+	if(  image < anz_images  ) {
+		float zoom = get_img_zoom( image );
+		*xoff = floor( images[image].base_x * zoom );
+		*yoff = floor( images[image].base_y * zoom );
+		*xw   = ceil( images[image].base_w * zoom );
+		*yw   = ceil( images[image].base_h * zoom );
+	}
+}
 
-	return ret;
+
+// query un-zoomed offsets
+void display_get_base_image_offset(image_id image, scr_coord_val *xoff, scr_coord_val *yoff, scr_coord_val *xw, scr_coord_val *yw)
+{
+	if(  image < anz_images  ) {
+		*xoff = images[image].base_x;
+		*yoff = images[image].base_y;
+		*xw   = images[image].base_w;
+		*yw   = images[image].base_h;
+	}
+}
+
+// ------------------ display all kind of images from here on ------------------------------
+
+// forward declaration, implementation is further below
+PIXVAL colors_blend_alpha32(PIXVAL background, PIXVAL foreground, int alpha);
+
+static uint64_t tex_hash(const void *ptr, size_t size)
+{
+	//take max max_samples samples
+	const char *p = (const char*)ptr;
+	unsigned int smps = size / 8;
+	unsigned int off = 8;
+	if(  smps > 5000  ) {
+		off = ( size + 4999 ) / 5000;
+		if(  off & 7  ) {
+			off &= ~7;
+			off += 8;
+		}
+		smps = size / off;
+	}
+	uint64_t h = uint64_t( ptr );
+	while(  smps > 0  ) {
+		h ^= h >> 3;
+		h ^= h << 61;
+		h ^= *(const uint64_t*)p;
+		p += off;
+		smps--;
+	}
+	return h;
 }
 
 
@@ -1942,7 +1810,7 @@ static GLuint getGlyphTex(uint32_t c, const font_t *fnt,
 
 
 static void display_img_pc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h,
-                           GLuint tex  CLIP_NUM_DEF)
+                           GLuint tex, GLuint rgbmap_tex  CLIP_NUM_DEF)
 {
 	scr_coord_val rw = w;
 	scr_coord_val rh = h;
@@ -1959,8 +1827,23 @@ static void display_img_pc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, 
 			glStencilFunc( GL_NOTEQUAL, 1, 1 );
 		}
 
+		glActiveTextureARB( GL_TEXTURE0_ARB );
+		glEnable( GL_TEXTURE_2D );
 		glBindTexture( GL_TEXTURE_2D, tex );
-		glColor3f( 1, 1, 1 );
+		glActiveTextureARB( GL_TEXTURE1_ARB );
+		glEnable( GL_TEXTURE_2D );
+		glBindTexture( GL_TEXTURE_2D, rgbmap_tex );
+
+		glUseProgram( combined_program );
+
+		glUniform1i( combined_texColor_Location, 0 );
+		glUniform1i( combined_texRGBMap_Location, 1 );
+		glUniform1i( combined_texAlpha_Location, 2 );
+
+		glUniform4f( combined_alphaMask_Location,
+		             0.0, 0.0, 0.0, 1.0 );
+		glColor4f( 0, 0, 0, 0.0 );
+
 		glEnable( GL_BLEND );
 		glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
 		glBegin( GL_QUADS );
@@ -1973,6 +1856,12 @@ static void display_img_pc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, 
 		glTexCoord2f( xoff   / float( rw ), ( yoff + h ) / float( rh ) );
 		glVertex2i( xp,     yp + h );
 		glEnd();
+
+		glUseProgram( 0 );
+
+		glActiveTextureARB( GL_TEXTURE1_ARB );
+		glDisable( GL_TEXTURE_2D );
+		glActiveTextureARB( GL_TEXTURE0_ARB );
 
 		if(  CR.number_of_clips > 0  ) {
 			glDisable( GL_STENCIL_TEST );
@@ -2021,43 +1910,16 @@ void display_img_aux(const image_id n, scr_coord_val xp, scr_coord_val yp, const
 {
 	if(  n < anz_images  ) {
 		// only use player images if needed
-		const sint8 use_player = (images[n].recode_flags & FLAG_HAS_PLAYER_COLOR) * player_nr_raw;
+		const sint8 use_player = player_nr_raw;
 		// need to go to nightmode and or re-zoomed?
 		PIXVAL *sp;
 		GLuint tex;
 
-		if(  use_player > 0  ) {
-			if(  ( images[n].recode_flags & FLAG_REZOOM )  ) {
-				rezoom_img( n );
-				recode_img( n, 0 );
-				recode_img( n, use_player );
-			}
-			else if(  ( images[n].player_flags & 1 )  ) {
-				recode_img( n, use_player );
-			}
-			sp = images[n].data[use_player];
-			if(  sp == NULL  ) {
-				dbg->warning( "display_img_aux", "CImg[%i] %u failed!", use_player, n );
-				return;
-			}
-			tex = getPlainImgTex( images[n], sp, use_player );
-		}
-		else {
-			if(  ( images[n].recode_flags & FLAG_REZOOM )  ) {
-				rezoom_img( n );
-				recode_img( n, 0 );
-			}
-			else if(  ( images[n].player_flags & 1 )  ) {
-				recode_img( n, 0 );
-			}
-			sp = images[n].data[0];
-			if(  sp == NULL  ) {
-				dbg->warning( "display_img_aux", "Img %u failed!", n );
-				return;
-			}
+		rezoom_img( n );
+		sp = images[n].base_data;
+		tex = getIndexImgTex( images[n], sp );
 
-			tex = getPlainImgTex( images[n], sp, 0 );
-		}
+		activate_player_color( use_player, true );
 		// now, since zooming may have change this image
 		float zoom = get_img_zoom( n );
 
@@ -2067,7 +1929,7 @@ void display_img_aux(const image_id n, scr_coord_val xp, scr_coord_val yp, const
 		display_img_pc( xp, yp,
 		                ceil( images[n].base_w * zoom ),
 		                ceil( images[n].base_h * zoom ),
-		                tex  CLIP_NUM_PAR );
+		                tex, rgbmap_day_night_tex  CLIP_NUM_PAR );
 	}
 }
 
@@ -2238,17 +2100,12 @@ void display_color_img(const image_id n, scr_coord_val xp, scr_coord_val yp, sin
 {
 	if(  n < anz_images  ) {
 		// do we have to use a player nr?
-		const sint8 player_nr = ( images[n].recode_flags & FLAG_HAS_PLAYER_COLOR ) * player_nr_raw;
+		const sint8 player_nr = player_nr_raw;
+
 		// first: size check
-		if(  ( images[n].recode_flags & FLAG_REZOOM )  ) {
-			rezoom_img( n );
-		}
+		rezoom_img( n );
 
 		if(  daynight || night_shift == 0  ) {
-			// ok, now we could use the same faster code as for the normal images
-			if(  ( images[n].player_flags & ( 1 << player_nr ) )  ) {
-				recode_img( n, player_nr );
-			}
 			display_img_aux( n, xp, yp, player_nr, true, dirty  CLIP_NUM_PAR );
 			return;
 		}
@@ -2276,10 +2133,10 @@ void display_color_img(const image_id n, scr_coord_val xp, scr_coord_val yp, sin
 			// color replacement needs the original data => sp points to non-cached data
 			const PIXVAL *sp = images[n].base_data;
 
-			GLuint tex = getColorImgTex( images[n], sp );
+			GLuint tex = getIndexImgTex( images[n], sp );
 			display_img_pc( x, y,
 			                images[n].base_w, images[n].base_h,
-			                tex  CLIP_NUM_PAR );
+			                tex, rgbmap_current_tex  CLIP_NUM_PAR );
 		}
 	} // number ok
 }
@@ -2319,9 +2176,10 @@ void display_base_img(const image_id n, scr_coord_val xp, scr_coord_val yp, cons
 		// color replacement needs the original data => sp points to non-cached data
 		const PIXVAL *sp = images[n].base_data;
 
-		GLuint tex = getColorImgTex( images[n], sp );
-		display_img_pc( x, y, images[n].base_w, images[n].base_h,
-		                tex  CLIP_NUM_PAR );
+		GLuint tex = getIndexImgTex( images[n], sp );
+		display_img_pc( x, y,
+		                images[n].base_w, images[n].base_h,
+		                tex, rgbmap_current_tex  CLIP_NUM_PAR );
 	} // number ok
 }
 
@@ -2377,14 +2235,23 @@ void display_blend_wh_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, s
 
 		const float alpha = percent_blend / 100.0;
 
+		glActiveTextureARB( GL_TEXTURE0_ARB );
+		glEnable( GL_TEXTURE_2D );
 		glBindTexture( GL_TEXTURE_2D, 0 );
+
+		glUseProgram( combined_program );
+
+		glUniform1i( combined_texColor_Location, 0 );
+		glUniform1i( combined_texRGBMap_Location, 1 );
+		glUniform1i( combined_texAlpha_Location, 2 );
+
+		glUniform4f( combined_alphaMask_Location,
+		             0.0, 0.0, 0.0, alpha );
 		glColor4f( ( colval & 0xf800 ) / float( 0xf800 ),
 		           ( colval & 0x07e0 ) / float( 0x07e0 ),
 		           ( colval & 0x001f ) / float( 0x001f ),
-		           alpha );
-		glTexEnvi( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE );
-		glTexEnvi( GL_TEXTURE_ENV, GL_SRC0_RGB, GL_PREVIOUS );
-		glTexEnvi( GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_REPLACE );
+		           1.0 );
+
 
 		glEnable( GL_BLEND );
 		glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
@@ -2399,63 +2266,15 @@ void display_blend_wh_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, s
 		glVertex2i( xp,     yp + h );
 		glEnd();
 
-		glTexEnvi( GL_TEXTURE_ENV, GL_SRC0_RGB, GL_TEXTURE );
-		glTexEnvi( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE );
-		glTexEnvi( GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE );
+		glUseProgram( 0 );
+
+		glActiveTextureARB( GL_TEXTURE0_ARB );
 	}
 }
 
 
-static void display_img_blend_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, GLuint tex, int colour, bool use_colour, float alpha  CLIP_NUM_DEF)
+static void display_img_blend_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, GLuint tex, GLuint rgbmap_tex, float alpha  CLIP_NUM_DEF)
 {
-	scr_coord_val rw = w;
-	scr_coord_val rh = h;
-	const scr_coord_val xoff = clip_wh( &xp, &w, CR.clip_rect.x, CR.clip_rect.xx );
-	const scr_coord_val yoff = clip_wh( &yp, &h, CR.clip_rect.y, CR.clip_rect.yy );
-
-	if(  w > 0 && h > 0  ) {
-		glBindTexture( GL_TEXTURE_2D, tex );
-		if(  use_colour  ) {
-			glColor4f( ( colour & 0xf800 ) / float( 0xf800 ),
-			           ( colour & 0x07e0 ) / float( 0x07e0 ),
-			           ( colour & 0x001f ) / float( 0x001f ),
-			           alpha );
-			glTexEnvi( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE );
-			glTexEnvi( GL_TEXTURE_ENV, GL_SRC0_RGB, GL_PREVIOUS );
-			glTexEnvi( GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_REPLACE );
-		}
-		else {
-			glColor4f( 1, 1, 1, alpha );
-		}
-		glEnable( GL_BLEND );
-		glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-		glBegin( GL_QUADS );
-		glTexCoord2f( xoff   / float( rw ),  yoff   / float( rh ) );
-		glVertex2i( xp,     yp );
-		glTexCoord2f( ( xoff + w ) / float( rw ),  yoff   / float( rh ) );
-		glVertex2i( xp + w,   yp );
-		glTexCoord2f( ( xoff + w ) / float( rw ), ( yoff + h ) / float( rh ) );
-		glVertex2i( xp + w,   yp + h );
-		glTexCoord2f( xoff   / float( rw ), ( yoff + h ) / float( rh ) );
-		glVertex2i( xp,     yp + h );
-		glEnd();
-		if(  use_colour  ) {
-			glTexEnvi( GL_TEXTURE_ENV, GL_SRC0_RGB, GL_TEXTURE );
-			glTexEnvi( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE );
-			glTexEnvi( GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE );
-		}
-	}
-}
-
-
-/* from here code for transparent images */
-
-static void display_img_alpha_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, GLuint tex, GLuint alphatex, const uint8 alpha_flags, PIXVAL  CLIP_NUM_DEF )
-{
-	//more exact: r/g/b channel from alphatex is selected by alpha_flags
-	//to be the alpha channel for this blt.
-	//we assume here that only one of the RGB channels is used for alpha
-
 	scr_coord_val rw = w;
 	scr_coord_val rh = h;
 	const scr_coord_val xoff = clip_wh( &xp, &w, CR.clip_rect.x, CR.clip_rect.xx );
@@ -2467,19 +2286,17 @@ static void display_img_alpha_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 		glBindTexture( GL_TEXTURE_2D, tex );
 		glActiveTextureARB( GL_TEXTURE1_ARB );
 		glEnable( GL_TEXTURE_2D );
-		glBindTexture( GL_TEXTURE_2D, alphatex );
+		glBindTexture( GL_TEXTURE_2D, rgbmap_tex );
 
-		glUseProgram( img_alpha_program );
+		glUseProgram( combined_program );
 
-		float alpha_mask[4];
-		//todo: someone please explain to me why there is 2.0 needed here
-		alpha_mask[0] = ( alpha_flags & ALPHA_RED ) ? 2.0 : 0.0;
-		alpha_mask[1] = ( alpha_flags & ALPHA_GREEN ) ? 2.0 : 0.0;
-		alpha_mask[2] = ( alpha_flags & ALPHA_BLUE ) ? 1.0 : 0.0;
-		alpha_mask[3] = 0.0;
-		glUniform4fv( img_alpha_alphaMask_Location, 1, alpha_mask );
-		glUniform1i( img_alpha_texColor_Location, 0 );
-		glUniform1i( img_alpha_texAlpha_Location, 1 );
+		glUniform1i( combined_texColor_Location, 0 );
+		glUniform1i( combined_texRGBMap_Location, 1 );
+		glUniform1i( combined_texAlpha_Location, 2 );
+
+		glUniform4f( combined_alphaMask_Location,
+		             0.0, 0.0, 0.0, alpha );
+		glColor4f( 0.0, 0.0, 0.0, 0.0 );
 
 		glEnable( GL_BLEND );
 		glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
@@ -2502,6 +2319,110 @@ static void display_img_alpha_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 	}
 }
 
+static void display_img_blend_wc_colour(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, GLuint tex, PIXVAL colour, float alpha  CLIP_NUM_DEF)
+{
+	scr_coord_val rw = w;
+	scr_coord_val rh = h;
+	const scr_coord_val xoff = clip_wh( &xp, &w, CR.clip_rect.x, CR.clip_rect.xx );
+	const scr_coord_val yoff = clip_wh( &yp, &h, CR.clip_rect.y, CR.clip_rect.yy );
+
+	if(  w > 0 && h > 0  ) {
+		glActiveTextureARB( GL_TEXTURE0_ARB );
+		glEnable( GL_TEXTURE_2D );
+		glBindTexture( GL_TEXTURE_2D, tex );
+
+		glUseProgram( combined_program );
+
+		glUniform1i( combined_texColor_Location, 0 );
+		glUniform1i( combined_texRGBMap_Location, 1 );
+		glUniform1i( combined_texAlpha_Location, 2 );
+
+		glUniform4f( combined_alphaMask_Location,
+		             0.0, 0.0, 0.0, alpha );
+		glColor4f( ( colour & 0xf800 ) / float( 0xf800 ),
+		           ( colour & 0x07e0 ) / float( 0x07e0 ),
+		           ( colour & 0x001f ) / float( 0x001f ),
+		           1.0 );
+
+		glEnable( GL_BLEND );
+		glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+		glBegin( GL_QUADS );
+		glTexCoord2f( xoff   / float( rw ),  yoff   / float( rh ) );
+		glVertex2i( xp,     yp );
+		glTexCoord2f( ( xoff + w ) / float( rw ),  yoff   / float( rh ) );
+		glVertex2i( xp + w,   yp );
+		glTexCoord2f( ( xoff + w ) / float( rw ), ( yoff + h ) / float( rh ) );
+		glVertex2i( xp + w,   yp + h );
+		glTexCoord2f( xoff   / float( rw ), ( yoff + h ) / float( rh ) );
+		glVertex2i( xp,     yp + h );
+		glEnd();
+
+		glUseProgram( 0 );
+
+		glActiveTextureARB( GL_TEXTURE0_ARB );
+	}
+}
+
+/* from here code for transparent images */
+
+static void display_img_alpha_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, GLuint tex, GLuint rgbmap_tex, GLuint alphatex, const uint8 alpha_flags, PIXVAL  CLIP_NUM_DEF )
+{
+	//more exact: r/g/b channel from alphatex is selected by alpha_flags
+	//to be the alpha channel for this blt.
+
+	scr_coord_val rw = w;
+	scr_coord_val rh = h;
+	const scr_coord_val xoff = clip_wh( &xp, &w, CR.clip_rect.x, CR.clip_rect.xx );
+	const scr_coord_val yoff = clip_wh( &yp, &h, CR.clip_rect.y, CR.clip_rect.yy );
+
+	if(  w > 0 && h > 0  ) {
+		glActiveTextureARB( GL_TEXTURE0_ARB );
+		glEnable( GL_TEXTURE_2D );
+		glBindTexture( GL_TEXTURE_2D, tex );
+		glActiveTextureARB( GL_TEXTURE1_ARB );
+		glEnable( GL_TEXTURE_2D );
+		glBindTexture( GL_TEXTURE_2D, rgbmap_tex );
+		glActiveTextureARB( GL_TEXTURE2_ARB );
+		glEnable( GL_TEXTURE_2D );
+		glBindTexture( GL_TEXTURE_2D, alphatex );
+
+		glUseProgram( combined_program );
+
+		glUniform1i( combined_texColor_Location, 0 );
+		glUniform1i( combined_texRGBMap_Location, 1 );
+		glUniform1i( combined_texAlpha_Location, 2 );
+
+		//todo: someone please explain to me why there is 2.0 needed here
+		glUniform4f( combined_alphaMask_Location,
+		             ( alpha_flags & ALPHA_RED ) ? 2.0 : 0.0,
+		             ( alpha_flags & ALPHA_GREEN ) ? 2.0 : 0.0,
+		             ( alpha_flags & ALPHA_BLUE ) ? 1.0 : 0.0,
+		             0.0 );
+		glColor4f( 0, 0, 0, 0.0 );
+
+		glEnable( GL_BLEND );
+		glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+		glBegin( GL_QUADS );
+		glTexCoord2f( xoff   / float( rw ),  yoff   / float( rh ) );
+		glVertex2i( xp,     yp );
+		glTexCoord2f( ( xoff + w ) / float( rw ),  yoff   / float( rh ) );
+		glVertex2i( xp + w,   yp );
+		glTexCoord2f( ( xoff + w ) / float( rw ), ( yoff + h ) / float( rh ) );
+		glVertex2i( xp + w,   yp + h );
+		glTexCoord2f( xoff   / float( rw ), ( yoff + h ) / float( rh ) );
+		glVertex2i( xp,     yp + h );
+		glEnd();
+
+		glUseProgram( 0 );
+
+		glActiveTextureARB( GL_TEXTURE2_ARB );
+		glDisable( GL_TEXTURE_2D );
+		glActiveTextureARB( GL_TEXTURE1_ARB );
+		glDisable( GL_TEXTURE_2D );
+		glActiveTextureARB( GL_TEXTURE0_ARB );
+	}
+}
+
 
 /**
  * draws the transparent outline of an image
@@ -2510,14 +2431,8 @@ void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_va
 {
 	if(  n < anz_images  ) {
 		// need to go to nightmode and or rezoomed?
-		if(  ( images[n].recode_flags & FLAG_REZOOM )  ) {
-			rezoom_img( n );
-			recode_img( n, 0 );
-		}
-		else if(  ( images[n].player_flags & 1 )  ) {
-			recode_img( n, 0 );
-		}
-		PIXVAL *sp = images[n].data[0];
+		rezoom_img( n );
+		PIXVAL *sp = images[n].base_data;
 
 		// now, since zooming may have change this image
 		float zoom = get_img_zoom( n );
@@ -2529,13 +2444,20 @@ void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_va
 		const PIXVAL color = color_index & 0xFFFF;
 		float alpha = ( color_index & TRANSPARENT_FLAGS ) / TRANSPARENT25_FLAG / 4.0;
 
-		GLuint tex = getPlainImgTex( images[n], sp, 0 );
-		display_img_blend_wc( xp, yp,
-		                      ceil( images[n].base_w * zoom ),
-		                      ceil( images[n].base_h * zoom ),
-		                      tex,
-		                      color, color_index & OUTLINE_FLAG, alpha
-		                      CLIP_NUM_PAR );
+		if(  color_index & OUTLINE_FLAG  ) {
+			GLuint tex = getIndexImgTex( images[n], sp );
+			display_img_blend_wc_colour( xp, yp,
+			                             ceil( images[n].base_w * zoom ),
+			                             ceil( images[n].base_h * zoom ),
+			                             tex, color, alpha  CLIP_NUM_PAR );
+		}
+		else {
+			GLuint tex = getIndexImgTex( images[n], sp );
+			display_img_blend_wc( xp, yp,
+			                      ceil( images[n].base_w * zoom ),
+			                      ceil( images[n].base_h * zoom ),
+			                      tex, rgbmap_day_night_tex, alpha  CLIP_NUM_PAR );
+		}
 	}
 }
 
@@ -2544,17 +2466,9 @@ void display_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const 
 {
 	if(  n < anz_images && alpha_n < anz_images  ) {
 		// need to go to nightmode and or rezoomed?
-		if(  ( images[n].recode_flags & FLAG_REZOOM )  ) {
-			rezoom_img( n );
-			recode_img( n, 0 );
-		}
-		else if(  ( images[n].player_flags & 1 )  ) {
-			recode_img( n, 0 );
-		}
-		if(  ( images[alpha_n].recode_flags & FLAG_REZOOM )  ) {
-			rezoom_img( alpha_n );
-		}
-		PIXVAL *sp = images[n].data[0];
+		rezoom_img( n );
+		rezoom_img( alpha_n );
+		PIXVAL *sp = images[n].base_data;
 		// alphamap image uses base data as we don't want to recode
 		PIXVAL *alphamap = images[alpha_n].base_data;
 
@@ -2567,12 +2481,13 @@ void display_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const 
 		// get the real color
 		const PIXVAL color = color_index & 0xFFFF;
 
-		GLuint tex = getPlainImgTex( images[n], sp, 0 );
+		GLuint tex = getIndexImgTex( images[n], sp );
 		GLuint alphatex = getBaseImgTex( images[alpha_n], alphamap );
 		display_img_alpha_wc( xp, yp,
 		                      ceil( images[n].base_w * zoom ),
 		                      ceil( images[n].base_h * zoom ),
-		                      tex, alphatex, alpha_flags,
+		                      tex, rgbmap_day_night_tex,
+		                      alphatex, alpha_flags,
 		                      color  CLIP_NUM_PAR );
 	}
 }
@@ -2616,17 +2531,18 @@ void display_base_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp
 					// no player
 					activate_player_color( 0, daynight );
 				}
-				tex = getColorImgTex( images[n], sp );
+				tex = getIndexImgTex( images[n], sp );
+				display_img_blend_wc( x, y,
+				                      images[n].base_w, images[n].base_h,
+				                      tex, rgbmap_current_tex, alpha  CLIP_NUM_PAR );
 			}
 			else {
-				tex = getBaseImgTex( images[n], sp );
+				tex = getIndexImgTex( images[n], sp );
+				display_img_blend_wc_colour( x, y,
+				                             images[n].base_w, images[n].base_h,
+				                             tex,
+				                             color, alpha  CLIP_NUM_PAR );
 			}
-
-			display_img_blend_wc( x, y,
-			                      images[n].base_w, images[n].base_h,
-			                      tex,
-			                      color, color_index & OUTLINE_FLAG, alpha
-			                      CLIP_NUM_PAR );
 		}
 	} // number ok
 }
@@ -2665,12 +2581,13 @@ void display_base_img_alpha(const image_id n, const image_id alpha_n, const unsi
 				// no player
 				activate_player_color( 0, daynight );
 			}
-			GLuint tex = getColorImgTex( images[n], sp );
-			GLuint alphatex = getColorImgTex( images[n], alphamap );
+			GLuint tex = getIndexImgTex( images[n], sp );
+			GLuint alphatex = getBaseImgTex( images[n], alphamap );
 
 			display_img_alpha_wc( x, y,
 			                      images[n].base_w, images[n].base_h,
-			                      tex, alphatex, alpha_flags,
+			                      tex, rgbmap_current_tex,
+			                      alphatex, alpha_flags,
 			                      color  CLIP_NUM_PAR );
 		}
 	} // number ok
@@ -2683,6 +2600,10 @@ void display_base_img_alpha(const image_id n, const image_id alpha_n, const unsi
 // scrolls horizontally, will ignore clipping etc.
 void display_scroll_band(scr_coord_val start_y, scr_coord_val x_offset, scr_coord_val h)
 {
+	glReadBuffer( GL_BACK );
+	glDrawBuffer( GL_BACK );
+	glDisable( GL_TEXTURE_2D );
+	glDisable( GL_BLEND );
 	if(  x_offset > 0  ) {
 		glRasterPos2i( 0,        start_y + h );
 		glCopyPixels( x_offset, disp_height - start_y - h,
@@ -2705,6 +2626,7 @@ static void display_pixel(scr_coord_val x, scr_coord_val y, PIXVAL color)
 		glColor3f( ( color & 0xf800 ) / float( 0x10000 ),
 		           ( color & 0x07e0 ) / float( 0x00800 ),
 		           ( color & 0x001f ) / float( 0x00020 ) );
+		glDisable( GL_TEXTURE_2D );
 		glBindTexture( GL_TEXTURE_2D, 0 );
 		glBegin( GL_QUADS );
 		glVertex2i( x + 1, y );
@@ -2725,6 +2647,7 @@ static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_va
 		glColor3f( ( colval & 0xf800 ) / float( 0x10000 ),
 		           ( colval & 0x07e0 ) / float( 0x00800 ),
 		           ( colval & 0x001f ) / float( 0x00020 ) );
+		glDisable( GL_TEXTURE_2D );
 		glBindTexture( GL_TEXTURE_2D, 0 );
 		glBegin( GL_QUADS );
 		glVertex2i( xp + w, yp );
@@ -2767,6 +2690,7 @@ static void display_vl_internal(const scr_coord_val xp, scr_coord_val yp, scr_co
 		glColor3f( ( colval & 0xf800 ) / float( 0x10000 ),
 		           ( colval & 0x07e0 ) / float( 0x00800 ),
 		           ( colval & 0x001f ) / float( 0x00020 ) );
+		glDisable( GL_TEXTURE_2D );
 		glBindTexture( GL_TEXTURE_2D, 0 );
 		glBegin( GL_QUADS );
 		glVertex2i( xp + 1, yp );
@@ -2804,6 +2728,7 @@ void display_array_wh(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_c
 	if(  w > 0 && h > 0  ) {
 		GLuint texname = getArrayTex( arr, arr_w, arr_h );
 
+		glEnable( GL_TEXTURE_2D );
 		glBindTexture( GL_TEXTURE_2D, texname );
 		glColor3f( 1, 1, 1 );
 		glBegin( GL_QUADS );
@@ -3121,6 +3046,7 @@ scr_coord_val display_text_proportional_len_clip_rgb(scr_coord_val x, scr_coord_
 				                              glx, gly,
 				                              glw, glh );
 
+				glEnable( GL_TEXTURE_2D );
 				glBindTexture( GL_TEXTURE_2D, texname );
 				glColor3f( ( color & 0xf800 ) / float( 0x10000 ),
 				           ( color & 0x07e0 ) / float( 0x00800 ),
@@ -3702,6 +3628,51 @@ void display_show_load_pointer(int loading)
 
 static int inited = false;
 
+static GLuint compileShader(GLuint type, char const *source, int length, char const *name)
+{
+	GLuint shader = glCreateShader( type );
+	GLint result;
+
+	glShaderSource( shader, 1, &source, &length );
+	glCompileShader( shader );
+	glGetShaderiv( shader, GL_COMPILE_STATUS, &result );
+	if(  result == GL_FALSE  ) {
+		char info[65536];
+		GLsizei len;
+		glGetShaderInfoLog( shader, sizeof(info), &len, info );
+		fputs( info, stderr );
+
+		glDeleteShader( shader );
+		shader = 0;
+		dbg->fatal( "compileShader", "Failed to compile shader %s", name );
+	}
+	return shader;
+}
+
+static GLuint linkProgram(GLuint vertex, GLuint fragment, char const *name)
+{
+	GLuint program = glCreateProgram();
+	GLint result;
+
+	glAttachShader( program, vertex );
+	glAttachShader( program, fragment );
+
+	glLinkProgram( program );
+	glGetProgramiv( program, GL_LINK_STATUS, &result );
+	if(  result == GL_FALSE  ) {
+		char info[65536];
+		GLsizei len;
+		glGetProgramInfoLog( program, sizeof(info), &len, info );
+		fputs( info, stderr );
+
+		glDeleteProgram( program );
+		program = 0;
+		dbg->fatal( "linkProgram", "Failed to link %s", name );
+	}
+
+	return program;
+}
+
 /**
  * Initialises the graphics module
  */
@@ -3745,65 +3716,34 @@ bool simgraph_init(scr_size window_size, sint16 full_screen)
 	display_day_night_shift( 0 );
 	memcpy( specialcolormap_all_day, specialcolormap_day_night, 256 * sizeof(PIXVAL) );
 	memcpy( rgbmap_all_day, rgbmap_day_night, RGBMAPSIZE * sizeof(PIXVAL) );
+	updateRGBMap( rgbmap_all_day_tex, rgbmap_all_day, 0 );
 
-	GLuint img_alpha_fragmentShader;
+	GLuint combined_fragmentShader;
 	GLuint vertexShader;
-	GLint result;
-	GLint length;
-	char const *text;
 
-	img_alpha_program = glCreateProgram();
+	combined_fragmentShader = compileShader(
+	                GL_FRAGMENT_SHADER,
+	                combined_fragmentShaderText,
+	                sizeof(combined_fragmentShaderText),
+	                "combined fragment shader" );
+	vertexShader = compileShader(
+	                GL_VERTEX_SHADER,
+	                vertexShaderText,
+	                sizeof(vertexShaderText),
+	                "vertex shader" );
 
-	img_alpha_fragmentShader = glCreateShader( GL_FRAGMENT_SHADER );
-	length = sizeof( img_alpha_fragmentShaderText );
-	text = img_alpha_fragmentShaderText;
-	glShaderSource( img_alpha_fragmentShader, 1, ( const char ** )&text, &length );
-	glCompileShader( img_alpha_fragmentShader );
-	glGetShaderiv( img_alpha_fragmentShader, GL_COMPILE_STATUS, &result );
-	if(  result == GL_FALSE  ) {
-		char info[65536];
-		GLsizei len;
-		glGetShaderInfoLog( img_alpha_fragmentShader, sizeof(info), &len, info );
-		fputs( info, stderr );
 
-		glDeleteShader( img_alpha_fragmentShader );
-		img_alpha_fragmentShader = 0;
-		dbg->fatal( "simgraph_init", "Failed to compile fragment shader" );
-	}
+	combined_program = linkProgram( vertexShader,
+	                                combined_fragmentShader,
+	                                "combined program" );
 
-	vertexShader = glCreateShader( GL_VERTEX_SHADER );
-	length = sizeof(vertexShaderText);
-	text = vertexShaderText;
-	glShaderSource( vertexShader, 1, (const char **)&text, &length );
-	glCompileShader( vertexShader );
-	glGetShaderiv( vertexShader, GL_COMPILE_STATUS, &result );
-	if(  result == GL_FALSE  ) {
-		char info[65536];
-		GLsizei len;
-		glGetShaderInfoLog( vertexShader, sizeof(info), &len, info );
-		fputs( info, stderr );
-
-		glDeleteShader( vertexShader );
-		vertexShader = 0;
-		dbg->fatal( "simgraph_init", "Failed to compile vertex shader" );
-	}
-
-	glAttachShader( img_alpha_program, img_alpha_fragmentShader );
-	glDeleteShader( img_alpha_fragmentShader );
-	glAttachShader( img_alpha_program, vertexShader );
+	glDeleteShader( combined_fragmentShader );
 	glDeleteShader( vertexShader );
 
-	glLinkProgram( img_alpha_program );
-	glGetProgramiv( img_alpha_program, GL_LINK_STATUS, &result );
-	if(  result == GL_FALSE  ) {
-		dbg->fatal( "simgraph_init", "Failed to link img_alpha program" );
-		glDeleteProgram( img_alpha_program );
-		img_alpha_program = 0;
-	}
-
-	img_alpha_alphaMask_Location = glGetUniformLocation( img_alpha_program, "alphaMask" );
-	img_alpha_texColor_Location = glGetUniformLocation( img_alpha_program, "texColor" );
-	img_alpha_texAlpha_Location = glGetUniformLocation( img_alpha_program, "texAlpha" );
+	combined_texColor_Location = glGetUniformLocation( combined_program, "texColor" );
+	combined_texRGBMap_Location = glGetUniformLocation( combined_program, "texRGBMap" );
+	combined_texAlpha_Location = glGetUniformLocation( combined_program, "texAlpha" );
+	combined_alphaMask_Location = glGetUniformLocation( combined_program, "alphaMask" );
 
 
 	return true;
