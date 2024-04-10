@@ -2595,8 +2595,6 @@ void display_base_img_alpha(const image_id n, const image_id alpha_n, const unsi
 // scrolls horizontally, will ignore clipping etc.
 void display_scroll_band(scr_coord_val start_y, scr_coord_val x_offset, scr_coord_val h)
 {
-	glReadBuffer( GL_BACK );
-	glDrawBuffer( GL_BACK );
 	glDisable( GL_TEXTURE_2D );
 	glDisable( GL_BLEND );
 	if(  x_offset > 0  ) {
