@@ -120,12 +120,12 @@ public:
 		y0 = y0_;
 		dy = y1 - y0;
 		non_convex = non_convex_;
-		int steps = (abs(dx) > abs(dy) ? abs(dx) : abs(dy));
+		int steps = ( abs( dx ) > abs( dy ) ? abs( dx ) : abs( dy ) );
 		if(  steps == 0  ) {
 			return;
 		}
-		sdx = ((sint64)dx << 16) / steps;
-		sdy = ((sint64)dy << 16) / steps;
+		sdx = ( (sint64)dx << 16 ) / steps;
+		sdy = ( (sint64)dy << 16 ) / steps;
 		// to stay right from the line
 		// left border: xmin <= x
 		// right border: x < xmax
@@ -134,7 +134,7 @@ public:
 				inc = 1 << 16;
 			}
 			else {
-				inc = ((sint64)dx << 16) / dy -  (1 << 16);
+				inc = ( (sint64)dx << 16 ) / dy - ( 1 << 16 );
 			}
 		}
 		else if(  dy < 0  ) {
@@ -158,17 +158,17 @@ public:
 		y--;
 		r.y = y;
 		r.non_convex_active = false;
-		if(  non_convex  &&  use_non_convex  &&  y < y0  &&  y < (y0 + dy)  ) {
+		if(  non_convex && use_non_convex && y < y0 && y < (y0 + dy)  ) {
 			r.non_convex_active = true;
-			y = min(y0, y0+dy) - 1;
+			y = min( y0, y0 + dy ) - 1;
 		}
 		if(  dy != 0  ) {
 			// init Bresenham algorithm
-			const sint64 t = (((sint64)y - y0) << 16) / sdy;
+			const sint64 t = ( ( (sint64)y - y0 ) << 16 ) / sdy;
 			// sx >> 16 = x
 			// sy >> 16 = y
-			r.sx = t * sdx + inc + ((sint64)x0 << 16);
-			r.sy = t * sdy + ((sint64)y0 << 16);
+			r.sx = t * sdx + inc + ( (sint64)x0 << 16 );
+			r.sy = t * sdy + ( (sint64)y0 << 16 );
 		}
 	}
 
@@ -202,7 +202,7 @@ public:
 				do {
 					r.sx += sdx;
 					r.sy += sdy;
-				} while(  (r.sy >> 16) < r.y  );
+				} while(  ( r.sy >> 16 ) < r.y  );
 				const int r_xmin = r.sx >> 16;
 				if(  xmin < r_xmin  ) {
 					xmin = r_xmin;
@@ -212,7 +212,7 @@ public:
 				do {
 					r.sx -= sdx;
 					r.sy -= sdy;
-				} while(  (r.sy >> 16) < r.y  );
+				} while(  ( r.sy >> 16 ) < r.y  );
 				const int r_xmax = r.sx >> 16;
 				if(  xmax > r_xmax  ) {
 					xmax = r_xmax;
@@ -221,7 +221,7 @@ public:
 		}
 		// horizontal clip
 		else {
-			const bool clip = dx * (r.y - y0) > 0;
+			const bool clip = dx * ( r.y - y0 ) > 0;
 			if(  clip  ) {
 				// invisible row
 				xmin = +1;
@@ -526,15 +526,15 @@ static inline rgb888_t pixval_to_rgb888(PIXVAL colour)
 	// Scale each colour channel from 5 or 6 bits to 8 bits
 #ifdef RGB555
 	return {
-		uint8(((colour >> 10) & 0x1F) * 0xFF / 0x1F), // R
-		uint8(((colour >>  5) & 0x1F) * 0xFF / 0x1F), // G
-		uint8(((colour >>  0) & 0x1F) * 0xFF / 0x1F)  // B
+		uint8( ( ( colour >> 10 ) & 0x1F ) * 0xFF / 0x1F ), // R
+		uint8( ( ( colour >>  5 ) & 0x1F ) * 0xFF / 0x1F ), // G
+		uint8( ( ( colour >>  0 ) & 0x1F ) * 0xFF / 0x1F ) // B
 	};
 #else
 	return {
-		uint8(((colour >> 11) & 0x1F) * 0xFF / 0x1F), // R
-		uint8(((colour >>  5) & 0x3F) * 0xFF / 0x3F), // G
-		uint8(((colour >>  0) & 0x1F) * 0xFF / 0x1F)  // B
+		uint8( ( ( colour >> 11 ) & 0x1F ) * 0xFF / 0x1F ), // R
+		uint8( ( ( colour >>  5 ) & 0x3F ) * 0xFF / 0x3F ), // G
+		uint8( ( ( colour >>  0 ) & 0x1F ) * 0xFF / 0x1F ) // B
 	};
 #endif
 }
@@ -547,9 +547,9 @@ static inline PIXVAL pixval_to_rgb343(PIXVAL rgb)
 	// rgb565: rrrrrggggggbbbbb
 	// rgb343:       rrrggggbbb
 #ifdef RGB555
-	return ((rgb >> 5) & 0x0380) | ((rgb >>  3) & 0x0078) | ((rgb >> 2) & 0x07);
+	return ( ( rgb >> 5 ) & 0x0380 ) | ( ( rgb >>  3 ) & 0x0078 ) | ( ( rgb >> 2 ) & 0x07 );
 #else
-	return ((rgb >> 6) & 0x0380) | ((rgb >>  4) & 0x0078) | ((rgb >> 2) & 0x07);
+	return ( ( rgb >> 6 ) & 0x0380 ) | ( ( rgb >>  4 ) & 0x0078 ) | ( ( rgb >> 2 ) & 0x07 );
 #endif
 }
 
@@ -560,17 +560,17 @@ static inline PIXVAL pixval_to_rgb343(PIXVAL rgb)
 rgb888_t get_color_rgb(uint8 idx)
 {
 	// special_pal has 224 rgb colors
-	if (idx < SPECIAL_COLOR_COUNT) {
+	if(  idx < SPECIAL_COLOR_COUNT  ) {
 		return special_pal[idx];
 	}
 
 	// if it uses one of the special light colours it's under display_day_lights
-	if (idx < SPECIAL_COLOR_COUNT + LIGHT_COUNT) {
+	if(  idx < SPECIAL_COLOR_COUNT + LIGHT_COUNT  ) {
 		return display_day_lights[idx - SPECIAL_COLOR_COUNT];
 	}
 
 	// Return black for anything else
-	return rgb888_t{0,0,0};
+	return rgb888_t{0, 0, 0};
 }
 
 /**
@@ -578,13 +578,13 @@ rgb888_t get_color_rgb(uint8 idx)
  */
 PIXVAL color_idx_to_rgb(PIXVAL idx)
 {
-	return (specialcolormap_all_day[(idx)&0x00FF]);
+	return ( specialcolormap_all_day[( idx ) & 0x00FF] );
 }
 
 PIXVAL color_rgb_to_idx(PIXVAL color)
 {
-	for(PIXVAL i=0; i<=0xff; i++) {
-		if (specialcolormap_all_day[i] == color) {
+	for(  PIXVAL i = 0; i <= 0xff; i++  ) {
+		if(  specialcolormap_all_day[i] == color  ) {
 			return i;
 		}
 	}
@@ -598,13 +598,13 @@ PIXVAL color_rgb_to_idx(PIXVAL color)
 void env_t_rgb_to_system_colors()
 {
 	// get system colours for the default colours or settings.xml
-	env_t::default_window_title_color = get_system_color(env_t::default_window_title_color_rgb);
-	env_t::front_window_text_color    = get_system_color(env_t::front_window_text_color_rgb);
-	env_t::bottom_window_text_color   = get_system_color(env_t::bottom_window_text_color_rgb);
-	env_t::tooltip_color              = get_system_color(env_t::tooltip_color_rgb);
-	env_t::tooltip_textcolor          = get_system_color(env_t::tooltip_textcolor_rgb);
-	env_t::cursor_overlay_color       = get_system_color(env_t::cursor_overlay_color_rgb);
-	env_t::background_color           = get_system_color(env_t::background_color_rgb);
+	env_t::default_window_title_color = get_system_color( env_t::default_window_title_color_rgb );
+	env_t::front_window_text_color    = get_system_color( env_t::front_window_text_color_rgb );
+	env_t::bottom_window_text_color   = get_system_color( env_t::bottom_window_text_color_rgb );
+	env_t::tooltip_color              = get_system_color( env_t::tooltip_color_rgb );
+	env_t::tooltip_textcolor          = get_system_color( env_t::tooltip_textcolor_rgb );
+	env_t::cursor_overlay_color       = get_system_color( env_t::cursor_overlay_color_rgb );
+	env_t::background_color           = get_system_color( env_t::background_color_rgb );
 }
 
 
@@ -613,7 +613,7 @@ scr_coord_val display_set_base_raster_width(scr_coord_val new_raster)
 {
 	scr_coord_val old = base_tile_raster_width;
 	base_tile_raster_width = new_raster;
-	tile_raster_width = (new_raster *  zoom_num[zoom_factor]) / zoom_den[zoom_factor];
+	tile_raster_width = ( new_raster *  zoom_num[zoom_factor] ) / zoom_den[zoom_factor];
 	return old;
 }
 
@@ -653,9 +653,9 @@ void display_set_height(scr_coord_val const h)
  */
 inline int clip_intv(scr_coord_val &x, scr_coord_val &w, const scr_coord_val left, const scr_coord_val right)
 {
-	scr_coord_val xx = min(x+w, right);
+	scr_coord_val xx = min( x + w, right );
 	scr_coord_val xoff = left - x;
-	if (xoff > 0) { // equivalent to x < left
+	if(  xoff > 0  ) { // equivalent to x < left
 		x = left;
 	}
 	else {
@@ -668,14 +668,14 @@ inline int clip_intv(scr_coord_val &x, scr_coord_val &w, const scr_coord_val lef
 /// wrapper for clip_intv
 static int clip_wh(scr_coord_val *x, scr_coord_val *w, const scr_coord_val left, const scr_coord_val right)
 {
-	return clip_intv(*x, *w, left, right);
+	return clip_intv( *x, *w, left, right );
 }
 
 
 /// wrapper for clip_intv, @returns whether @p w is positive
 static bool clip_lr(scr_coord_val *x, scr_coord_val *w, const scr_coord_val left, const scr_coord_val right)
 {
-	clip_intv(*x, *w, left, right);
+	clip_intv( *x, *w, left, right );
 	return *w > 0;
 }
 
@@ -700,13 +700,13 @@ clip_dimension display_get_clip_wh(CLIP_NUM_DEF0)
  */
 void display_set_clip_wh(scr_coord_val x, scr_coord_val y, scr_coord_val w, scr_coord_val h  CLIP_NUM_DEF, bool fit)
 {
-	if (!fit) {
-		clip_wh( &x, &w, 0, disp_width);
-		clip_wh( &y, &h, 0, disp_height);
+	if(  !fit  ) {
+		clip_wh( &x, &w, 0, disp_width );
+		clip_wh( &y, &h, 0, disp_height );
 	}
 	else {
-		clip_wh( &x, &w, CR.clip_rect.x, CR.clip_rect.xx);
-		clip_wh( &y, &h, CR.clip_rect.y, CR.clip_rect.yy);
+		clip_wh( &x, &w, CR.clip_rect.x, CR.clip_rect.xx );
+		clip_wh( &y, &h, CR.clip_rect.y, CR.clip_rect.yy );
 	}
 
 	CR.clip_rect.x = x;
@@ -719,17 +719,17 @@ void display_set_clip_wh(scr_coord_val x, scr_coord_val y, scr_coord_val w, scr_
 
 void display_push_clip_wh(scr_coord_val x, scr_coord_val y, scr_coord_val w, scr_coord_val h  CLIP_NUM_DEF)
 {
-	assert(!CR.swap_active);
+	assert( !CR.swap_active );
 	// save active clipping rectangle
 	CR.clip_rect_swap = CR.clip_rect;
 	// active rectangle provided by parameters
-	display_set_clip_wh(x, y, w, h  CLIP_NUM_PAR);
+	display_set_clip_wh( x, y, w, h  CLIP_NUM_PAR );
 	CR.swap_active = true;
 }
 
 void display_swap_clip_wh(CLIP_NUM_DEF0)
 {
-	if (CR.swap_active) {
+	if(  CR.swap_active  ) {
 		// swap clipping rectangles
 		clip_dimension save = CR.clip_rect;
 		CR.clip_rect = CR.clip_rect_swap;
@@ -739,7 +739,7 @@ void display_swap_clip_wh(CLIP_NUM_DEF0)
 
 void display_pop_clip_wh(CLIP_NUM_DEF0)
 {
-	if (CR.swap_active) {
+	if(  CR.swap_active  ) {
 		// swap original clipping rectangle back
 		CR.clip_rect   = CR.clip_rect_swap;
 		CR.swap_active = false;
@@ -754,8 +754,8 @@ void display_pop_clip_wh(CLIP_NUM_DEF0)
 void add_poly_clip(int x0,int y0, int x1, int y1, int ribi  CLIP_NUM_DEF)
 {
 	if(  CR.number_of_clips < MAX_POLY_CLIPS  ) {
-		CR.poly_clips[CR.number_of_clips].clip_from_to( x0, y0, x1, y1, ribi&16 );
-		CR.clip_ribi[CR.number_of_clips] = ribi&15;
+		CR.poly_clips[CR.number_of_clips].clip_from_to( x0, y0, x1, y1, ribi & 16 );
+		CR.clip_ribi[CR.number_of_clips] = ribi & 15;
 		CR.number_of_clips++;
 	}
 }
@@ -785,8 +785,8 @@ void activate_ribi_clip(int ribi  CLIP_NUM_DEF)
  */
 static inline void init_ranges(int y  CLIP_NUM_DEF)
 {
-	for(  uint8 i = 0;  i < CR.number_of_clips;  i++  ) {
-		if(  (CR.clip_ribi[i] & CR.active_ribi)  ) {
+	for(  uint8 i = 0; i < CR.number_of_clips; i++  ) {
+		if(  ( CR.clip_ribi[i] & CR.active_ribi )  ) {
 			CR.poly_clips[i].get_x_range( y, CR.xranges[i], CR.active_ribi & 16 );
 		}
 	}
@@ -802,8 +802,8 @@ inline void get_xrange_and_step_y(int &xmin, int &xmax  CLIP_NUM_DEF)
 {
 	xmin = CR.clip_rect.x;
 	xmax = CR.clip_rect.xx;
-	for(  uint8 i = 0;  i < CR.number_of_clips;  i++  ) {
-		if(  (CR.clip_ribi[i] & CR.active_ribi)  ) {
+	for(  uint8 i = 0; i < CR.number_of_clips; i++  ) {
+		if(  ( CR.clip_ribi[i] & CR.active_ribi )  ) {
 			CR.poly_clips[i].inc_y( CR.xranges[i], xmin, xmax );
 		}
 	}
@@ -821,9 +821,9 @@ static inline void mark_tile_dirty(const int x, const int y)
 {
 	const int bit = x + y * tile_buffer_per_line;
 #if 0
-	assert(bit / 8 < tile_buffer_length);
+	assert( bit / 8 < tile_buffer_length );
 #endif
-	tile_dirty[bit >> 5] |= 1 << (bit & 31);
+	tile_dirty[bit >> 5] |= 1 << ( bit & 31 );
 }
 
 
@@ -839,21 +839,21 @@ static void mark_rect_dirty_nc(scr_coord_val x1, scr_coord_val y1, scr_coord_val
 	y2 >>= DIRTY_TILE_SHIFT;
 
 #if 0
-	assert(x1 >= 0);
-	assert(x1 < tiles_per_line);
-	assert(y1 >= 0);
-	assert(y1 < tile_lines);
-	assert(x2 >= 0);
-	assert(x2 < tiles_per_line);
-	assert(y2 >= 0);
-	assert(y2 < tile_lines);
+	assert( x1 >= 0 );
+	assert( x1 < tiles_per_line );
+	assert( y1 >= 0 );
+	assert( y1 < tile_lines );
+	assert( x2 >= 0 );
+	assert( x2 < tiles_per_line );
+	assert( y2 >= 0 );
+	assert( y2 < tile_lines );
 #endif
 
 	for(  ;  y1 <= y2;  y1++  ) {
 		int bit = y1 * tile_buffer_per_line + x1;
 		const int end = bit + x2 - x1;
 		do {
-			tile_dirty[bit >> 5] |= 1 << (bit & 31);
+			tile_dirty[bit >> 5] |= 1 << ( bit & 31 );
 		} while(  ++bit <= end  );
 	}
 }
@@ -865,7 +865,7 @@ static void mark_rect_dirty_nc(scr_coord_val x1, scr_coord_val y1, scr_coord_val
 void mark_rect_dirty_wc(scr_coord_val x1, scr_coord_val y1, scr_coord_val x2, scr_coord_val y2)
 {
 	// inside display?
-	if(  x2 >= 0  &&  y2 >= 0  &&  x1 < disp_width  &&  y1 < disp_height  ) {
+	if(  x2 >= 0 && y2 >= 0 && x1 < disp_width && y1 < disp_height  ) {
 		if(  x1 < 0  ) {
 			x1 = 0;
 		}
@@ -886,7 +886,7 @@ void mark_rect_dirty_wc(scr_coord_val x1, scr_coord_val y1, scr_coord_val x2, sc
 void mark_rect_dirty_clip(scr_coord_val x1, scr_coord_val y1, scr_coord_val x2, scr_coord_val y2  CLIP_NUM_DEF)
 {
 	// inside clip_rect?
-	if(  x2 >= CR.clip_rect.x  &&  y2 >= CR.clip_rect.y  &&  x1 < CR.clip_rect.xx  &&  y1 < CR.clip_rect.yy  ) {
+	if(  x2 >= CR.clip_rect.x && y2 >= CR.clip_rect.y && x1 < CR.clip_rect.xx && y1 < CR.clip_rect.yy  ) {
 		if(  x1 < CR.clip_rect.x  ) {
 			x1 = CR.clip_rect.x;
 		}
@@ -894,10 +894,10 @@ void mark_rect_dirty_clip(scr_coord_val x1, scr_coord_val y1, scr_coord_val x2, 
 			y1 = CR.clip_rect.y;
 		}
 		if(  x2 >= CR.clip_rect.xx  ) {
-			x2 = CR.clip_rect.xx-1;
+			x2 = CR.clip_rect.xx - 1;
 		}
 		if(  y2 >= CR.clip_rect.yy  ) {
-			y2 = CR.clip_rect.yy-1;
+			y2 = CR.clip_rect.yy - 1;
 		}
 		mark_rect_dirty_nc( x1, y1, x2, y2 );
 	}
@@ -920,12 +920,11 @@ void mark_screen_dirty()
 void display_mark_img_dirty(image_id image, scr_coord_val xp, scr_coord_val yp)
 {
 	if(  image < anz_images  ) {
-		mark_rect_dirty_wc(
-			xp + images[image].x,
-			yp + images[image].y,
-			xp + images[image].x + images[image].w - 1,
-			yp + images[image].y + images[image].h - 1
-		);
+		mark_rect_dirty_wc( xp + images[image].x,
+		                    yp + images[image].y,
+		                    xp + images[image].x + images[image].w - 1,
+		                    yp + images[image].y + images[image].h - 1
+		                  );
 	}
 }
 
@@ -942,8 +941,8 @@ void display_mark_img_dirty(image_id image, scr_coord_val xp, scr_coord_val yp)
  */
 static void rezoom()
 {
-	for(  image_id n = 0;  n < anz_images;  n++  ) {
-		if(  (images[n].recode_flags & FLAG_ZOOMABLE) != 0  &&  images[n].base_h > 0  ) {
+	for(  image_id n = 0; n < anz_images; n++  ) {
+		if(  ( images[n].recode_flags & FLAG_ZOOMABLE ) != 0 && images[n].base_h > 0  ) {
 			images[n].recode_flags |= FLAG_REZOOM;
 		}
 	}
@@ -953,10 +952,10 @@ static void rezoom()
 void set_zoom_factor(int z)
 {
 	// do not zoom beyond 4 pixels
-	if(  (base_tile_raster_width * zoom_num[z]) / zoom_den[z] > 4  ) {
+	if(  ( base_tile_raster_width * zoom_num[z] ) / zoom_den[z] > 4  ) {
 		zoom_factor = z;
-		tile_raster_width = (base_tile_raster_width * zoom_num[zoom_factor]) / zoom_den[zoom_factor];
-		dbg->message("set_zoom_factor()", "Zoom level now %d (%i/%i)", zoom_factor, zoom_num[zoom_factor], zoom_den[zoom_factor] );
+		tile_raster_width = ( base_tile_raster_width * zoom_num[zoom_factor] ) / zoom_den[zoom_factor];
+		dbg->message( "set_zoom_factor()", "Zoom level now %d (%i/%i)", zoom_factor, zoom_num[zoom_factor], zoom_den[zoom_factor] );
 		rezoom();
 	}
 }
@@ -966,7 +965,7 @@ int zoom_factor_up()
 {
 	// zoom out, if size permits
 	if(  zoom_factor > 0  ) {
-		set_zoom_factor( zoom_factor-1 );
+		set_zoom_factor( zoom_factor - 1 );
 		return true;
 	}
 	return false;
@@ -976,7 +975,7 @@ int zoom_factor_up()
 int zoom_factor_down()
 {
 	if(  zoom_factor < MAX_ZOOM_FACTOR  ) {
-		set_zoom_factor( zoom_factor+1 );
+		set_zoom_factor( zoom_factor + 1 );
 		return true;
 	}
 	return false;
@@ -988,25 +987,25 @@ static uint8 player_day=0xFF;
 static void activate_player_color(sint8 player_nr, bool daynight)
 {
 	// caches the last settings
-	if(!daynight) {
-		if(player_day!=player_nr) {
+	if(  !daynight  ) {
+		if(  player_day != player_nr  ) {
 			int i;
 			player_day = player_nr;
-			for(i=0;  i<8;  i++  ) {
-				rgbmap_all_day[0x8000+i] = specialcolormap_all_day[player_offsets[player_day][0]+i];
-				rgbmap_all_day[0x8008+i] = specialcolormap_all_day[player_offsets[player_day][1]+i];
+			for(  i = 0; i < 8; i++  ) {
+				rgbmap_all_day[0x8000 + i] = specialcolormap_all_day[player_offsets[player_day][0] + i];
+				rgbmap_all_day[0x8008 + i] = specialcolormap_all_day[player_offsets[player_day][1] + i];
 			}
 		}
 		rgbmap_current = rgbmap_all_day;
 	}
 	else {
 		// changing color table
-		if(player_night!=player_nr) {
+		if(  player_night != player_nr  ) {
 			int i;
 			player_night = player_nr;
-			for(i=0;  i<8;  i++  ) {
-				rgbmap_day_night[0x8000+i] = specialcolormap_day_night[player_offsets[player_night][0]+i];
-				rgbmap_day_night[0x8008+i] = specialcolormap_day_night[player_offsets[player_night][1]+i];
+			for(  i = 0; i < 8; i++  ) {
+				rgbmap_day_night[0x8000 + i] = specialcolormap_day_night[player_offsets[player_night][0] + i];
+				rgbmap_day_night[0x8008 + i] = specialcolormap_day_night[player_offsets[player_night][1] + i];
 			}
 		}
 		rgbmap_current = rgbmap_day_night;
@@ -1019,7 +1018,7 @@ static void activate_player_color(sint8 player_nr, bool daynight)
  */
 static void recode()
 {
-	for(  image_id n = 0;  n < anz_images;  n++  ) {
+	for(  image_id n = 0; n < anz_images; n++  ) {
 		images[n].player_flags = 0xFFFF;  // recode all player colors
 	}
 }
@@ -1040,12 +1039,12 @@ static void recode_img_src_target(scr_coord_val h, PIXVAL *src, PIXVAL *target)
 				if(  runlen & TRANSPARENT_RUN  ) {
 					runlen &= ~TRANSPARENT_RUN;
 					while(  runlen--  ) {
-						if(  *src < 0x8020+(31*16)  ) {
+						if(  *src < 0x8020 + ( 31 * 16 )  ) {
 							// expand transparent player color
-							const uint8 alpha   = (*src-0x8020) % 31;
-							const PIXVAL colour = rgbmap_day_night[(*src-0x8020)/31+0x8000];
+							const uint8 alpha   = ( *src - 0x8020 ) % 31;
+							const PIXVAL colour = rgbmap_day_night[( *src - 0x8020 ) / 31 + 0x8000];
 
-							*target++ = 0x8020 + 31*31 + pixval_to_rgb343(colour)*31 + alpha;
+							*target++ = 0x8020 + 31 * 31 + pixval_to_rgb343( colour ) * 31 + alpha;
 							src ++;
 						}
 						else {
@@ -1060,7 +1059,7 @@ static void recode_img_src_target(scr_coord_val h, PIXVAL *src, PIXVAL *target)
 					}
 				}
 				// next clear run or zero = end
-			} while(  (runlen = *target++ = *src++)  );
+			} while(  ( runlen = *target++ = *src++ )  );
 		} while(  --h  );
 	}
 }
@@ -1080,7 +1079,7 @@ static void recode_img(const image_id n, const sint8 player_nr)
 	// may this image be zoomed
 #ifdef MULTI_THREAD
 	pthread_mutex_lock( &recode_img_mutex );
-	if(  (images[n].player_flags & (1<<player_nr)) == 0  ) {
+	if(  ( images[n].player_flags & ( 1 << player_nr ) ) == 0  ) {
 		// other thread did already the re-code...
 		pthread_mutex_unlock( &recode_img_mutex );
 		return;
@@ -1094,7 +1093,7 @@ static void recode_img(const image_id n, const sint8 player_nr)
 	// contains now the player color ...
 	activate_player_color( player_nr, true );
 	recode_img_src_target( images[n].h, src, images[n].data[player_nr] );
-	images[n].player_flags &= ~(1<<player_nr);
+	images[n].player_flags &= ~( 1 << player_nr );
 #ifdef MULTI_THREAD
 	pthread_mutex_unlock( &recode_img_mutex );
 #endif
@@ -1114,41 +1113,41 @@ static void recode_img(const image_id n, const sint8 player_nr)
 // recode 4*bytes into PIXVAL
 PIXVAL inline compress_pixel(uint8* p)
 {
-	return (((p[0]==1 ? 0x8000 : 0 ) | p[1]) + (((uint16)p[2])<<5) + (((uint16)p[3])<<10));
+	return ( ( ( p[0] == 1 ? 0x8000 : 0 ) | p[1] ) + ( ( ( uint16 )p[2] ) << 5 ) + ( ( ( uint16 )p[3] ) << 10 ) );
 }
 
 // recode 4*bytes into PIXVAL, respect transparency
 PIXVAL inline compress_pixel_transparent(uint8 *p)
 {
-	return p[0]==255 ? 0x73FE : compress_pixel(p);
+	return p[0] == 255 ? 0x73FE : compress_pixel( p );
 }
 
 // zoom-in pixel taking color of above/below and transparency of diagonal neighbor into account
 PIXVAL inline zoomin_pixel(uint8 *p, uint8* pab, uint8 *prl, uint8* pdia)
 {
-	if (p[0] == 255) {
-		if ( (pab[0] | prl[0] | pdia[0])==255) {
+	if(  p[0] == 255  ) {
+		if(  ( pab[0] | prl[0] | pdia[0] ) == 255  ) {
 			return 0x73FE; // pixel and one neighbor transparent -> return transparent
 		}
 		// pixel transparent but all three neighbors not -> interpolate
-		uint8 valid=0;
-		uint8 r=0, g=0, b=0;
-		SumSubpixel(pab);
-		SumSubpixel(prl);
-		if(valid==0) {
+		uint8 valid = 0;
+		uint8 r = 0, g = 0, b = 0;
+		SumSubpixel( pab );
+		SumSubpixel( prl );
+		if(  valid == 0  ) {
 			return 0x73FE;
 		}
-		else if(valid==255) {
-			return (0x8000 | r) + (((uint16)g)<<5) + (((uint16)b)<<10);
+		else if(  valid == 255  ) {
+			return ( 0x8000 | r ) + ( ( ( uint16 )g ) << 5 ) + ( ( ( uint16 )b ) << 10 );
 		}
 		else {
-			return (r/valid) + (((uint16)(g/valid))<<5) + (((uint16)(b/valid))<<10);
+			return ( r / valid ) + ( ( ( uint16 )( g / valid ) ) << 5 ) + ( ( ( uint16 )( b / valid ) ) << 10 );
 		}
 	}
 	else {
-		if ( (pab[0] & prl[0] & pdia[0])!=255) {
+		if(  ( pab[0] & prl[0] & pdia[0] ) != 255  ) {
 			// pixel and one neighbor not transparent
-			return compress_pixel(p);
+			return compress_pixel( p );
 		}
 		return 0x73FE;
 	}
@@ -1163,10 +1162,10 @@ PIXVAL inline zoomin_pixel(uint8 *p, uint8* pab, uint8 *prl, uint8* pdia)
 static void rezoom_img(const image_id n)
 {
 	// may this image be zoomed
-	if(  n < anz_images  &&  images[n].base_h > 0  ) {
+	if(  n < anz_images && images[n].base_h > 0  ) {
 #ifdef MULTI_THREAD
 		pthread_mutex_lock( &rezoom_img_mutex[n % env_t::num_threads] );
-		if(  (images[n].recode_flags & FLAG_REZOOM) == 0  ) {
+		if(  ( images[n].recode_flags & FLAG_REZOOM ) == 0  ) {
 			// other routine did already the re-zooming ...
 			pthread_mutex_unlock( &rezoom_img_mutex[n % env_t::num_threads] );
 			return;
@@ -1181,7 +1180,7 @@ static void rezoom_img(const image_id n)
 			free( images[n].zoom_data );
 			images[n].zoom_data = NULL;
 		}
-		for(  uint8 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
+		for(  uint8 i = 0; i < MAX_PLAYER_COUNT; i++  ) {
 			if(  images[n].data[i] != NULL  ) {
 				free( images[n].data[i] );
 				images[n].data[i] = NULL;
@@ -1189,7 +1188,7 @@ static void rezoom_img(const image_id n)
 		}
 
 		// just restore original size?
-		if(  zoom_factor == ZOOM_NEUTRAL  ||  (images[n].recode_flags&FLAG_ZOOMABLE) == 0  ) {
+		if(  zoom_factor == ZOOM_NEUTRAL || ( images[n].recode_flags & FLAG_ZOOMABLE ) == 0  ) {
 			// this we can do be a simple copy ...
 			images[n].x = images[n].base_x;
 			images[n].w = images[n].base_w;
@@ -1203,12 +1202,12 @@ static void rezoom_img(const image_id n)
 				do {
 					// clear run + colored run + next clear run
 					sp++;
-					sp += (*sp)&(~TRANSPARENT_RUN); // MSVC crashes on (*sp)&(~TRANSPARENT_RUN) + 1 !!!
+					sp += ( *sp ) & ( ~TRANSPARENT_RUN ); // MSVC crashes on (*sp)&(~TRANSPARENT_RUN) + 1 !!!
 					sp ++;
 				} while(  *sp  );
 				sp++;
 			}
-			images[n].len = (uint32)(size_t)(sp - images[n].base_data);
+			images[n].len = (uint32)(size_t)( sp - images[n].base_data );
 			images[n].recode_flags &= ~FLAG_REZOOM;
 #ifdef MULTI_THREAD
 			pthread_mutex_unlock( &rezoom_img_mutex[n % env_t::num_threads] );
@@ -1218,29 +1217,29 @@ static void rezoom_img(const image_id n)
 
 		// now we want to downsize the image
 		// just divide the sizes
-		images[n].x = (images[n].base_x * zoom_num[zoom_factor]) / zoom_den[zoom_factor];
-		images[n].y = (images[n].base_y * zoom_num[zoom_factor]) / zoom_den[zoom_factor];
-		images[n].w = (images[n].base_w * zoom_num[zoom_factor]) / zoom_den[zoom_factor];
-		images[n].h = (images[n].base_h * zoom_num[zoom_factor]) / zoom_den[zoom_factor];
+		images[n].x = ( images[n].base_x * zoom_num[zoom_factor] ) / zoom_den[zoom_factor];
+		images[n].y = ( images[n].base_y * zoom_num[zoom_factor] ) / zoom_den[zoom_factor];
+		images[n].w = ( images[n].base_w * zoom_num[zoom_factor] ) / zoom_den[zoom_factor];
+		images[n].h = ( images[n].base_h * zoom_num[zoom_factor] ) / zoom_den[zoom_factor];
 
-		if(  images[n].h > 0  &&  images[n].w > 0  ) {
+		if(  images[n].h > 0 && images[n].w > 0  ) {
 			// just recalculate the image in the new size
 			PIXVAL *src = images[n].base_data;
 			PIXVAL *dest = NULL;
 			// embed the baseimage in an image with margin ~ remainder
-			const sint16 x_rem = (images[n].base_x * zoom_num[zoom_factor]) % zoom_den[zoom_factor];
-			const sint16 y_rem = (images[n].base_y * zoom_num[zoom_factor]) % zoom_den[zoom_factor];
-			const sint16 xl_margin = max( x_rem, 0);
-			const sint16 xr_margin = max(-x_rem, 0);
-			const sint16 yl_margin = max( y_rem, 0);
-			const sint16 yr_margin = max(-y_rem, 0);
+			const sint16 x_rem = ( images[n].base_x * zoom_num[zoom_factor] ) % zoom_den[zoom_factor];
+			const sint16 y_rem = ( images[n].base_y * zoom_num[zoom_factor] ) % zoom_den[zoom_factor];
+			const sint16 xl_margin = max( x_rem, 0 );
+			const sint16 xr_margin = max( -x_rem, 0 );
+			const sint16 yl_margin = max( y_rem, 0 );
+			const sint16 yr_margin = max( -y_rem, 0 );
 			// baseimage top-left  corner is at (xl_margin, yl_margin)
 			// ...       low-right corner is at (xr_margin, yr_margin)
 
-			sint32 orgzoomwidth = ((images[n].base_w + zoom_den[zoom_factor] - 1 ) / zoom_den[zoom_factor]) * zoom_den[zoom_factor];
-			sint32 newzoomwidth = (orgzoomwidth*zoom_num[zoom_factor])/zoom_den[zoom_factor];
-			sint32 orgzoomheight = ((images[n].base_h + zoom_den[zoom_factor] - 1 ) / zoom_den[zoom_factor]) * zoom_den[zoom_factor];
-			sint32 newzoomheight = (orgzoomheight * zoom_num[zoom_factor]) / zoom_den[zoom_factor];
+			sint32 orgzoomwidth = ( ( images[n].base_w + zoom_den[zoom_factor] - 1 ) / zoom_den[zoom_factor] ) * zoom_den[zoom_factor];
+			sint32 newzoomwidth = ( orgzoomwidth * zoom_num[zoom_factor] ) / zoom_den[zoom_factor];
+			sint32 orgzoomheight = ( ( images[n].base_h + zoom_den[zoom_factor] - 1 ) / zoom_den[zoom_factor] ) * zoom_den[zoom_factor];
+			sint32 newzoomheight = ( orgzoomheight * zoom_num[zoom_factor] ) / zoom_den[zoom_factor];
 
 			// we will unpack, re-sample, pack it
 
@@ -1254,46 +1253,46 @@ static void rezoom_img(const image_id n)
 			// We end with an over sized buffer for the normal usage, but since it's re-used for all re-zooms,
 			// it's not performance critical and we are safe from all possible inputs.
 
-			size_t new_size = ( ( (newzoomwidth * 3) / 2 ) + 1 + 2) * newzoomheight * sizeof(PIXVAL);
-			size_t unpack_size = (xl_margin + orgzoomwidth + xr_margin) * (yl_margin + orgzoomheight + yr_margin) * 4;
+			size_t new_size = ( ( ( newzoomwidth * 3 ) / 2 ) + 1 + 2 ) * newzoomheight * sizeof(PIXVAL);
+			size_t unpack_size = ( xl_margin + orgzoomwidth + xr_margin ) * ( yl_margin + orgzoomheight + yr_margin ) * 4;
 			if(  unpack_size > new_size  ) {
 				new_size = unpack_size;
 			}
-			new_size = ((new_size * 128) + 127) / 128; // enlarge slightly to try and keep buffers on their own cacheline for multithreaded access. A portable aligned_alloc would be better.
+			new_size = ( ( new_size * 128 ) + 127 ) / 128; // enlarge slightly to try and keep buffers on their own cacheline for multithreaded access. A portable aligned_alloc would be better.
 			if(  rezoom_size[n % env_t::num_threads] < new_size  ) {
 				free( rezoom_baseimage2[n % env_t::num_threads] );
 				free( rezoom_baseimage[n % env_t::num_threads] );
 				rezoom_size[n % env_t::num_threads] = new_size;
 				rezoom_baseimage[n % env_t::num_threads]  = MALLOCN( uint8, new_size );
-				rezoom_baseimage2[n % env_t::num_threads] = (PIXVAL *)MALLOCN( uint8, new_size );
+				rezoom_baseimage2[n % env_t::num_threads] = ( PIXVAL * )MALLOCN( uint8, new_size );
 			}
 			memset( rezoom_baseimage[n % env_t::num_threads], 255, new_size ); // fill with invalid data to mark transparent regions
 
 			// index of top-left corner
-			uint32 baseoff = 4 * (yl_margin * (xl_margin + orgzoomwidth + xr_margin) + xl_margin);
+			uint32 baseoff = 4 * ( yl_margin * ( xl_margin + orgzoomwidth + xr_margin ) + xl_margin );
 			sint32 basewidth = xl_margin + orgzoomwidth + xr_margin;
 
 			// now: unpack the image
-			for(  sint32 y = 0;  y < images[n].base_h;  ++y  ) {
+			for(  sint32 y = 0; y < images[n].base_h; ++y  ) {
 				uint16 runlen;
-				uint8 *p = rezoom_baseimage[n % env_t::num_threads] + baseoff + y * (basewidth * 4);
+				uint8 *p = rezoom_baseimage[n % env_t::num_threads] + baseoff + y * ( basewidth * 4 );
 
 				// decode line
 				runlen = *src++;
 				do {
 					// clear run
-					p += (runlen & ~TRANSPARENT_RUN) * 4;
+					p += ( runlen & ~TRANSPARENT_RUN ) * 4;
 					// color pixel
-					runlen = (*src++) & ~TRANSPARENT_RUN;
+					runlen = ( *src++ ) & ~TRANSPARENT_RUN;
 					while(  runlen--  ) {
 						// get rgb components
 						PIXVAL s = *src++;
-						*p++ = (s>>15);
-						*p++ = (s & 31);
+						*p++ = ( s >> 15 );
+						*p++ = ( s & 31 );
 						s >>= 5;
-						*p++ = (s & 31);
+						*p++ = ( s & 31 );
 						s >>= 5;
-						*p++ = (s & 31);
+						*p++ = ( s & 31 );
 					}
 					runlen = *src++;
 				} while(  runlen != 0  );
@@ -1303,12 +1302,12 @@ static void rezoom_img(const image_id n)
 			dest = rezoom_baseimage2[n % env_t::num_threads];
 			switch(  zoom_den[zoom_factor]  ) {
 				case 1: {
-					assert(zoom_num[zoom_factor]==2);
+					assert( zoom_num[zoom_factor] == 2 );
 
 					// first half row - just copy values, do not fiddle with neighbor colors
 					uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff;
-					for(  sint16 x = 0;  x < orgzoomwidth;  x++  ) {
-						PIXVAL c1 = compress_pixel_transparent( p1 + (x * 4) );
+					for(  sint16 x = 0; x < orgzoomwidth; x++  ) {
+						PIXVAL c1 = compress_pixel_transparent( p1 + ( x * 4 ) );
 						// now set the pixel ...
 						dest[x * 2] = c1;
 						dest[x * 2 + 1] = c1;
@@ -1316,19 +1315,19 @@ static void rezoom_img(const image_id n)
 					// skip one line
 					dest += newzoomwidth;
 
-					for(  sint16 y = 0;  y < orgzoomheight - 1;  y++  ) {
-						uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + y * (basewidth * 4);
+					for(  sint16 y = 0; y < orgzoomheight - 1; y++  ) {
+						uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + y * ( basewidth * 4 );
 						// copy leftmost pixels
 						dest[0] = compress_pixel_transparent( p1 );
 						dest[newzoomwidth] = compress_pixel_transparent( p1 + basewidth * 4 );
-						for(  sint16 x = 0;  x < orgzoomwidth - 1;  x++  ) {
-							uint8 *px1 = p1 + (x * 4);
+						for(  sint16 x = 0; x < orgzoomwidth - 1; x++  ) {
+							uint8 *px1 = p1 + ( x * 4 );
 							// pixel at 2,2 in 2x2 superpixel
 							dest[x * 2 + 1] = zoomin_pixel( px1, px1 + 4, px1 + basewidth * 4, px1 + basewidth * 4 + 4 );
 
 							// 2x2 superpixel is transparent but original pixel was not
 							// preserve one pixel
-							if(  dest[x * 2 + 1] == 0x73FE  &&  px1[0] != 255  &&  dest[x * 2] == 0x73FE  &&  dest[x * 2 - newzoomwidth] == 0x73FE  &&  dest[x * 2 - newzoomwidth - 1] == 0x73FE  ) {
+							if(  dest[x * 2 + 1] == 0x73FE && px1[0] != 255 && dest[x * 2] == 0x73FE && dest[x * 2 - newzoomwidth] == 0x73FE && dest[x * 2 - newzoomwidth - 1] == 0x73FE  ) {
 								// preserve one pixel
 								dest[x * 2 + 1] = compress_pixel( px1 );
 							}
@@ -1343,15 +1342,15 @@ static void rezoom_img(const image_id n)
 							dest[x * 2 + newzoomwidth + 2] = zoomin_pixel( px1 + basewidth * 4 + 4, px1 + basewidth * 4, px1 + 4, px1 );
 						}
 						// copy rightmost pixels
-						dest[2 * orgzoomwidth - 1] = compress_pixel_transparent( p1 + 4 * (orgzoomwidth - 1) );
-						dest[2 * orgzoomwidth + newzoomwidth - 1] = compress_pixel_transparent( p1 + 4 * (orgzoomwidth - 1) + basewidth * 4 );
+						dest[2 * orgzoomwidth - 1] = compress_pixel_transparent( p1 + 4 * ( orgzoomwidth - 1 ) );
+						dest[2 * orgzoomwidth + newzoomwidth - 1] = compress_pixel_transparent( p1 + 4 * ( orgzoomwidth - 1 ) + basewidth * 4 );
 						// skip two lines
 						dest += 2 * newzoomwidth;
 					}
 					// last half row - just copy values, do not fiddle with neighbor colors
-					p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + (orgzoomheight - 1) * (basewidth * 4);
-					for(  sint16 x = 0;  x < orgzoomwidth;  x++  ) {
-						PIXVAL c1 = compress_pixel_transparent( p1 + (x * 4) );
+					p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( orgzoomheight - 1 ) * ( basewidth * 4 );
+					for(  sint16 x = 0; x < orgzoomwidth; x++  ) {
+						PIXVAL c1 = compress_pixel_transparent( p1 + ( x * 4 ) );
 						// now set the pixel ...
 						dest[x * 2]   = c1;
 						dest[x * 2 + 1] = c1;
@@ -1359,14 +1358,14 @@ static void rezoom_img(const image_id n)
 					break;
 				}
 				case 2:
-					for(  sint16 y = 0;  y < newzoomheight;  y++  ) {
-						uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * zoom_den[zoom_factor] + 0 - y_rem) / zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p2 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * zoom_den[zoom_factor] + 1 - y_rem) / zoom_num[zoom_factor]) * (basewidth * 4);
-						for(  sint16 x = 0;  x < newzoomwidth;  x++  ) {
+					for(  sint16 y = 0; y < newzoomheight; y++  ) {
+						uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * zoom_den[zoom_factor] + 0 - y_rem ) / zoom_num[zoom_factor] ) * ( basewidth * 4 );
+						uint8 *p2 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * zoom_den[zoom_factor] + 1 - y_rem ) / zoom_num[zoom_factor] ) * ( basewidth * 4 );
+						for(  sint16 x = 0; x < newzoomwidth; x++  ) {
 							uint8 valid = 0;
 							uint8 r = 0, g = 0, b = 0;
-							sint16 xreal1 = ((x * zoom_den[zoom_factor] + 0 - x_rem) / zoom_num[zoom_factor]) * 4;
-							sint16 xreal2 = ((x * zoom_den[zoom_factor] + 1 - x_rem) / zoom_num[zoom_factor]) * 4;
+							sint16 xreal1 = ( ( x * zoom_den[zoom_factor] + 0 - x_rem ) / zoom_num[zoom_factor] ) * 4;
+							sint16 xreal2 = ( ( x * zoom_den[zoom_factor] + 1 - x_rem ) / zoom_num[zoom_factor] ) * 4;
 							SumSubpixel( p1 + xreal1 );
 							SumSubpixel( p1 + xreal2 );
 							SumSubpixel( p2 + xreal1 );
@@ -1375,25 +1374,25 @@ static void rezoom_img(const image_id n)
 								*dest++ = 0x73FE;
 							}
 							else if(  valid == 255  ) {
-								*dest++ = (0x8000 | r) + (((uint16)g)<<5) + (((uint16)b)<<10);
+								*dest++ = ( 0x8000 | r ) + ( ( ( uint16 )g ) << 5 ) + ( ( ( uint16 )b ) << 10 );
 							}
 							else {
-								*dest++ = (r/valid) + (((uint16)(g/valid))<<5) + (((uint16)(b/valid))<<10);
+								*dest++ = ( r / valid ) + ( ( ( uint16 )( g / valid ) ) << 5 ) + ( ( ( uint16 )( b / valid ) ) << 10 );
 							}
 						}
 					}
 					break;
 				case 3:
-					for(  sint16 y = 0;  y < newzoomheight;  y++  ) {
-						uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * zoom_den[zoom_factor] + 0 - y_rem) / zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p2 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * zoom_den[zoom_factor] + 1 - y_rem) / zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p3 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * zoom_den[zoom_factor] + 2 - y_rem) / zoom_num[zoom_factor]) * (basewidth * 4);
-						for(  sint16 x = 0;  x < newzoomwidth;  x++  ) {
+					for(  sint16 y = 0; y < newzoomheight; y++  ) {
+						uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * zoom_den[zoom_factor] + 0 - y_rem ) / zoom_num[zoom_factor] ) * ( basewidth * 4 );
+						uint8 *p2 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * zoom_den[zoom_factor] + 1 - y_rem ) / zoom_num[zoom_factor] ) * ( basewidth * 4 );
+						uint8 *p3 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * zoom_den[zoom_factor] + 2 - y_rem ) / zoom_num[zoom_factor] ) * ( basewidth * 4 );
+						for(  sint16 x = 0; x < newzoomwidth; x++  ) {
 							uint8 valid = 0;
 							uint16 r = 0, g = 0, b = 0;
-							sint16 xreal1 = ((x * zoom_den[zoom_factor] + 0 - x_rem) / zoom_num[zoom_factor]) * 4;
-							sint16 xreal2 = ((x * zoom_den[zoom_factor] + 1 - x_rem) / zoom_num[zoom_factor]) * 4;
-							sint16 xreal3 = ((x * zoom_den[zoom_factor] + 2 - x_rem) / zoom_num[zoom_factor]) * 4;
+							sint16 xreal1 = ( ( x * zoom_den[zoom_factor] + 0 - x_rem ) / zoom_num[zoom_factor] ) * 4;
+							sint16 xreal2 = ( ( x * zoom_den[zoom_factor] + 1 - x_rem ) / zoom_num[zoom_factor] ) * 4;
+							sint16 xreal3 = ( ( x * zoom_den[zoom_factor] + 2 - x_rem ) / zoom_num[zoom_factor] ) * 4;
 							SumSubpixel( p1 + xreal1 );
 							SumSubpixel( p1 + xreal2 );
 							SumSubpixel( p1 + xreal3 );
@@ -1407,27 +1406,27 @@ static void rezoom_img(const image_id n)
 								*dest++ = 0x73FE;
 							}
 							else if(  valid == 255  ) {
-								*dest++ = (0x8000 | r) + (((uint16)g)<<5) + (((uint16)b)<<10);
+								*dest++ = ( 0x8000 | r ) + ( ( ( uint16 )g ) << 5 ) + ( ( ( uint16 )b ) << 10 );
 							}
 							else {
-								*dest++ = (r/valid) | (((uint16)(g/valid))<<5) | (((uint16)(b/valid))<<10);
+								*dest++ = ( r / valid ) | ( ( ( uint16 )( g / valid ) ) << 5 ) | ( ( ( uint16 )( b / valid ) ) << 10 );
 							}
 						}
 					}
 					break;
 				case 4:
-					for(  sint16 y = 0;  y < newzoomheight;  y++  ) {
-						uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * zoom_den[zoom_factor] + 0 - y_rem) / zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p2 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * zoom_den[zoom_factor] + 1 - y_rem) / zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p3 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * zoom_den[zoom_factor] + 2 - y_rem) / zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p4 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * zoom_den[zoom_factor] + 3 - y_rem) / zoom_num[zoom_factor]) * (basewidth * 4);
-						for(  sint16 x = 0;  x < newzoomwidth;  x++  ) {
+					for(  sint16 y = 0; y < newzoomheight; y++  ) {
+						uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * zoom_den[zoom_factor] + 0 - y_rem ) / zoom_num[zoom_factor] ) * ( basewidth * 4 );
+						uint8 *p2 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * zoom_den[zoom_factor] + 1 - y_rem ) / zoom_num[zoom_factor] ) * ( basewidth * 4 );
+						uint8 *p3 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * zoom_den[zoom_factor] + 2 - y_rem ) / zoom_num[zoom_factor] ) * ( basewidth * 4 );
+						uint8 *p4 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * zoom_den[zoom_factor] + 3 - y_rem ) / zoom_num[zoom_factor] ) * ( basewidth * 4 );
+						for(  sint16 x = 0; x < newzoomwidth; x++  ) {
 							uint8 valid = 0;
 							uint16 r = 0, g = 0, b = 0;
-							sint16 xreal1 = ((x * zoom_den[zoom_factor] + 0 - x_rem) / zoom_num[zoom_factor]) * 4;
-							sint16 xreal2 = ((x * zoom_den[zoom_factor] + 1 - x_rem) / zoom_num[zoom_factor]) * 4;
-							sint16 xreal3 = ((x * zoom_den[zoom_factor] + 2 - x_rem) / zoom_num[zoom_factor]) * 4;
-							sint16 xreal4 = ((x * zoom_den[zoom_factor] + 3 - x_rem) / zoom_num[zoom_factor]) * 4;
+							sint16 xreal1 = ( ( x * zoom_den[zoom_factor] + 0 - x_rem ) / zoom_num[zoom_factor] ) * 4;
+							sint16 xreal2 = ( ( x * zoom_den[zoom_factor] + 1 - x_rem ) / zoom_num[zoom_factor] ) * 4;
+							sint16 xreal3 = ( ( x * zoom_den[zoom_factor] + 2 - x_rem ) / zoom_num[zoom_factor] ) * 4;
+							sint16 xreal4 = ( ( x * zoom_den[zoom_factor] + 3 - x_rem ) / zoom_num[zoom_factor] ) * 4;
 							SumSubpixel( p1 + xreal1 );
 							SumSubpixel( p1 + xreal2 );
 							SumSubpixel( p1 + xreal3 );
@@ -1448,35 +1447,35 @@ static void rezoom_img(const image_id n)
 								*dest++ = 0x73FE;
 							}
 							else if(  valid == 255  ) {
-								*dest++ = (0x8000 | r) + (((uint16)g)<<5) + (((uint16)b)<<10);
+								*dest++ = ( 0x8000 | r ) + ( ( ( uint16 )g ) << 5 ) + ( ( ( uint16 )b ) << 10 );
 							}
 							else {
-								*dest++ = (r/valid) | (((uint16)(g/valid))<<5) | (((uint16)(b/valid))<<10);
+								*dest++ = ( r / valid ) | ( ( ( uint16 )( g / valid ) ) << 5 ) | ( ( ( uint16 )( b / valid ) ) << 10 );
 							}
 						}
 					}
 					break;
 				case 8:
-					for(  sint16 y = 0;  y < newzoomheight;  y++  ) {
-						uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * zoom_den[zoom_factor] + 0 - y_rem) / zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p2 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * zoom_den[zoom_factor] + 1 - y_rem) / zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p3 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * zoom_den[zoom_factor] + 2 - y_rem) / zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p4 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * zoom_den[zoom_factor] + 3 - y_rem) / zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p5 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * zoom_den[zoom_factor] + 4 - y_rem) / zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p6 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * zoom_den[zoom_factor] + 5 - y_rem) / zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p7 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * zoom_den[zoom_factor] + 6 - y_rem) / zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p8 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * zoom_den[zoom_factor] + 7 - y_rem) / zoom_num[zoom_factor]) * (basewidth * 4);
-						for(  sint16 x = 0;  x < newzoomwidth;  x++  ) {
+					for(  sint16 y = 0; y < newzoomheight; y++  ) {
+						uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * zoom_den[zoom_factor] + 0 - y_rem ) / zoom_num[zoom_factor] ) * ( basewidth * 4 );
+						uint8 *p2 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * zoom_den[zoom_factor] + 1 - y_rem ) / zoom_num[zoom_factor] ) * ( basewidth * 4 );
+						uint8 *p3 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * zoom_den[zoom_factor] + 2 - y_rem ) / zoom_num[zoom_factor] ) * ( basewidth * 4 );
+						uint8 *p4 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * zoom_den[zoom_factor] + 3 - y_rem ) / zoom_num[zoom_factor] ) * ( basewidth * 4 );
+						uint8 *p5 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * zoom_den[zoom_factor] + 4 - y_rem ) / zoom_num[zoom_factor] ) * ( basewidth * 4 );
+						uint8 *p6 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * zoom_den[zoom_factor] + 5 - y_rem ) / zoom_num[zoom_factor] ) * ( basewidth * 4 );
+						uint8 *p7 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * zoom_den[zoom_factor] + 6 - y_rem ) / zoom_num[zoom_factor] ) * ( basewidth * 4 );
+						uint8 *p8 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * zoom_den[zoom_factor] + 7 - y_rem ) / zoom_num[zoom_factor] ) * ( basewidth * 4 );
+						for(  sint16 x = 0; x < newzoomwidth; x++  ) {
 							uint8 valid = 0;
 							uint16 r = 0, g = 0, b = 0;
-							sint16 xreal1 = ((x * zoom_den[zoom_factor] + 0 - x_rem) / zoom_num[zoom_factor]) * 4;
-							sint16 xreal2 = ((x * zoom_den[zoom_factor] + 1 - x_rem) / zoom_num[zoom_factor]) * 4;
-							sint16 xreal3 = ((x * zoom_den[zoom_factor] + 2 - x_rem) / zoom_num[zoom_factor]) * 4;
-							sint16 xreal4 = ((x * zoom_den[zoom_factor] + 3 - x_rem) / zoom_num[zoom_factor]) * 4;
-							sint16 xreal5 = ((x * zoom_den[zoom_factor] + 4 - x_rem) / zoom_num[zoom_factor]) * 4;
-							sint16 xreal6 = ((x * zoom_den[zoom_factor] + 5 - x_rem) / zoom_num[zoom_factor]) * 4;
-							sint16 xreal7 = ((x * zoom_den[zoom_factor] + 6 - x_rem) / zoom_num[zoom_factor]) * 4;
-							sint16 xreal8 = ((x * zoom_den[zoom_factor] + 7 - x_rem) / zoom_num[zoom_factor]) * 4;
+							sint16 xreal1 = ( ( x * zoom_den[zoom_factor] + 0 - x_rem ) / zoom_num[zoom_factor] ) * 4;
+							sint16 xreal2 = ( ( x * zoom_den[zoom_factor] + 1 - x_rem ) / zoom_num[zoom_factor] ) * 4;
+							sint16 xreal3 = ( ( x * zoom_den[zoom_factor] + 2 - x_rem ) / zoom_num[zoom_factor] ) * 4;
+							sint16 xreal4 = ( ( x * zoom_den[zoom_factor] + 3 - x_rem ) / zoom_num[zoom_factor] ) * 4;
+							sint16 xreal5 = ( ( x * zoom_den[zoom_factor] + 4 - x_rem ) / zoom_num[zoom_factor] ) * 4;
+							sint16 xreal6 = ( ( x * zoom_den[zoom_factor] + 5 - x_rem ) / zoom_num[zoom_factor] ) * 4;
+							sint16 xreal7 = ( ( x * zoom_den[zoom_factor] + 6 - x_rem ) / zoom_num[zoom_factor] ) * 4;
+							sint16 xreal8 = ( ( x * zoom_den[zoom_factor] + 7 - x_rem ) / zoom_num[zoom_factor] ) * 4;
 							SumSubpixel( p1 + xreal1 );
 							SumSubpixel( p1 + xreal2 );
 							SumSubpixel( p1 + xreal3 );
@@ -1545,37 +1544,38 @@ static void rezoom_img(const image_id n)
 								*dest++ = 0x73FE;
 							}
 							else if(  valid == 255  ) {
-								*dest++ = (0x8000 | r) + (((uint16)g)<<5) + (((uint16)b)<<10);
+								*dest++ = ( 0x8000 | r ) + ( ( ( uint16 )g ) << 5 ) + ( ( ( uint16 )b ) << 10 );
 							}
 							else {
-								*dest++ = (r/valid) | (((uint16)(g/valid))<<5) | (((uint16)(b/valid))<<10);
+								*dest++ = ( r / valid ) | ( ( ( uint16 )( g / valid ) ) << 5 ) | ( ( ( uint16 )( b / valid ) ) << 10 );
 							}
 						}
 					}
 					break;
-				default: assert(0);
-			}
+				default:
+					assert( 0 );
+				}
 
 			// now encode the image again
-			dest = (PIXVAL*)rezoom_baseimage[n % env_t::num_threads];
-			for(  sint16 y = 0;  y < newzoomheight;  y++  ) {
-				PIXVAL *line = ((PIXVAL *)rezoom_baseimage2[n % env_t::num_threads]) + (y * newzoomwidth);
+			dest = ( PIXVAL * )rezoom_baseimage[n % env_t::num_threads];
+			for(  sint16 y = 0; y < newzoomheight; y++  ) {
+				PIXVAL *line = ( ( PIXVAL * )rezoom_baseimage2[n % env_t::num_threads] ) + ( y * newzoomwidth );
 				PIXVAL count;
 				sint16 x = 0;
 				uint16 clear_colored_run_pair_count = 0;
 
 				do {
 					// check length of transparent pixels
-					for(  count = 0;  x < newzoomwidth  &&  line[x] == 0x73FE;  count++, x++  )
-						{}
+					for(  count = 0; x < newzoomwidth && line[x] == 0x73FE; count++, x++  ) {
+					}
 					// first runlength: transparent pixels
 					*dest++ = count;
 					uint16 has_alpha = 0;
 					// copy for non-transparent
 					count = 0;
-					while(  x < newzoomwidth  &&  line[x] != 0x73FE  ) {
+					while(  x < newzoomwidth && line[x] != 0x73FE  ) {
 						PIXVAL pixval = line[x++];
-						if(  pixval >= 0x8020  &&  !has_alpha  ) {
+						if(  pixval >= 0x8020 && !has_alpha  ) {
 							if(  count  ) {
 								*dest++ = count;
 								dest += count;
@@ -1584,9 +1584,9 @@ static void rezoom_img(const image_id n)
 							}
 							has_alpha = TRANSPARENT_RUN;
 						}
-						else if(  pixval < 0x8020  &&  has_alpha  ) {
+						else if(  pixval < 0x8020 && has_alpha  ) {
 							if(  count  ) {
-								*dest++ = count+TRANSPARENT_RUN;
+								*dest++ = count + TRANSPARENT_RUN;
 								dest += count;
 								count = 0;
 								*dest++ = TRANSPARENT_RUN;
@@ -1601,12 +1601,12 @@ static void rezoom_img(const image_id n)
 					 * If it is not the first clear-colored-run pair and its colored run is empty
 					 * --> it is superfluous and can be removed by rolling back the pointer
 					 */
-					if(  clear_colored_run_pair_count > 0  &&  count == 0  ) {
+					if(  clear_colored_run_pair_count > 0 && count == 0  ) {
 						dest--;
 						// this only happens at the end of a line, so no need to increment clear_colored_run_pair_count
 					}
 					else {
-						*dest++ = count+has_alpha; // number of colored pixels
+						*dest++ = count + has_alpha; // number of colored pixels
 						dest += count; // skip them
 						clear_colored_run_pair_count++;
 					}
@@ -1618,9 +1618,9 @@ static void rezoom_img(const image_id n)
 			images[n].w = newzoomwidth;
 			images[n].h = newzoomheight;
 			if(  newzoomheight > 0  ) {
-				const size_t zoom_len = (size_t)(((uint8 *)dest) - ((uint8 *)rezoom_baseimage[n % env_t::num_threads]));
-				images[n].len = (uint32)(zoom_len / sizeof(PIXVAL));
-				images[n].zoom_data = MALLOCN(PIXVAL, images[n].len);
+				const size_t zoom_len = (size_t)( ( (uint8 *)dest ) - ( (uint8 *)rezoom_baseimage[n % env_t::num_threads] ) );
+				images[n].len = (uint32)( zoom_len / sizeof(PIXVAL) );
+				images[n].zoom_data = MALLOCN( PIXVAL, images[n].len );
 				assert( images[n].zoom_data );
 				memcpy( images[n].zoom_data, rezoom_baseimage[n % env_t::num_threads], zoom_len );
 			}
@@ -1661,17 +1661,17 @@ scr_size display_get_best_matching_size(const image_id n, sint16 zoom_percent)
 
 
 // force a certain size on a image (for rescaling tool images)
-void display_fit_img_to_width( const image_id n, sint16 new_w )
+void display_fit_img_to_width(const image_id n, sint16 new_w)
 {
-	if(  n < anz_images  &&  images[n].base_h > 0  &&  images[n].w != new_w  ) {
+	if(  n < anz_images && images[n].base_h > 0 && images[n].w != new_w  ) {
 		int old_zoom_factor = zoom_factor;
-		for(  int i=0;  i<=MAX_ZOOM_FACTOR;  i++  ) {
-			int zoom_w = (images[n].base_w * zoom_num[i]) / zoom_den[i];
+		for(  int i = 0; i <= MAX_ZOOM_FACTOR; i++  ) {
+			int zoom_w = ( images[n].base_w * zoom_num[i] ) / zoom_den[i];
 			if(  zoom_w <= new_w  ) {
 				uint8 old_zoom_flag = images[n].recode_flags & FLAG_ZOOMABLE;
 				images[n].recode_flags |= FLAG_REZOOM | FLAG_ZOOMABLE;
 				zoom_factor = i;
-				rezoom_img(n);
+				rezoom_img( n );
 				images[n].recode_flags &= ~FLAG_ZOOMABLE;
 				images[n].recode_flags |= old_zoom_flag;
 				zoom_factor = old_zoom_factor;
@@ -1684,7 +1684,7 @@ void display_fit_img_to_width( const image_id n, sint16 new_w )
 
 static void calc_base_pal_from_night_shift(const int night)
 {
-	const int night2 = min(night, 4);
+	const int night2 = min( night, 4 );
 	const int day = 4 - night2;
 	unsigned int i;
 
@@ -1694,70 +1694,70 @@ static void calc_base_pal_from_night_shift(const int night)
 	//                     0,75 - quite bright                 80        17
 	//                     0,8    bright                      104        22
 
-	const double RG_night_multiplier = pow(0.75, night) * ((light_level + 8.0) / 8.0);
-	const double B_night_multiplier  = pow(0.83, night) * ((light_level + 8.0) / 8.0);
+	const double RG_night_multiplier = pow( 0.75, night ) * ( ( light_level + 8.0 ) / 8.0 );
+	const double B_night_multiplier  = pow( 0.83, night ) * ( ( light_level + 8.0 ) / 8.0 );
 
-	for (i = 0; i < 0x8000; i++) {
+	for(  i = 0; i < 0x8000; i++  ) {
 		// (1<<15) this is total no of all possible colors in RGB555)
 		// RGB 555 input
-		int R = (i & 0x7C00) >> 7;
-		int G = (i & 0x03E0) >> 2;
-		int B = (i & 0x001F) << 3;
+		int R = ( i & 0x7C00 ) >> 7;
+		int G = ( i & 0x03E0 ) >> 2;
+		int B = ( i & 0x001F ) << 3;
 		// lines generate all possible colors in 555RGB code - input
 		// however the result is in 888RGB - 8bit per channel
 
-		R = (int)(R * RG_night_multiplier);
-		G = (int)(G * RG_night_multiplier);
-		B = (int)(B * B_night_multiplier);
+		R = (int)( R * RG_night_multiplier );
+		G = (int)( G * RG_night_multiplier );
+		B = (int)( B * B_night_multiplier );
 
-		rgbmap_day_night[i] = get_system_color({ (uint8)R, (uint8)G, (uint8)B });
+		rgbmap_day_night[i] = get_system_color( { (uint8)R, (uint8)G, (uint8)B } );
 	}
 
 	// again the same but for transparent colors
-	for (i = 0; i < 0x0400; i++) {
+	for(  i = 0; i < 0x0400; i++  ) {
 		// RGB 343 input
-		int R = (i & 0x0380) >> 2;
-		int G = (i & 0x0078) << 1;
-		int B = (i & 0x0007) << 5;
+		int R = ( i & 0x0380 ) >> 2;
+		int G = ( i & 0x0078 ) << 1;
+		int B = ( i & 0x0007 ) << 5;
 
 		// lines generate all possible colors in 343RGB code - input
 		// however the result is in 888RGB - 8bit per channel
-		R = (int)(R * RG_night_multiplier);
-		G = (int)(G * RG_night_multiplier);
-		B = (int)(B *  B_night_multiplier);
+		R = (int)( R * RG_night_multiplier );
+		G = (int)( G * RG_night_multiplier );
+		B = (int)( B *  B_night_multiplier );
 
-		PIXVAL color = get_system_color({ (uint8)R, (uint8)G, (uint8)B });
-		rgbmap_day_night[0x8000 +MAX_PLAYER_COUNT + LIGHT_COUNT + i] = color;
+		PIXVAL color = get_system_color( { (uint8)R, (uint8)G, (uint8)B } );
+		rgbmap_day_night[0x8000 + MAX_PLAYER_COUNT + LIGHT_COUNT + i] = color;
 	}
 
 	// player color map (and used for map display etc.)
-	for (i = 0; i < SPECIAL_COLOR_COUNT; i++) {
-		const int R = (int)(special_pal[i].r * RG_night_multiplier);
-		const int G = (int)(special_pal[i].g * RG_night_multiplier);
-		const int B = (int)(special_pal[i].b *  B_night_multiplier);
+	for(  i = 0; i < SPECIAL_COLOR_COUNT; i++  ) {
+		const int R = (int)( special_pal[i].r * RG_night_multiplier );
+		const int G = (int)( special_pal[i].g * RG_night_multiplier );
+		const int B = (int)( special_pal[i].b *  B_night_multiplier );
 
-		specialcolormap_day_night[i] = get_system_color({ (uint8)R, (uint8)G, (uint8)B });
+		specialcolormap_day_night[i] = get_system_color( { (uint8)R, (uint8)G, (uint8)B } );
 	}
 
 	// special light colors (actually, only non-darkening greys should be used)
-	for(i=0;  i<LIGHT_COUNT;  i++  ) {
-		specialcolormap_day_night[SPECIAL_COLOR_COUNT+i] = get_system_color( display_day_lights[i] );
+	for(  i = 0; i < LIGHT_COUNT; i++  ) {
+		specialcolormap_day_night[SPECIAL_COLOR_COUNT + i] = get_system_color( display_day_lights[i] );
 	}
 
 	// init with black for forbidden colors
-	for(i=SPECIAL_COLOR_COUNT+LIGHT_COUNT;  i<256;  i++  ) {
+	for(  i = SPECIAL_COLOR_COUNT + LIGHT_COUNT; i < 256; i++  ) {
 		specialcolormap_day_night[i] = 0;
 	}
 
 	// default player colors
-	for(i=0;  i<8;  i++  ) {
-		rgbmap_day_night[0x8000+i] = specialcolormap_day_night[player_offsets[0][0]+i];
-		rgbmap_day_night[0x8008+i] = specialcolormap_day_night[player_offsets[0][1]+i];
+	for(  i = 0; i < 8; i++  ) {
+		rgbmap_day_night[0x8000 + i] = specialcolormap_day_night[player_offsets[0][0] + i];
+		rgbmap_day_night[0x8008 + i] = specialcolormap_day_night[player_offsets[0][1] + i];
 	}
 	player_night = 0;
 
 	// Lights
-	for (i = 0; i < LIGHT_COUNT; i++) {
+	for(  i = 0; i < LIGHT_COUNT; i++  ) {
 		const int day_R = display_day_lights[i].r;
 		const int day_G = display_day_lights[i].g;
 		const int day_B = display_day_lights[i].b;
@@ -1766,11 +1766,11 @@ static void calc_base_pal_from_night_shift(const int night)
 		const int night_G = display_night_lights[i].g;
 		const int night_B = display_night_lights[i].b;
 
-		const int R = (day_R * day + night_R * night2) >> 2;
-		const int G = (day_G * day + night_G * night2) >> 2;
-		const int B = (day_B * day + night_B * night2) >> 2;
+		const int R = ( day_R * day + night_R * night2 ) >> 2;
+		const int G = ( day_G * day + night_G * night2 ) >> 2;
+		const int B = ( day_B * day + night_B * night2 ) >> 2;
 
-		PIXVAL color = get_system_color({ (uint8)max(R,0), (uint8)max(G,0), (uint8)max(B,0) });
+		PIXVAL color = get_system_color( { (uint8)max( R, 0 ), (uint8)max( G, 0 ), (uint8)max( B, 0 ) } );
 		rgbmap_day_night[0x8000 + MAX_PLAYER_COUNT + i] = color;
 	}
 
@@ -1783,7 +1783,7 @@ void display_day_night_shift(int night)
 {
 	if(  night != night_shift  ) {
 		night_shift = night;
-		calc_base_pal_from_night_shift(night);
+		calc_base_pal_from_night_shift( night );
 		mark_screen_dirty();
 	}
 }
@@ -1792,16 +1792,16 @@ void display_day_night_shift(int night)
 // set first and second company color for player
 void display_set_player_color_scheme(const int player, const uint8 col1, const uint8 col2 )
 {
-	if(player_offsets[player][0]!=col1  ||  player_offsets[player][1]!=col2) {
+	if(  player_offsets[player][0] != col1 || player_offsets[player][1] != col2  ) {
 		// set new player colors
 		player_offsets[player][0] = col1;
 		player_offsets[player][1] = col2;
-		if(player==player_day  ||  player==player_night) {
+		if(  player == player_day || player == player_night  ) {
 			// and recalculate map (and save it)
-			calc_base_pal_from_night_shift(0);
-			memcpy(rgbmap_all_day, rgbmap_day_night, RGBMAPSIZE * sizeof(PIXVAL));
-			if(night_shift!=0) {
-				calc_base_pal_from_night_shift(night_shift);
+			calc_base_pal_from_night_shift( 0 );
+			memcpy( rgbmap_all_day, rgbmap_day_night, RGBMAPSIZE * sizeof(PIXVAL) );
+			if(  night_shift != 0  ) {
+				calc_base_pal_from_night_shift( night_shift );
 			}
 			// calc_base_pal_from_night_shift resets player_night to 0
 			player_day = player_night;
@@ -1818,14 +1818,14 @@ void register_image(image_t *image_in)
 	struct imd *image;
 
 	/* valid image? */
-	if(  image_in->len == 0  ||  image_in->h == 0  ) {
-		dbg->warning("register_image()", "Ignoring image %d because of missing data", anz_images);
+	if(  image_in->len == 0 || image_in->h == 0  ) {
+		dbg->warning( "register_image()", "Ignoring image %d because of missing data", anz_images );
 		image_in->imageid = IMG_EMPTY;
 		return;
 	}
 
 	if(  anz_images == alloc_images  ) {
-		if(  images==NULL  ) {
+		if(  images == NULL  ) {
 			alloc_images = 510;
 		}
 		else {
@@ -1835,7 +1835,7 @@ void register_image(image_t *image_in)
 			// overflow
 			dbg->fatal( "register_image", "*** Out of images (more than %li!) ***", anz_images );
 		}
-		images = REALLOC(images, imd, alloc_images);
+		images = REALLOC( images, imd, alloc_images );
 	}
 
 	image_in->imageid = anz_images;
@@ -1854,7 +1854,7 @@ void register_image(image_t *image_in)
 	image->player_flags = 0xFFFF; // recode all player colors
 
 	// find out if there are really player colors
-	for(  PIXVAL *src = image_in->data, y = 0;  y < image_in->h;  ++y  ) {
+	for(  PIXVAL *src = image_in->data, y = 0; y < image_in->h; ++y  ) {
 		uint16 runlen;
 
 		// decode line
@@ -1870,15 +1870,15 @@ void register_image(image_t *image_in)
 			while(  runlen--  ) {
 				// get rgb components
 				PIXVAL s = *src++;
-				if(  s>=0x8000  &&  s<0x8010  ) {
+				if(  s >= 0x8000 && s < 0x8010  ) {
 					image->recode_flags |= FLAG_HAS_PLAYER_COLOR;
 				}
 			}
 			runlen = *src++;
-		} while(  runlen!=0  ); // end of row: runlen == 0
+		} while(  runlen != 0  );   // end of row: runlen == 0
 	}
 
-	for(  uint8 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
+	for(  uint8 i = 0; i < MAX_PLAYER_COUNT; i++  ) {
 		image->data[i] = NULL;
 	}
 
@@ -1900,14 +1900,14 @@ void register_image(image_t *image_in)
 
 // delete all images above a certain number ...
 // (mostly needed when changing climate zones)
-void display_free_all_images_above( image_id above )
+void display_free_all_images_above(image_id above)
 {
 	while(  above < anz_images  ) {
 		anz_images--;
 		if(  images[anz_images].zoom_data != NULL  ) {
 			free( images[anz_images].zoom_data );
 		}
-		for(  uint8 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
+		for(  uint8 i = 0; i < MAX_PLAYER_COUNT; i++  ) {
 			if(  images[anz_images].data[i] != NULL  ) {
 				free( images[anz_images].data[i] );
 			}
@@ -1961,18 +1961,18 @@ static inline void pixcopy(PIXVAL *dest, const PIXVAL *src, const PIXVAL * const
  */
 static inline void colorpixcopy(PIXVAL* dest, const PIXVAL* src, const PIXVAL* const end)
 {
-	if (*src < 0x8020) {
-		while (src < end) {
+	if(  *src < 0x8020  ) {
+		while(  src < end  ) {
 			*dest++ = rgbmap_current[*src++];
 		}
 	}
 	else {
-		while (src < end) {
+		while(  src < end  ) {
 			// a semi-transparent pixel
 			uint16 aux   = *src++ - 0x8020;
-			uint16 alpha = (aux % 31) + 1;
+			uint16 alpha = ( aux % 31 ) + 1;
 
-			*dest = colors_blend_alpha32(*dest, rgbmap_day_night[0x8000 + aux / 31], alpha);
+			*dest = colors_blend_alpha32( *dest, rgbmap_day_night[0x8000 + aux / 31], alpha );
 			dest++;
 		}
 	}
@@ -1984,18 +1984,18 @@ static inline void colorpixcopy(PIXVAL* dest, const PIXVAL* src, const PIXVAL* c
  */
 static inline void colorpixcopydaytime(PIXVAL* dest, const PIXVAL* src, const PIXVAL* const end)
 {
-	if (*src < 0x8020) {
-		while (src < end) {
+	if(  *src < 0x8020  ) {
+		while(  src < end  ) {
 			*dest++ = rgbmap_current[*src++];
 		}
 	}
 	else {
-		while (src < end) {
+		while(  src < end  ) {
 			// a semi-transparent pixel
 			uint16 aux   = *src++ - 0x8020;
-			uint16 alpha = (aux % 31) + 1;
+			uint16 alpha = ( aux % 31 ) + 1;
 
-			*dest = colors_blend_alpha32(*dest, rgbmap_all_day[0x8000 + aux / 31], alpha);
+			*dest = colors_blend_alpha32( *dest, rgbmap_all_day[0x8000 + aux / 31], alpha );
 			dest++;
 		}
 	}
@@ -2018,19 +2018,19 @@ template<pixcopy_routines copyroutine> void templated_pixcopy(PIXVAL *dest, cons
 
 template<> void templated_pixcopy<plain>(PIXVAL *dest, const PIXVAL *src, const PIXVAL * const end)
 {
-	pixcopy(dest, src, end);
+	pixcopy( dest, src, end );
 }
 
 
 template<> void templated_pixcopy<colored>(PIXVAL* dest, const PIXVAL* src, const PIXVAL* const end)
 {
-	colorpixcopy(dest, src, end);
+	colorpixcopy( dest, src, end );
 }
 
 
 template<> void templated_pixcopy<daytime>(PIXVAL* dest, const PIXVAL* src, const PIXVAL* const end)
 {
-	colorpixcopydaytime(dest, src, end);
+	colorpixcopydaytime( dest, src, end );
 }
 
 
@@ -2044,7 +2044,7 @@ static void display_img_pc(scr_coord_val h, const scr_coord_val xp, const scr_co
 		PIXVAL *tp = textur + yp * disp_width;
 
 		// initialize clipping
-		init_ranges( yp  CLIP_NUM_PAR);
+		init_ranges( yp  CLIP_NUM_PAR );
 		do { // line decoder
 			int xpos = xp;
 
@@ -2056,7 +2056,7 @@ static void display_img_pc(scr_coord_val h, const scr_coord_val xp, const scr_co
 			get_xrange_and_step_y( xmin, xmax  CLIP_NUM_PAR );
 			do {
 				// we start with a clear run (which may be 0 pixels)
-				xpos += (runlen & ~TRANSPARENT_RUN);
+				xpos += ( runlen & ~TRANSPARENT_RUN );
 
 				// now get colored pixels
 				runlen = *sp++;
@@ -2064,24 +2064,24 @@ static void display_img_pc(scr_coord_val h, const scr_coord_val xp, const scr_co
 				runlen &= ~TRANSPARENT_RUN;
 
 				// something to display?
-				if (xmin < xmax  &&  xpos + runlen > xmin && xpos < xmax) {
-					const int left = (xpos >= xmin ? 0 : xmin - xpos);
-					const int len  = (xmax - xpos >= runlen ? runlen : xmax - xpos);
+				if(  xmin < xmax && xpos + runlen > xmin && xpos < xmax  ) {
+					const int left = ( xpos >= xmin ? 0 : xmin - xpos );
+					const int len  = ( xmax - xpos >= runlen ? runlen : xmax - xpos );
 					if(  !has_alpha  ) {
-						templated_pixcopy<copyroutine>(tp + xpos + left, sp + left, sp + len);
+						templated_pixcopy<copyroutine>( tp + xpos + left, sp + left, sp + len );
 					}
 					else {
-						colorpixcopy(tp + xpos + left, sp + left, sp + len);
+						colorpixcopy( tp + xpos + left, sp + left, sp + len );
 					}
 				}
 
 				sp += runlen;
 				xpos += runlen;
 
-			} while ((runlen = *sp++));
+			} while(  ( runlen = *sp++ )  );
 
 			tp += disp_width;
-		} while (--h);
+		} while(  --h  );
 	}
 }
 
@@ -2102,7 +2102,7 @@ static void display_img_wc(scr_coord_val h, const scr_coord_val xp, const scr_co
 
 			do {
 				// we start with a clear run
-				xpos += (runlen & ~TRANSPARENT_RUN);
+				xpos += ( runlen & ~TRANSPARENT_RUN );
 
 				// now get colored pixels
 				runlen = *sp++;
@@ -2110,23 +2110,23 @@ static void display_img_wc(scr_coord_val h, const scr_coord_val xp, const scr_co
 				runlen &= ~TRANSPARENT_RUN;
 
 				// something to display?
-				if(  xpos + runlen > CR.clip_rect.x  &&  xpos < CR.clip_rect.xx  ) {
-					const int left = (xpos >= CR.clip_rect.x ? 0 : CR.clip_rect.x - xpos);
-					const int len  = (CR.clip_rect.xx - xpos >= runlen ? runlen : CR.clip_rect.xx - xpos);
+				if(  xpos + runlen > CR.clip_rect.x && xpos < CR.clip_rect.xx  ) {
+					const int left = ( xpos >= CR.clip_rect.x ? 0 : CR.clip_rect.x - xpos );
+					const int len  = ( CR.clip_rect.xx - xpos >= runlen ? runlen : CR.clip_rect.xx - xpos );
 					if(  !has_alpha  ) {
-						pixcopy(tp + xpos + left, sp + left, sp + len);
+						pixcopy( tp + xpos + left, sp + left, sp + len );
 					}
 					else {
-						colorpixcopy(tp + xpos + left, sp + left, sp + len);
+						colorpixcopy( tp + xpos + left, sp + left, sp + len );
 					}
 				}
 
 				sp += runlen;
 				xpos += runlen;
-			} while ((runlen = *sp++));
+			} while(  ( runlen = *sp++ )  );
 
 			tp += disp_width;
-		} while (--h);
+		} while(  --h  );
 	}
 }
 
@@ -2136,7 +2136,7 @@ static void display_img_wc(scr_coord_val h, const scr_coord_val xp, const scr_co
  */
 static void display_img_nc(scr_coord_val h, const scr_coord_val xp, const scr_coord_val yp, const PIXVAL *sp)
 {
-	if (h > 0) {
+	if(  h > 0  ) {
 		PIXVAL *tp = textur + xp + yp * disp_width;
 
 		do { // line decoder
@@ -2146,13 +2146,13 @@ static void display_img_nc(scr_coord_val h, const scr_coord_val xp, const scr_co
 			// one line decoder
 			do {
 				// we start with a clear run
-				p += (runlen & ~TRANSPARENT_RUN);
+				p += ( runlen & ~TRANSPARENT_RUN );
 
 				// now get colored pixels
 				runlen = *sp++;
 				if(  runlen & TRANSPARENT_RUN  ) {
 					runlen &= ~TRANSPARENT_RUN;
-					colorpixcopy( p, sp, sp+runlen );
+					colorpixcopy( p, sp, sp + runlen );
 					p += runlen;
 					sp += runlen;
 				}
@@ -2167,24 +2167,24 @@ static void display_img_nc(scr_coord_val h, const scr_coord_val xp, const scr_co
 					// trying to merge reads and writes
 					if(  runlen  ) {
 						// align to 4 bytes, should use uintptr_t but not available
-						if(  reinterpret_cast<size_t>(p) & 0x2  ) {
+						if(  reinterpret_cast<size_t>( p ) & 0x2  ) {
 							*p++ = *sp++;
 							runlen--;
 						}
 						// aligned fast copy loop
 						bool const postalign = runlen & 1;
 						runlen >>= 1;
-						uint32 *ld = (uint32 *)p;
-						while (runlen--) {
+						uint32 *ld = ( uint32 * )p;
+						while(  runlen--  ) {
 #if defined _MSC_VER // MSVC can read unaligned
-							*ld++ = *(uint32 const *const)sp;
+							*ld++ = *( uint32 const * const )sp;
 #else
 							// little endian order, assumed by default
-							*ld++ = (uint32(sp[1]) << 16) | uint32(sp[0]);
+							*ld++ = ( uint32( sp[1] ) << 16 ) | uint32( sp[0] );
 #endif
 							sp += 2;
 						}
-						p = (PIXVAL*)ld;
+						p = (PIXVAL *)ld;
 						// finish unaligned remainder
 						if(  postalign  ) {
 							*p++ = *sp++;
@@ -2194,46 +2194,46 @@ static void display_img_nc(scr_coord_val h, const scr_coord_val xp, const scr_co
 #else
 					// high level c++
 					const PIXVAL *const splast = sp + runlen;
-					p = std::copy(sp, splast, p);
+					p = std::copy( sp, splast, p );
 					sp = splast;
 #endif
 				}
 				runlen = *sp++;
-			} while (runlen != 0);
+			} while(  runlen != 0  );
 
 			tp += disp_width;
-		} while (--h > 0);
+		} while(  --h > 0  );
 	}
 }
 
 
 // only used for GUI
-void display_img_aligned( const image_id n, scr_rect area, int align, const bool dirty)
+void display_img_aligned(const image_id n, scr_rect area, int align, const bool dirty)
 {
 	if(  n < anz_images  ) {
-		scr_coord_val x,y;
+		scr_coord_val x, y;
 
 		// align the image horizontally
 		x = area.x;
-		if(  (align & ALIGN_RIGHT) == ALIGN_CENTER_H  ) {
+		if(  ( align & ALIGN_RIGHT ) == ALIGN_CENTER_H  ) {
 			x -= images[n].x;
-			x += (area.w-images[n].w)/2;
+			x += ( area.w - images[n].w ) / 2;
 		}
-		else if(  (align & ALIGN_RIGHT) == ALIGN_RIGHT  ) {
+		else if(  ( align & ALIGN_RIGHT ) == ALIGN_RIGHT  ) {
 			x = area.get_right() - images[n].x - images[n].w;
 		}
 
 		// align the image vertically
 		y = area.y;
-		if(  (align & ALIGN_BOTTOM) == ALIGN_CENTER_V  ) {
+		if(  ( align & ALIGN_BOTTOM ) == ALIGN_CENTER_V  ) {
 			y -= images[n].y;
-			y += (area.h-images[n].h)/2;
+			y += ( area.h - images[n].h ) / 2;
 		}
-		else if(  (align & ALIGN_BOTTOM) == ALIGN_BOTTOM  ) {
+		else if(  ( align & ALIGN_BOTTOM ) == ALIGN_BOTTOM  ) {
 			y = area.get_bottom() - images[n].y - images[n].h;
 		}
 
-		display_color_img( n, x, y, 0, false, dirty  CLIP_NUM_DEFAULT);
+		display_color_img( n, x, y, 0, false, dirty  CLIP_NUM_DEFAULT );
 	}
 }
 
@@ -2253,21 +2253,21 @@ void display_img_aux(const image_id n, scr_coord_val xp, scr_coord_val yp, const
 			// player colour images are rezoomed/recoloured in display_color_img
 			sp = images[n].data[use_player];
 			if(  sp == NULL  ) {
-				dbg->warning("display_img_aux", "CImg[%i] %u failed!", use_player, n);
+				dbg->warning( "display_img_aux", "CImg[%i] %u failed!", use_player, n );
 				return;
 			}
 		}
 		else {
-			if(  (images[n].recode_flags & FLAG_REZOOM)  ) {
+			if(  ( images[n].recode_flags & FLAG_REZOOM )  ) {
 				rezoom_img( n );
 				recode_img( n, 0 );
 			}
-			else if(  (images[n].player_flags & 1)  ) {
+			else if(  ( images[n].player_flags & 1 )  ) {
 				recode_img( n, 0 );
 			}
 			sp = images[n].data[0];
 			if(  sp == NULL  ) {
-				dbg->warning("display_img_aux", "Img %u failed!", n);
+				dbg->warning( "display_img_aux", "Img %u failed!", n );
 				return;
 			}
 		}
@@ -2290,7 +2290,7 @@ void display_img_aux(const image_id n, scr_coord_val xp, scr_coord_val yp, const
 		}
 
 		// vertically lines to skip (only bottom is visible
-		scr_coord_val skip_lines = CR.clip_rect.y - (int)yp;
+		scr_coord_val skip_lines = CR.clip_rect.y - ( int )yp;
 		if(  skip_lines > 0  ) {
 			if(  skip_lines >= h  ) {
 				// not visible at all
@@ -2299,13 +2299,13 @@ void display_img_aux(const image_id n, scr_coord_val xp, scr_coord_val yp, const
 			h -= skip_lines;
 			yp += skip_lines;
 			// now skip them
-			while (skip_lines--) {
+			while(  skip_lines--  ) {
 				do {
 					// clear run + colored run + next clear run
 					sp++;
-					sp += (*sp) & (~TRANSPARENT_RUN);
+					sp += ( *sp ) & ( ~TRANSPARENT_RUN );
 					sp ++;
-				} while (*sp);
+				} while(  *sp  );
 				sp++;
 			}
 			// now sp is the new start of an image with height h
@@ -2319,23 +2319,23 @@ void display_img_aux(const image_id n, scr_coord_val xp, scr_coord_val yp, const
 
 			// clipping at poly lines?
 			if(  CR.number_of_clips > 0  ) {
-					display_img_pc<plain>( h, xp, yp, sp  CLIP_NUM_PAR );
-					// since height may be reduced, start marking here
-					if(  dirty  ) {
-						mark_rect_dirty_clip( xp, yp, xp + w - 1, yp + h - 1  CLIP_NUM_PAR );
-					}
+				display_img_pc<plain>( h, xp, yp, sp  CLIP_NUM_PAR );
+				// since height may be reduced, start marking here
+				if(  dirty  ) {
+					mark_rect_dirty_clip( xp, yp, xp + w - 1, yp + h - 1  CLIP_NUM_PAR );
+				}
 			}
 			else {
 				// use horizontal clipping or skip it?
-				if(  xp >= CR.clip_rect.x  &&  xp + w <= CR.clip_rect.xx  ) {
+				if(  xp >= CR.clip_rect.x && xp + w <= CR.clip_rect.xx  ) {
 					// marking change?
 					if(  dirty  ) {
 						mark_rect_dirty_nc( xp, yp, xp + w - 1, yp + h - 1 );
 					}
 					display_img_nc( h, xp, yp, sp );
 				}
-				else if(  xp < CR.clip_rect.xx  &&  xp + w > CR.clip_rect.x  ) {
-					display_img_wc( h, xp, yp, sp  CLIP_NUM_PAR);
+				else if(  xp < CR.clip_rect.xx && xp + w > CR.clip_rect.x  ) {
+					display_img_wc( h, xp, yp, sp  CLIP_NUM_PAR );
 					// since height may be reduced, start marking here
 					if(  dirty  ) {
 						mark_rect_dirty_clip( xp, yp, xp + w - 1, yp + h - 1  CLIP_NUM_PAR );
@@ -2348,35 +2348,35 @@ void display_img_aux(const image_id n, scr_coord_val xp, scr_coord_val yp, const
 
 
 // local helper function for tiles buttons
-static void display_three_image_row( image_id i1, image_id i2, image_id i3, scr_rect row, FLAGGED_PIXVAL)
+static void display_three_image_row(image_id i1, image_id i2, image_id i3, scr_rect row, FLAGGED_PIXVAL)
 {
-	if(  i1!=IMG_EMPTY  ) {
+	if(  i1 != IMG_EMPTY  ) {
 		scr_coord_val w = images[i1].w;
-		display_color_img( i1, row.x, row.y, 0, false, true  CLIP_NUM_DEFAULT);
+		display_color_img( i1, row.x, row.y, 0, false, true  CLIP_NUM_DEFAULT );
 		row.x += w;
 		row.w -= w;
 	}
 	// right
-	if(  i3!=IMG_EMPTY  ) {
+	if(  i3 != IMG_EMPTY  ) {
 		scr_coord_val w = images[i3].w;
-		display_color_img( i3, row.get_right()-w, row.y, 0, false, true  CLIP_NUM_DEFAULT);
+		display_color_img( i3, row.get_right() - w, row.y, 0, false, true  CLIP_NUM_DEFAULT );
 		row.w -= w;
 	}
 	// middle
-	if(  i2!=IMG_EMPTY  ) {
+	if(  i2 != IMG_EMPTY  ) {
 		scr_coord_val w = images[i2].w;
 		// tile it wide
 		while(  w <= row.w  ) {
-			display_color_img( i2, row.x, row.y, 0, false, true  CLIP_NUM_DEFAULT);
+			display_color_img( i2, row.x, row.y, 0, false, true  CLIP_NUM_DEFAULT );
 			row.x += w;
 			row.w -= w;
 		}
 		// for the rest we have to clip the rectangle
 		if(  row.w > 0  ) {
 			clip_dimension const cl = display_get_clip_wh();
-			display_set_clip_wh( cl.x, cl.y, max(0,min(row.get_right(),cl.xx)-cl.x), cl.h );
-			display_color_img( i2, row.x, row.y, 0, false, true  CLIP_NUM_DEFAULT);
-			display_set_clip_wh(cl.x, cl.y, cl.w, cl.h );
+			display_set_clip_wh( cl.x, cl.y, max( 0, min( row.get_right(), cl.xx ) - cl.x ), cl.h );
+			display_color_img( i2, row.x, row.y, 0, false, true  CLIP_NUM_DEFAULT );
+			display_set_clip_wh( cl.x, cl.y, cl.w, cl.h );
 		}
 	}
 }
@@ -2398,75 +2398,75 @@ typedef void (*DISP_THREE_ROW_FUNC)(image_id, image_id, image_id, scr_rect, FLAG
  * - if images[*][1] are empty, display images[*][0] vertically aligned
  * - if images[1][*] are empty, display images[0][*] horizontally aligned
  */
-static void display_img_stretch_intern( const stretch_map_t &imag, scr_rect area, DISP_THREE_ROW_FUNC display_three_image_rowf, FLAGGED_PIXVAL color)
+static void display_img_stretch_intern(const stretch_map_t &imag, scr_rect area, DISP_THREE_ROW_FUNC display_three_image_rowf, FLAGGED_PIXVAL color)
 {
-	scr_coord_val h_top    = max(max( get_img_height(imag[0][0]), get_img_height(imag[1][0])), get_img_height(imag[2][0]));
-	scr_coord_val h_middle = max(max( get_img_height(imag[0][1]), get_img_height(imag[1][1])), get_img_height(imag[2][1]));
-	scr_coord_val h_bottom = max(max( get_img_height(imag[0][2]), get_img_height(imag[1][2])), get_img_height(imag[2][2]));
+	scr_coord_val h_top    = max( max( get_img_height( imag[0][0] ), get_img_height( imag[1][0] ) ), get_img_height( imag[2][0] ) );
+	scr_coord_val h_middle = max( max( get_img_height( imag[0][1] ), get_img_height( imag[1][1] ) ), get_img_height( imag[2][1] ) );
+	scr_coord_val h_bottom = max( max( get_img_height( imag[0][2] ), get_img_height( imag[1][2] ) ), get_img_height( imag[2][2] ) );
 
 	// center vertically if images[*][1] are empty, display images[*][0]
-	if(  imag[0][1] == IMG_EMPTY  &&  imag[1][1] == IMG_EMPTY  &&  imag[2][1] == IMG_EMPTY  ) {
-		scr_coord_val h = max(h_top, get_img_height(imag[1][1]));
+	if(  imag[0][1] == IMG_EMPTY && imag[1][1] == IMG_EMPTY && imag[2][1] == IMG_EMPTY  ) {
+		scr_coord_val h = max( h_top, get_img_height( imag[1][1] ) );
 		// center vertically
-		area.y += (area.h-h)/2;
+		area.y += ( area.h - h ) / 2;
 	}
 
 	// center horizontally if images[1][*] are empty, display images[0][*]
-	if(  imag[1][0] == IMG_EMPTY  &&  imag[1][1] == IMG_EMPTY  &&  imag[1][2] == IMG_EMPTY  ) {
-		scr_coord_val w_left = max(max( get_img_width(imag[0][0]), get_img_width(imag[0][1])), get_img_width(imag[0][2]));
+	if(  imag[1][0] == IMG_EMPTY && imag[1][1] == IMG_EMPTY && imag[1][2] == IMG_EMPTY  ) {
+		scr_coord_val w_left = max( max( get_img_width( imag[0][0] ), get_img_width( imag[0][1] ) ), get_img_width( imag[0][2] ) );
 		// center vertically
-		area.x += (area.w-w_left)/2;
+		area.x += ( area.w - w_left ) / 2;
 	}
 
 	// top row
-	display_three_image_rowf( imag[0][0], imag[1][0], imag[2][0], area, color);
+	display_three_image_rowf( imag[0][0], imag[1][0], imag[2][0], area, color );
 
 	// bottom row
 	if(  h_bottom > 0  ) {
-		scr_rect row( area.x, area.y+area.h-h_bottom, area.w, h_bottom );
-		display_three_image_rowf( imag[0][2], imag[1][2], imag[2][2], row, color);
+		scr_rect row( area.x, area.y + area.h - h_bottom, area.w, h_bottom );
+		display_three_image_rowf( imag[0][2], imag[1][2], imag[2][2], row, color );
 	}
 
 	// now stretch the middle
 	if(  h_middle > 0  ) {
-		scr_rect row( area.x, area.y+h_top, area.w, area.h-h_top-h_bottom);
+		scr_rect row( area.x, area.y + h_top, area.w, area.h - h_top - h_bottom );
 		// tile it wide
 		while(  h_middle <= row.h  ) {
-			display_three_image_rowf( imag[0][1], imag[1][1], imag[2][1], row, color);
+			display_three_image_rowf( imag[0][1], imag[1][1], imag[2][1], row, color );
 			row.y += h_middle;
 			row.h -= h_middle;
 		}
 		// for the rest we have to clip the rectangle
 		if(  row.h > 0  ) {
 			clip_dimension const cl = display_get_clip_wh();
-			display_set_clip_wh( cl.x, cl.y, cl.w, max(0,min(row.get_bottom(),cl.yy)-cl.y) );
-			display_three_image_rowf( imag[0][1], imag[1][1], imag[2][1], row, color);
-			display_set_clip_wh(cl.x, cl.y, cl.w, cl.h );
+			display_set_clip_wh( cl.x, cl.y, cl.w, max( 0, min( row.get_bottom(), cl.yy ) - cl.y ) );
+			display_three_image_rowf( imag[0][1], imag[1][1], imag[2][1], row, color );
+			display_set_clip_wh( cl.x, cl.y, cl.w, cl.h );
 		}
 	}
 }
 
-void display_img_stretch( const stretch_map_t &imag, scr_rect area)
+void display_img_stretch(const stretch_map_t &imag, scr_rect area)
 {
-	display_img_stretch_intern(imag, area, display_three_image_row, 0);
+	display_img_stretch_intern( imag, area, display_three_image_row, 0 );
 }
 
-static void display_three_blend_row( image_id i1, image_id i2, image_id i3, scr_rect row, FLAGGED_PIXVAL color )
+static void display_three_blend_row(image_id i1, image_id i2, image_id i3, scr_rect row, FLAGGED_PIXVAL color)
 {
-	if(  i1!=IMG_EMPTY  ) {
+	if(  i1 != IMG_EMPTY  ) {
 		scr_coord_val w = images[i1].w;
 		display_rezoomed_img_blend( i1, row.x, row.y, 0, color, false, true CLIPNUM_IGNORE );
 		row.x += w;
 		row.w -= w;
 	}
 	// right
-	if(  i3!=IMG_EMPTY  ) {
+	if(  i3 != IMG_EMPTY  ) {
 		scr_coord_val w = images[i3].w;
-		display_rezoomed_img_blend( i3, row.get_right()-w, row.y, 0, color, false, true CLIPNUM_IGNORE );
+		display_rezoomed_img_blend( i3, row.get_right() - w, row.y, 0, color, false, true CLIPNUM_IGNORE );
 		row.w -= w;
 	}
 	// middle
-	if(  i2!=IMG_EMPTY  ) {
+	if(  i2 != IMG_EMPTY  ) {
 		scr_coord_val w = images[i2].w;
 		// tile it wide
 		while(  w <= row.w  ) {
@@ -2477,18 +2477,18 @@ static void display_three_blend_row( image_id i1, image_id i2, image_id i3, scr_
 		// for the rest we have to clip the rectangle
 		if(  row.w > 0  ) {
 			clip_dimension const cl = display_get_clip_wh();
-			display_set_clip_wh( cl.x, cl.y, max(0,min(row.get_right(),cl.xx)-cl.x), cl.h );
+			display_set_clip_wh( cl.x, cl.y, max( 0, min( row.get_right(), cl.xx ) - cl.x ), cl.h );
 			display_rezoomed_img_blend( i2, row.x, row.y, 0, color, false, true CLIPNUM_IGNORE );
-			display_set_clip_wh(cl.x, cl.y, cl.w, cl.h );
+			display_set_clip_wh( cl.x, cl.y, cl.w, cl.h );
 		}
 	}
 }
 
 
 // this displays a 3x3 array of images to fit the scr_rect like above, but blend the color
-void display_img_stretch_blend( const stretch_map_t &imag, scr_rect area, FLAGGED_PIXVAL color )
+void display_img_stretch_blend(const stretch_map_t &imag, scr_rect area, FLAGGED_PIXVAL color)
 {
-	display_img_stretch_intern(imag, area, display_three_blend_row, color);
+	display_img_stretch_intern( imag, area, display_three_blend_row, color );
 }
 
 
@@ -2510,25 +2510,25 @@ static void display_color_img_wc(const PIXVAL* sp, scr_coord_val x, scr_coord_va
 
 		do {
 			// we start with a clear run
-			xpos += (runlen & ~TRANSPARENT_RUN);
+			xpos += ( runlen & ~TRANSPARENT_RUN );
 
 			// now get colored pixels
-			runlen = (*sp++) & ~TRANSPARENT_RUN; // we recode anyway, so no need to do it explicitely
+			runlen = ( *sp++ ) & ~TRANSPARENT_RUN; // we recode anyway, so no need to do it explicitely
 
 			// something to display?
-			if (xpos + runlen > CR.clip_rect.x && xpos < CR.clip_rect.xx) {
-				const int left = (xpos >= CR.clip_rect.x ? 0 : CR.clip_rect.x - xpos);
-				const int len = (CR.clip_rect.xx - xpos > runlen ? runlen : CR.clip_rect.xx - xpos);
+			if(  xpos + runlen > CR.clip_rect.x && xpos < CR.clip_rect.xx  ) {
+				const int left = ( xpos >= CR.clip_rect.x ? 0 : CR.clip_rect.x - xpos );
+				const int len = ( CR.clip_rect.xx - xpos > runlen ? runlen : CR.clip_rect.xx - xpos );
 
-				colorpixcopy(tp + xpos + left, sp + left, sp + len);
+				colorpixcopy( tp + xpos + left, sp + left, sp + len );
 			}
 
 			sp += runlen;
 			xpos += runlen;
-		} while ((runlen = *sp++));
+		} while(  ( runlen = *sp++ )  );
 
 		tp += disp_width;
-	} while (--h);
+	} while(  --h  );
 }
 
 
@@ -2548,25 +2548,25 @@ static void display_color_img_wc_daytime(const PIXVAL* sp, scr_coord_val x, scr_
 
 		do {
 			// we start with a clear run
-			xpos += (runlen & ~TRANSPARENT_RUN);
+			xpos += ( runlen & ~TRANSPARENT_RUN );
 
 			// now get colored pixels
-			runlen = (*sp++) & ~TRANSPARENT_RUN; // we recode anyway, so no need to do it explicitely
+			runlen = ( *sp++ ) & ~TRANSPARENT_RUN; // we recode anyway, so no need to do it explicitely
 
 			// something to display?
-			if (xpos + runlen > CR.clip_rect.x && xpos < CR.clip_rect.xx) {
-				const int left = (xpos >= CR.clip_rect.x ? 0 : CR.clip_rect.x - xpos);
-				const int len = (CR.clip_rect.xx - xpos > runlen ? runlen : CR.clip_rect.xx - xpos);
+			if(  xpos + runlen > CR.clip_rect.x && xpos < CR.clip_rect.xx  ) {
+				const int left = ( xpos >= CR.clip_rect.x ? 0 : CR.clip_rect.x - xpos );
+				const int len = ( CR.clip_rect.xx - xpos > runlen ? runlen : CR.clip_rect.xx - xpos );
 
-				colorpixcopydaytime(tp + xpos + left, sp + left, sp + len);
+				colorpixcopydaytime( tp + xpos + left, sp + left, sp + len );
 			}
 
 			sp += runlen;
 			xpos += runlen;
-		} while ((runlen = *sp++));
+		} while(  ( runlen = *sp++ )  );
 
 		tp += disp_width;
-	} while (--h);
+	} while(  --h  );
 }
 
 
@@ -2577,28 +2577,28 @@ void display_color_img(const image_id n, scr_coord_val xp, scr_coord_val yp, sin
 {
 	if(  n < anz_images  ) {
 		// do we have to use a player nr?
-		const sint8 player_nr = (images[n].recode_flags & FLAG_HAS_PLAYER_COLOR) * player_nr_raw;
+		const sint8 player_nr = ( images[n].recode_flags & FLAG_HAS_PLAYER_COLOR ) * player_nr_raw;
 		// first: size check
-		if(  (images[n].recode_flags & FLAG_REZOOM)  ) {
+		if(  ( images[n].recode_flags & FLAG_REZOOM )  ) {
 			rezoom_img( n );
 		}
 
-		if(  daynight  ||  night_shift == 0  ) {
+		if(  daynight || night_shift == 0  ) {
 			// ok, now we could use the same faster code as for the normal images
-			if(  (images[n].player_flags & (1<<player_nr))  ) {
+			if(  ( images[n].player_flags & ( 1 << player_nr ) )  ) {
 				recode_img( n, player_nr );
 			}
-			display_img_aux( n, xp, yp, player_nr, true, dirty  CLIP_NUM_PAR);
+			display_img_aux( n, xp, yp, player_nr, true, dirty  CLIP_NUM_PAR );
 			return;
 		}
 		else {
-		// do player colour substitution but not daynight - can't use cached images. Do NOT call multithreaded.
-		// now test if visible and clipping needed
+			// do player colour substitution but not daynight - can't use cached images. Do NOT call multithreaded.
+			// now test if visible and clipping needed
 			const scr_coord_val x = images[n].x + xp;
 			      scr_coord_val y = images[n].y + yp;
 			const scr_coord_val w = images[n].w;
 			      scr_coord_val h = images[n].h;
-			if(  h <= 0  ||  x >= CR.clip_rect.xx  ||  y >= CR.clip_rect.yy  ||  x + w <= CR.clip_rect.x  ||  y + h <= CR.clip_rect.y  ) {
+			if(  h <= 0 || x >= CR.clip_rect.xx || y >= CR.clip_rect.yy || x + w <= CR.clip_rect.x || y + h <= CR.clip_rect.y  ) {
 				// not visible => we are done
 				// happens quite often ...
 				return;
@@ -2622,18 +2622,18 @@ void display_color_img(const image_id n, scr_coord_val xp, scr_coord_val yp, sin
 					do {
 						// clear run + colored run + next clear run
 						++sp;
-						sp += (*sp) & (~TRANSPARENT_RUN);
+						sp += ( *sp ) & ( ~TRANSPARENT_RUN );
 						sp++;
-					} while (*sp);
+					} while(  *sp  );
 					sp++;
 				}
 
 				// clipping at poly lines?
 				if(  CR.number_of_clips > 0  ) {
-					daynight ? display_img_pc<colored>(h, x, y, sp  CLIP_NUM_PAR) : display_img_pc<daytime>(h, x, y, sp  CLIP_NUM_PAR);
+					daynight ? display_img_pc<colored>( h, x, y, sp  CLIP_NUM_PAR ) : display_img_pc<daytime>( h, x, y, sp  CLIP_NUM_PAR );
 				}
 				else {
-					daynight ? display_color_img_wc(sp, x, y, h  CLIP_NUM_PAR) : display_color_img_wc_daytime(sp, x, y, h  CLIP_NUM_PAR);
+					daynight ? display_color_img_wc( sp, x, y, h  CLIP_NUM_PAR ) : display_color_img_wc_daytime( sp, x, y, h  CLIP_NUM_PAR );
 				}
 			}
 		}
@@ -2646,9 +2646,9 @@ void display_color_img(const image_id n, scr_coord_val xp, scr_coord_val yp, sin
  */
 void display_base_img(const image_id n, scr_coord_val xp, scr_coord_val yp, const sint8 player_nr, const bool daynight, const bool dirty  CLIP_NUM_DEF)
 {
-	if(  base_tile_raster_width==tile_raster_width  ) {
+	if(  base_tile_raster_width == tile_raster_width  ) {
 		// same size => use standard routine
-		display_color_img( n, xp, yp, player_nr, daynight, dirty  CLIP_NUM_PAR);
+		display_color_img( n, xp, yp, player_nr, daynight, dirty  CLIP_NUM_PAR );
 	}
 	else if(  n < anz_images  ) {
 		// now test if visible and clipping needed
@@ -2657,18 +2657,18 @@ void display_base_img(const image_id n, scr_coord_val xp, scr_coord_val yp, cons
 		const scr_coord_val w = images[n].base_w;
 		      scr_coord_val h = images[n].base_h;
 
-		if(  h <= 0  ||  x >= CR.clip_rect.xx  ||  y >= CR.clip_rect.yy  ||  x + w <= CR.clip_rect.x  ||  y + h <= CR.clip_rect.y  ) {
+		if(  h <= 0 || x >= CR.clip_rect.xx || y >= CR.clip_rect.yy || x + w <= CR.clip_rect.x || y + h <= CR.clip_rect.y  ) {
 			// not visible => we are done
 			// happens quite often ...
 			return;
 		}
 
 		if (dirty) {
-			mark_rect_dirty_wc(x, y, x + w - 1, y + h - 1);
+			mark_rect_dirty_wc( x, y, x + w - 1, y + h - 1 );
 		}
 
 		// colors for 2nd company color
-		if(player_nr>=0) {
+		if(  player_nr >= 0  ) {
 			activate_player_color( player_nr, daynight );
 		}
 		else {
@@ -2688,51 +2688,51 @@ void display_base_img(const image_id n, scr_coord_val xp, scr_coord_val yp, cons
 				do {
 					// clear run + colored run + next clear run
 					sp++;
-					sp += (*sp) & (~TRANSPARENT_RUN);
+					sp += ( *sp ) & ( ~TRANSPARENT_RUN );
 					sp++;
-				} while (*sp);
+				} while(  *sp  );
 				sp++;
 			}
 			// clipping at poly lines?
 			if(  CR.number_of_clips > 0  ) {
-				daynight ? display_img_pc<colored>(h, x, y, sp  CLIP_NUM_PAR) : display_img_pc<daytime>(h, x, y, sp  CLIP_NUM_PAR);
+				daynight ? display_img_pc<colored>( h, x, y, sp  CLIP_NUM_PAR ) : display_img_pc<daytime>( h, x, y, sp  CLIP_NUM_PAR );
 			}
 			else {
-				daynight ? display_color_img_wc(sp, x, y, h  CLIP_NUM_PAR) : display_color_img_wc_daytime(sp, x, y, h  CLIP_NUM_PAR);
+				daynight ? display_color_img_wc( sp, x, y, h  CLIP_NUM_PAR ) : display_color_img_wc_daytime( sp, x, y, h  CLIP_NUM_PAR );
 			}
 		}
 
 	} // number ok
 }
 
-inline PIXVAL colors_blend25(PIXVAL background, PIXVAL foreground) { return rgb_shr1(background) + rgb_shr2(background) + rgb_shr2(foreground); }
-inline PIXVAL colors_blend50(PIXVAL background, PIXVAL foreground) { return rgb_shr1(background) + rgb_shr1(foreground); }
-inline PIXVAL colors_blend75(PIXVAL background, PIXVAL foreground) { return rgb_shr2(background) + rgb_shr1(foreground) + rgb_shr2(foreground); }
+inline PIXVAL colors_blend25(PIXVAL background, PIXVAL foreground) { return rgb_shr1( background ) + rgb_shr2( background ) + rgb_shr2( foreground ); }
+inline PIXVAL colors_blend50(PIXVAL background, PIXVAL foreground) { return rgb_shr1( background ) + rgb_shr1( foreground ); }
+inline PIXVAL colors_blend75(PIXVAL background, PIXVAL foreground) { return rgb_shr2( background ) + rgb_shr1( foreground ) + rgb_shr2( foreground ); }
 inline PIXVAL colors_blend_alpha32(PIXVAL background, PIXVAL foreground, int alpha)
 {
-	uint32 b = ((background << 16) | background) & MASK_32;
-	uint32 f = ((foreground << 16) | foreground) & MASK_32;
-	uint32 r = ((f * alpha + (32-alpha) * b) >> 5) & MASK_32;
-	return r | (r >> 16);
+	uint32 b = ( ( background << 16 ) | background ) & MASK_32;
+	uint32 f = ( ( foreground << 16 ) | foreground ) & MASK_32;
+	uint32 r = ( ( f * alpha + ( 32 - alpha ) * b ) >> 5 ) & MASK_32;
+	return r | ( r >> 16 );
 }
 
 // Blends two colors. Possible values for alpha: 0..32
 PIXVAL display_blend_colors_alpha32(PIXVAL background, PIXVAL foreground, int alpha)
 {
 	// alpha takes values 0 .. 32
-	switch(alpha) {
+	switch( alpha ) {
 		case 0: // nothing to do ...
 			return background;
 		case 8:
-			return colors_blend25(background, foreground);
+			return colors_blend25( background, foreground );
 		case 16:
-			return colors_blend50(background, foreground);
+			return colors_blend50( background, foreground );
 		case 24:
-			return colors_blend75(background, foreground);
+			return colors_blend75( background, foreground );
 		case 32:
 			return foreground;
 		default:
-			return colors_blend_alpha32(background, foreground, alpha);
+			return colors_blend_alpha32( background, foreground, alpha );
 	}
 }
 
@@ -2740,7 +2740,7 @@ PIXVAL display_blend_colors_alpha32(PIXVAL background, PIXVAL foreground, int al
 // Blends two colors
 PIXVAL display_blend_colors(PIXVAL background, PIXVAL foreground, int percent_blend)
 {
-	return display_blend_colors_alpha32(background, foreground, (percent_blend*32)/100);
+	return display_blend_colors_alpha32( background, foreground, ( percent_blend * 32 ) / 100 );
 }
 
 
@@ -2755,8 +2755,8 @@ struct blend75_t { static inline PIXVAL blend(PIXVAL background, PIXVAL foregrou
 template<class F> void pix_blend_tpl(PIXVAL *dest, const PIXVAL *src, const PIXVAL , const PIXVAL len)
 {
 	const PIXVAL *const end = dest + len;
-	while (dest < end) {
-		*dest = F::blend(*dest, *src);
+	while(  dest < end  ) {
+		*dest = F::blend( *dest, *src );
 		dest++;
 		src++;
 	}
@@ -2766,8 +2766,8 @@ template<class F> void pix_blend_tpl(PIXVAL *dest, const PIXVAL *src, const PIXV
 template<class F> void pix_blend_recode_tpl(PIXVAL *dest, const PIXVAL *src, const PIXVAL , const PIXVAL len)
 {
 	const PIXVAL *const end = dest + len;
-	while (dest < end) {
-		*dest = F::blend(*dest, rgbmap_current[*src]);
+	while(  dest < end  ) {
+		*dest = F::blend( *dest, rgbmap_current[*src] );
 		dest++;
 		src++;
 	}
@@ -2776,8 +2776,8 @@ template<class F> void pix_blend_recode_tpl(PIXVAL *dest, const PIXVAL *src, con
 template<class F> void pix_outline_tpl(PIXVAL *dest, const PIXVAL *, const PIXVAL colour, const PIXVAL len)
 {
 	const PIXVAL *const end = dest + len;
-	while (dest < end) {
-		*dest = F::blend(*dest, colour);
+	while(  dest < end  ) {
+		*dest = F::blend( *dest, colour );
 		dest++;
 	}
 }
@@ -2802,10 +2802,10 @@ static blend_proc outline[3] = {
 /**
  * Blends a rectangular region with a color
  */
-void display_blend_wh_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL colval, int percent_blend )
+void display_blend_wh_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL colval, int percent_blend)
 {
-	if(  clip_lr( &xp, &w, CR0.clip_rect.x, CR0.clip_rect.xx )  &&  clip_lr( &yp, &h, CR0.clip_rect.y, CR0.clip_rect.yy )  ) {
-		const PIXVAL alpha = (percent_blend*64)/100;
+	if(  clip_lr( &xp, &w, CR0.clip_rect.x, CR0.clip_rect.xx ) && clip_lr( &yp, &h, CR0.clip_rect.y, CR0.clip_rect.yy )  ) {
+		const PIXVAL alpha = ( percent_blend * 64 ) / 100;
 
 		switch( alpha ) {
 			case 0: // nothing to do ...
@@ -2815,11 +2815,11 @@ void display_blend_wh_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, s
 			case 32:
 			case 48:
 			{
-				// fast blending with 1/4 | 1/2 | 3/4 percentage
-				blend_proc blend = outline[ (alpha>>4) - 1 ];
+			// fast blending with 1/4 | 1/2 | 3/4 percentage
+				blend_proc blend = outline[( alpha >> 4 ) - 1 ];
 
-				for(  scr_coord_val y=0;  y<h;  y++  ) {
-					blend( textur + xp + (yp+y) * disp_width, NULL, colval, w );
+				for(  scr_coord_val y = 0; y < h; y++  ) {
+					blend( textur + xp + ( yp + y ) * disp_width, NULL, colval, w );
 				}
 			}
 			break;
@@ -2832,30 +2832,30 @@ void display_blend_wh_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, s
 			default:
 				// any percentage blending: SLOW!
 				{
-					const PIXVAL r_src = red(colval);
-					const PIXVAL g_src = green(colval);
-					const PIXVAL b_src = blue(colval);
-					for(  ;  h>0;  yp++, h--  ) {
-						PIXVAL *dest = textur + yp*disp_width + xp;
-						const PIXVAL *const end = dest + w;
-						while (dest < end) {
-							const PIXVAL r_dest = red(*dest);
-							const PIXVAL g_dest = green(*dest);
-							const PIXVAL b_dest = blue(*dest);
-							const PIXVAL r = r_dest + ( ( (r_src - r_dest) * alpha ) >> 6 );
-							const PIXVAL g = g_dest + ( ( (g_src - g_dest) * alpha ) >> 6 );
-							const PIXVAL b = b_dest + ( ( (b_src - b_dest) * alpha ) >> 6 );
-							*dest++ = rgb(r, g, b);
-						}
+				const PIXVAL r_src = red( colval );
+				const PIXVAL g_src = green( colval );
+				const PIXVAL b_src = blue( colval );
+				for(  ; h > 0; yp++, h--  ) {
+					PIXVAL *dest = textur + yp * disp_width + xp;
+					const PIXVAL *const end = dest + w;
+					while(  dest < end  ) {
+						const PIXVAL r_dest = red( *dest );
+						const PIXVAL g_dest = green( *dest );
+						const PIXVAL b_dest = blue( *dest );
+						const PIXVAL r = r_dest + ( ( ( r_src - r_dest ) * alpha ) >> 6 );
+						const PIXVAL g = g_dest + ( ( ( g_src - g_dest ) * alpha ) >> 6 );
+						const PIXVAL b = b_dest + ( ( ( b_src - b_dest ) * alpha ) >> 6 );
+						*dest++ = rgb( r, g, b );
 					}
 				}
-				break;
+			}
+			break;
 		}
 	}
 }
 
 
-static void display_img_blend_wc(scr_coord_val h, const scr_coord_val xp, const scr_coord_val yp, const PIXVAL *sp, int colour, blend_proc p  CLIP_NUM_DEF )
+static void display_img_blend_wc(scr_coord_val h, const scr_coord_val xp, const scr_coord_val yp, const PIXVAL *sp, int colour, blend_proc p  CLIP_NUM_DEF)
 {
 	if(  h > 0  ) {
 		PIXVAL *tp = textur + yp * disp_width;
@@ -2868,24 +2868,24 @@ static void display_img_blend_wc(scr_coord_val h, const scr_coord_val xp, const 
 
 			do {
 				// we start with a clear run
-				xpos += (runlen & ~TRANSPARENT_RUN);
+				xpos += ( runlen & ~TRANSPARENT_RUN );
 
 				// now get colored pixels
-				runlen = (*sp++) & (~TRANSPARENT_RUN);
+				runlen = ( *sp++ ) & ( ~TRANSPARENT_RUN );
 
 				// something to display?
-				if(  xpos + runlen > CR.clip_rect.x  &&  xpos < CR.clip_rect.xx  ) {
-					const int left = (xpos >= CR.clip_rect.x ? 0 : CR.clip_rect.x - xpos);
-					const int len  = (CR.clip_rect.xx - xpos >= runlen ? runlen : CR.clip_rect.xx - xpos);
-					p(tp + xpos + left, sp + left, colour, len - left);
+				if(  xpos + runlen > CR.clip_rect.x && xpos < CR.clip_rect.xx  ) {
+					const int left = ( xpos >= CR.clip_rect.x ? 0 : CR.clip_rect.x - xpos );
+					const int len  = ( CR.clip_rect.xx - xpos >= runlen ? runlen : CR.clip_rect.xx - xpos );
+					p( tp + xpos + left, sp + left, colour, len - left );
 				}
 
 				sp += runlen;
 				xpos += runlen;
-			} while ((runlen = *sp++));
+			} while(  ( runlen = *sp++ )  );
 
 			tp += disp_width;
-		} while (--h);
+		} while(  --h  );
 	}
 }
 
@@ -2895,10 +2895,10 @@ static void display_img_blend_wc(scr_coord_val h, const scr_coord_val xp, const 
 static PIXVAL get_alpha_mask(const unsigned alpha_flags)
 {
 	PIXVAL mask = alpha_flags & ALPHA_RED ? 0x7c00 : 0;
-	if (alpha_flags & ALPHA_GREEN) {
+	if(  alpha_flags & ALPHA_GREEN  ) {
 		mask |= 0x03e0;
 	}
-	if (alpha_flags & ALPHA_BLUE) {
+	if(  alpha_flags & ALPHA_BLUE  ) {
 		mask |= 0x001f;
 	}
 	return mask;
@@ -2914,7 +2914,7 @@ static void alpha(PIXVAL *dest, const PIXVAL *src, const PIXVAL *alphamap, const
 	while(  dest < end  ) {
 		// read mask components - always 15bpp
 		uint16 masked = *alphamap & alpha_mask;
-		uint16 alpha_value = (masked & 0x1f) + ((masked >> 5) & 0x1f) + ((masked >> 10) & 0x1f);
+		uint16 alpha_value = ( masked & 0x1f ) + ( ( masked >> 5 ) & 0x1f ) + ( ( masked >> 10 ) & 0x1f );
 
 		if(  alpha_value > 30  ) {
 			// opaque, just copy source
@@ -2923,7 +2923,7 @@ static void alpha(PIXVAL *dest, const PIXVAL *src, const PIXVAL *alphamap, const
 		else if(  alpha_value > 0  ) {
 			alpha_value = alpha_value > 15 ? alpha_value + 1 : alpha_value;
 
-			*dest = colors_blend_alpha32(*dest, *src, alpha_value);
+			*dest = colors_blend_alpha32( *dest, *src, alpha_value );
 		}
 
 		dest++;
@@ -2940,7 +2940,7 @@ static void alpha_recode(PIXVAL *dest, const PIXVAL *src, const PIXVAL *alphamap
 	while(  dest < end  ) {
 		// read mask components - always 15bpp
 		uint16 masked = *alphamap & alpha_mask;
-		uint16 alpha_value = (masked & 0x1f) + ((masked >> 5) & 0x1f) + ((masked >> 10) & 0x1f);
+		uint16 alpha_value = ( masked & 0x1f ) + ( ( masked >> 5 ) & 0x1f ) + ( ( masked >> 10 ) & 0x1f );
 
 		if(  alpha_value > 30  ) {
 			// opaque, just copy source
@@ -2949,7 +2949,7 @@ static void alpha_recode(PIXVAL *dest, const PIXVAL *src, const PIXVAL *alphamap
 		else if(  alpha_value > 0  ) {
 			alpha_value = alpha_value > 15 ? alpha_value + 1 : alpha_value;
 
-			*dest = colors_blend_alpha32(*dest, rgbmap_current[*src], alpha_value);
+			*dest = colors_blend_alpha32( *dest, rgbmap_current[*src], alpha_value );
 		}
 
 		dest++;
@@ -2959,7 +2959,7 @@ static void alpha_recode(PIXVAL *dest, const PIXVAL *src, const PIXVAL *alphamap
 }
 
 
-static void display_img_alpha_wc(scr_coord_val h, const scr_coord_val xp, const scr_coord_val yp, const PIXVAL *sp, const PIXVAL *alphamap, const PIXVAL alpha_mask, int colour, alpha_proc p  CLIP_NUM_DEF )
+static void display_img_alpha_wc(scr_coord_val h, const scr_coord_val xp, const scr_coord_val yp, const PIXVAL *sp, const PIXVAL *alphamap, const PIXVAL alpha_mask, int colour, alpha_proc p  CLIP_NUM_DEF)
 {
 	if(  h > 0  ) {
 		PIXVAL *tp = textur + yp * disp_width;
@@ -2976,13 +2976,13 @@ static void display_img_alpha_wc(scr_coord_val h, const scr_coord_val xp, const 
 				xpos += runlen;
 
 				// now get colored pixels
-				runlen = ((*sp++) & ~TRANSPARENT_RUN);
+				runlen = ( ( *sp++ ) & ~TRANSPARENT_RUN );
 				alphamap++;
 
 				// something to display?
-				if(  xpos + runlen > CR.clip_rect.x  &&  xpos < CR.clip_rect.xx  ) {
-					const int left = (xpos >= CR.clip_rect.x ? 0 : CR.clip_rect.x - xpos);
-					const int len  = (CR.clip_rect.xx - xpos >= runlen ? runlen : CR.clip_rect.xx - xpos);
+				if(  xpos + runlen > CR.clip_rect.x && xpos < CR.clip_rect.xx  ) {
+					const int left = ( xpos >= CR.clip_rect.x ? 0 : CR.clip_rect.x - xpos );
+					const int len  = ( CR.clip_rect.xx - xpos >= runlen ? runlen : CR.clip_rect.xx - xpos );
 					p( tp + xpos + left, sp + left, alphamap + left, alpha_mask, colour, len - left );
 				}
 
@@ -2990,7 +2990,7 @@ static void display_img_alpha_wc(scr_coord_val h, const scr_coord_val xp, const 
 				alphamap += runlen;
 				xpos += runlen;
 				alphamap++;
-			} while(  (runlen = *sp++)  );
+			} while(  ( runlen = *sp++ )  );
 
 			tp += disp_width;
 		} while(  --h  );
@@ -3005,11 +3005,11 @@ void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_va
 {
 	if(  n < anz_images  ) {
 		// need to go to nightmode and or rezoomed?
-		if(  (images[n].recode_flags & FLAG_REZOOM)  ) {
+		if(  ( images[n].recode_flags & FLAG_REZOOM )  ) {
 			rezoom_img( n );
 			recode_img( n, 0 );
 		}
-		else if(  (images[n].player_flags & 1)  ) {
+		else if(  ( images[n].player_flags & 1 )  ) {
 			recode_img( n, 0 );
 		}
 		PIXVAL *sp = images[n].data[0];
@@ -3029,10 +3029,12 @@ void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_va
 			h -= reduce_h;
 		}
 		// still something to draw
-		if(  h <= 0  ) return;
+		if(  h <= 0  ) {
+			return;
+		}
 
 		// vertically lines to skip (only bottom is visible)
-		scr_coord_val skip_lines = CR.clip_rect.y - (int)yp;
+		scr_coord_val skip_lines = CR.clip_rect.y - ( int )yp;
 		if(  skip_lines > 0  ) {
 			if(  skip_lines >= h  ) {
 				// not visible at all
@@ -3041,13 +3043,13 @@ void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_va
 			h -= skip_lines;
 			yp += skip_lines;
 			// now skip them
-			while (skip_lines--) {
+			while(  skip_lines--  ) {
 				do {
 					// clear run + colored run + next clear run
 					sp++;
-					sp += (*sp) & (~TRANSPARENT_RUN);
+					sp += ( *sp ) & ( ~TRANSPARENT_RUN );
 					sp++;
-				} while (*sp);
+				} while(  *sp  );
 				sp++;
 			}
 			// now sp is the new start of an image with height h
@@ -3060,7 +3062,7 @@ void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_va
 			// get the real color
 			const PIXVAL color = color_index & 0xFFFF;
 			// we use function pointer for the blend runs for the moment ...
-			blend_proc pix_blend = (color_index&OUTLINE_FLAG) ? outline[ (color_index&TRANSPARENT_FLAGS)/TRANSPARENT25_FLAG - 1 ] : blend[ (color_index&TRANSPARENT_FLAGS)/TRANSPARENT25_FLAG - 1 ];
+			blend_proc pix_blend = ( color_index & OUTLINE_FLAG ) ? outline[( color_index & TRANSPARENT_FLAGS ) / TRANSPARENT25_FLAG - 1 ] : blend[( color_index & TRANSPARENT_FLAGS ) / TRANSPARENT25_FLAG - 1 ];
 
 			// marking change?
 			if(  dirty  ) {
@@ -3074,16 +3076,16 @@ void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_va
 
 void display_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const unsigned alpha_flags, scr_coord_val xp, scr_coord_val yp, const sint8 /*player_nr*/, const FLAGGED_PIXVAL color_index, const bool /*daynight*/, const bool dirty  CLIP_NUM_DEF)
 {
-	if(  n < anz_images  &&  alpha_n < anz_images  ) {
+	if(  n < anz_images && alpha_n < anz_images  ) {
 		// need to go to nightmode and or rezoomed?
-		if(  (images[n].recode_flags & FLAG_REZOOM)  ) {
+		if(  ( images[n].recode_flags & FLAG_REZOOM )  ) {
 			rezoom_img( n );
 			recode_img( n, 0 );
 		}
-		else if(  (images[n].player_flags & 1)  ) {
+		else if(  ( images[n].player_flags & 1 )  ) {
 			recode_img( n, 0 );
 		}
-		if(  (images[alpha_n].recode_flags & FLAG_REZOOM)  ) {
+		if(  ( images[alpha_n].recode_flags & FLAG_REZOOM )  ) {
 			rezoom_img( alpha_n );
 		}
 		PIXVAL *sp = images[n].data[0];
@@ -3109,7 +3111,7 @@ void display_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const 
 		}
 
 		// vertically lines to skip (only bottom is visible
-		scr_coord_val skip_lines = CR.clip_rect.y - (int)yp;
+		scr_coord_val skip_lines = CR.clip_rect.y - ( int )yp;
 		if(  skip_lines > 0  ) {
 			if(  skip_lines >= h  ) {
 				// not visible at all
@@ -3122,10 +3124,10 @@ void display_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const 
 				do {
 					// clear run + colored run + next clear run
 					sp++;
-					sp += (*sp) & (~TRANSPARENT_RUN);
+					sp += ( *sp ) & ( ~TRANSPARENT_RUN );
 					sp++;
 					alphamap++;
-					alphamap += (*alphamap) & (~TRANSPARENT_RUN);
+					alphamap += ( *alphamap ) & ( ~TRANSPARENT_RUN );
 					alphamap++;
 				} while(  *sp  );
 				sp++;
@@ -3145,7 +3147,7 @@ void display_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const 
 			if(  dirty  ) {
 				mark_rect_dirty_wc( xp, yp, xp + w - 1, yp + h - 1 );
 			}
-			display_img_alpha_wc( h, xp, yp, sp, alphamap, get_alpha_mask(alpha_flags), color, alpha  CLIP_NUM_PAR );
+			display_img_alpha_wc( h, xp, yp, sp, alphamap, get_alpha_mask( alpha_flags ), color, alpha  CLIP_NUM_PAR );
 		}
 	}
 }
@@ -3164,7 +3166,7 @@ void display_base_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp
 		scr_coord_val y = images[n].base_y + yp;
 		scr_coord_val w = images[n].base_w;
 		scr_coord_val h = images[n].base_h;
-		if(  h == 0  ||  x >= CR.clip_rect.xx  ||  y >= CR.clip_rect.yy  ||  x + w <= CR.clip_rect.x  ||  y + h <= CR.clip_rect.y  ) {
+		if(  h == 0 || x >= CR.clip_rect.xx || y >= CR.clip_rect.yy || x + w <= CR.clip_rect.x || y + h <= CR.clip_rect.y  ) {
 			// not visible => we are done
 			// happens quite often ...
 			return;
@@ -3179,18 +3181,18 @@ void display_base_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp
 		}
 
 		// vertical lines to skip (only bottom is visible)
-		scr_coord_val skip_lines = CR.clip_rect.y - (int)y;
+		scr_coord_val skip_lines = CR.clip_rect.y - ( int )y;
 		if(  skip_lines > 0  ) {
 			h -= skip_lines;
 			y += skip_lines;
 			// now skip them
-			while (skip_lines--) {
+			while(  skip_lines--  ) {
 				do {
 					// clear run + colored run + next clear run
 					sp++;
-					sp += (*sp) & (~TRANSPARENT_RUN);
+					sp += ( *sp ) & ( ~TRANSPARENT_RUN );
 					sp++;
-				} while (*sp);
+				} while(  *sp  );
 				sp++;
 			}
 			// now sp is the new start of an image with height h
@@ -3199,12 +3201,12 @@ void display_base_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp
 		// new block for new variables
 		{
 			const PIXVAL color = color_index & 0xFFFF;
-			blend_proc pix_blend = (color_index&OUTLINE_FLAG) ? outline[ (color_index&TRANSPARENT_FLAGS)/TRANSPARENT25_FLAG - 1 ] : blend_recode[ (color_index&TRANSPARENT_FLAGS)/TRANSPARENT25_FLAG - 1 ];
+			blend_proc pix_blend = ( color_index & OUTLINE_FLAG ) ? outline[( color_index & TRANSPARENT_FLAGS ) / TRANSPARENT25_FLAG - 1 ] : blend_recode[( color_index & TRANSPARENT_FLAGS ) / TRANSPARENT25_FLAG - 1 ];
 
 			// recode is needed only for blending
-			if(  !(color_index&OUTLINE_FLAG)  ) {
+			if(  !( color_index & OUTLINE_FLAG )  ) {
 				// colors for 2nd company color
-				if(player_nr>=0) {
+				if(  player_nr >= 0  ) {
 					activate_player_color( player_nr, daynight );
 				}
 				else {
@@ -3234,7 +3236,7 @@ void display_base_img_alpha(const image_id n, const image_id alpha_n, const unsi
 		scr_coord_val y = images[n].base_y + yp;
 		scr_coord_val w = images[n].base_w;
 		scr_coord_val h = images[n].base_h;
-		if(  h == 0  ||  x >= CR.clip_rect.xx  ||  y >= CR.clip_rect.yy  ||  x + w <= CR.clip_rect.x  ||  y + h <= CR.clip_rect.y  ) {
+		if(  h == 0 || x >= CR.clip_rect.xx || y >= CR.clip_rect.yy || x + w <= CR.clip_rect.x || y + h <= CR.clip_rect.y  ) {
 			// not visible => we are done
 			// happens quite often ...
 			return;
@@ -3250,7 +3252,7 @@ void display_base_img_alpha(const image_id n, const image_id alpha_n, const unsi
 		}
 
 		// vertical lines to skip (only bottom is visible)
-		scr_coord_val skip_lines = CR.clip_rect.y - (int)y;
+		scr_coord_val skip_lines = CR.clip_rect.y - ( int )y;
 		if(  skip_lines > 0  ) {
 			h -= skip_lines;
 			y += skip_lines;
@@ -3259,13 +3261,13 @@ void display_base_img_alpha(const image_id n, const image_id alpha_n, const unsi
 				do {
 					// clear run + colored run + next clear run
 					sp++;
-					sp += (*sp) & (~TRANSPARENT_RUN);
+					sp += ( *sp ) & ( ~TRANSPARENT_RUN );
 					sp++;
 				} while(  *sp  );
 				do {
 					// clear run + colored run + next clear run
 					alphamap++;
-					alphamap += (*alphamap) & (~TRANSPARENT_RUN);
+					alphamap += ( *alphamap ) & ( ~TRANSPARENT_RUN );
 					alphamap++;
 				} while(  *alphamap  );
 				sp++;
@@ -3279,7 +3281,7 @@ void display_base_img_alpha(const image_id n, const image_id alpha_n, const unsi
 			const PIXVAL color = color_index & 0xFFFF;
 
 			// recode is needed only for blending
-			if(  !(color_index & OUTLINE_FLAG)  ) {
+			if(  !( color_index & OUTLINE_FLAG )  ) {
 				// colors for 2nd company color
 				if(  player_nr >= 0  ) {
 					activate_player_color( player_nr, daynight );
@@ -3293,7 +3295,7 @@ void display_base_img_alpha(const image_id n, const image_id alpha_n, const unsi
 			if(  dirty  ) {
 				mark_rect_dirty_wc( x, y, x + w - 1, y + h - 1 );
 			}
-			display_img_alpha_wc( h, x, y, sp, alphamap, get_alpha_mask(alpha_flags), color, alpha_recode  CLIP_NUM_PAR );
+			display_img_alpha_wc( h, x, y, sp, alphamap, get_alpha_mask( alpha_flags ), color, alpha_recode  CLIP_NUM_PAR );
 		}
 	} // number ok
 }
@@ -3305,15 +3307,15 @@ void display_base_img_alpha(const image_id n, const image_id alpha_n, const unsi
 // scrolls horizontally, will ignore clipping etc.
 void display_scroll_band(scr_coord_val start_y, scr_coord_val x_offset, scr_coord_val h)
 {
-	start_y  = max(start_y,  0);
-	x_offset = min(x_offset, disp_width);
-	h        = min(h,        disp_height);
+	start_y  = max( start_y,  0 );
+	x_offset = min( x_offset, disp_width );
+	h        = min( h,        disp_height );
 
 	const PIXVAL *const src = textur + start_y * disp_width + x_offset;
 	PIXVAL *const dst = textur + start_y * disp_width;
-	const size_t amount = sizeof(PIXVAL) * (h * disp_width - x_offset);
+	const size_t amount = sizeof(PIXVAL) * ( h * disp_width - x_offset );
 
-	memmove(dst, src, amount);
+	memmove( dst, src, amount );
 }
 
 
@@ -3326,14 +3328,14 @@ static void display_pixel(scr_coord_val x, scr_coord_val y, PIXVAL color, bool m
 static void display_pixel(scr_coord_val x, scr_coord_val y, PIXVAL color)
 #endif
 {
-	if(  x >= CR0.clip_rect.x  &&  x < CR0.clip_rect.xx  &&  y >= CR0.clip_rect.y  &&  y < CR0.clip_rect.yy  ) {
-		PIXVAL* const p = textur + x + y * disp_width;
+	if(  x >= CR0.clip_rect.x && x < CR0.clip_rect.xx && y >= CR0.clip_rect.y && y < CR0.clip_rect.yy  ) {
+		PIXVAL *const p = textur + x + y * disp_width;
 
 		*p = color;
 #ifdef DEBUG_FLUSH_BUFFER
 		if(  mark_dirty  ) {
 #endif
-			mark_tile_dirty(x >> DIRTY_TILE_SHIFT, y >> DIRTY_TILE_SHIFT);
+			mark_tile_dirty( x >> DIRTY_TILE_SHIFT, y >> DIRTY_TILE_SHIFT );
 #ifdef DEBUG_FLUSH_BUFFER
 		}
 #endif
@@ -3346,16 +3348,16 @@ static void display_pixel(scr_coord_val x, scr_coord_val y, PIXVAL color)
  */
 static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL colval, bool dirty, scr_coord_val cL, scr_coord_val cR, scr_coord_val cT, scr_coord_val cB)
 {
-	if (clip_lr(&xp, &w, cL, cR) && clip_lr(&yp, &h, cT, cB)) {
+	if(  clip_lr( &xp, &w, cL, cR ) && clip_lr( &yp, &h, cT, cB )  ) {
 		PIXVAL *p = textur + xp + yp * disp_width;
 		const int dx = disp_width - w;
 
-		if (dirty) {
-			mark_rect_dirty_nc(xp, yp, xp + w - 1, yp + h - 1);
+		if(  dirty  ) {
+			mark_rect_dirty_nc( xp, yp, xp + w - 1, yp + h - 1 );
 		}
 #if defined USE_ASSEMBLER && defined __GNUC__ && defined __i686__
 		// GCC might not use "rep stos" so force its use
-		const uint32 longcolval = (colval << 16) | colval;
+		const uint32 longcolval = ( colval << 16 ) | colval;
 		do {
 			unsigned int count = w;
 			asm volatile (
@@ -3373,15 +3375,15 @@ static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_va
 				: "cc", "memory"
 			);
 			p += dx;
-		} while (--h);
+		} while(  --h  );
 #elif defined LOW_LEVEL
 		// low level c++
-		const uint32 colvald = (colval << 16) | colval;
+		const uint32 colvald = ( colval << 16 ) | colval;
 		do {
 			scr_coord_val count = w;
 
 			// align to 4 bytes, should use uintptr_t but not available
-			if(  reinterpret_cast<size_t>(p) & 0x2  ) {
+			if(  reinterpret_cast<size_t>( p ) & 0x2  ) {
 				*p++ = (PIXVAL)colvald;
 				count--;
 			}
@@ -3389,7 +3391,7 @@ static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_va
 			bool const postalign = count & 1;
 			count >>= 1;
 			uint32 *lp = (uint32 *)p;
-			while(count--) {
+			while(  count--  ) {
 				*lp++ = colvald;
 			}
 			p = (PIXVAL *)lp;
@@ -3398,14 +3400,14 @@ static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_va
 				*p++ = (PIXVAL)colvald;
 			}
 			p += dx;
-		} while (--h);
+		} while(  --h  );
 #else
 		// high level c++
 		do {
 			PIXVAL *const fillend = p + w;
-			std::fill(p, fillend, colval);
+			std::fill( p, fillend, colval );
 			p = fillend + dx;
-		} while (--h);
+		} while(  --h  );
 #endif
 	}
 }
@@ -3413,7 +3415,7 @@ static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_va
 
 void display_fillbox_wh_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL color, bool dirty)
 {
-	display_fb_internal(xp, yp, w, h, color, dirty, 0, disp_width, 0, disp_height);
+	display_fb_internal( xp, yp, w, h, color, dirty, 0, disp_width, 0, disp_height );
 }
 
 
@@ -3438,22 +3440,24 @@ void display_filled_roundbox_clip(scr_coord_val xp, scr_coord_val yp, scr_coord_
  */
 static void display_vl_internal(const scr_coord_val xp, scr_coord_val yp, scr_coord_val h, const PIXVAL colval, int dirty, scr_coord_val cL, scr_coord_val cR, scr_coord_val cT, scr_coord_val cB)
 {
-	if (xp >= cL && xp < cR && clip_lr(&yp, &h, cT, cB)) {
+	if(  xp >= cL && xp < cR && clip_lr( &yp, &h, cT, cB )  ) {
 		PIXVAL *p = textur + xp + yp * disp_width;
 
-		if (dirty) mark_rect_dirty_nc(xp, yp, xp, yp + h - 1);
+		if(  dirty  ) {
+			mark_rect_dirty_nc( xp, yp, xp, yp + h - 1 );
+		}
 
 		do {
 			*p = colval;
 			p += disp_width;
-		} while (--h != 0);
+		} while(  --h != 0  );
 	}
 }
 
 
 void display_vline_wh_rgb(const scr_coord_val xp, scr_coord_val yp, scr_coord_val h, const PIXVAL color, bool dirty)
 {
-	display_vl_internal(xp, yp, h, color, dirty, 0, disp_width, 0, disp_height);
+	display_vl_internal( xp, yp, h, color, dirty, 0, disp_width, 0, disp_height );
 }
 
 
@@ -3471,22 +3475,26 @@ void display_array_wh(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_c
 	const int arr_w = w;
 	const scr_coord_val xoff = clip_wh( &xp, &w, CR0.clip_rect.x, CR0.clip_rect.xx );
 	const scr_coord_val yoff = clip_wh( &yp, &h, CR0.clip_rect.y, CR0.clip_rect.yy );
-	if(  w > 0  &&  h > 0  ) {
+	if(  w > 0 && h > 0  ) {
 		PIXVAL *p = textur + xp + yp * disp_width;
 		const PIXVAL *arr_src = arr;
 
-		mark_rect_dirty_nc(xp, yp, xp + w - 1, yp + h - 1);
-		if(  xp == CR0.clip_rect.x  ) arr_src += xoff;
-		if(  yp == CR0.clip_rect.y  ) arr_src += yoff * arr_w;
+		mark_rect_dirty_nc( xp, yp, xp + w - 1, yp + h - 1 );
+		if(  xp == CR0.clip_rect.x  ) {
+			arr_src += xoff;
+		}
+		if(  yp == CR0.clip_rect.y  ) {
+			arr_src += yoff * arr_w;
+		}
 		do {
 			unsigned int ww = w;
 
 			do {
 				*p++ = *arr_src++;
-			} while (--ww > 0);
+			} while(  --ww > 0  );
 			arr_src += arr_w - w;
 			p += disp_width - w;
-		} while (--h != 0);
+		} while(  --h != 0  );
 	}
 }
 
@@ -3503,11 +3511,11 @@ bool display_load_font(const char *fname, bool reload)
 	}
 
 	// skip reloading if already in memory, if bdf font
-	if(  !reload  &&  default_font.is_loaded()  &&  strcmp( default_font.get_fname(), fname ) == 0  ) {
+	if(  !reload && default_font.is_loaded() && strcmp( default_font.get_fname(), fname ) == 0  ) {
 		return true;
 	}
 
-	if(  loaded_fnt.load_from_file(fname)  ) {
+	if(  loaded_fnt.load_from_file( fname )  ) {
 		default_font = loaded_fnt;
 		default_font_ascent    = default_font.get_ascent();
 		default_font_linespace = default_font.get_linespace();
@@ -3533,7 +3541,7 @@ bool display_load_font(const char *fname, bool reload)
 
 scr_coord_val display_get_char_width(utf32 c)
 {
-	return default_font.get_glyph_advance(c);
+	return default_font.get_glyph_advance( c );
 }
 
 
@@ -3547,12 +3555,12 @@ scr_coord_val display_get_number_width()
  * as well as retrieves the char byte count and the screen pixel width
  * CAUTION : The text pointer advances to point to the next logical character
  */
-utf32 get_next_char_with_metrics(const char* &text, unsigned char &byte_length, unsigned char &pixel_width)
+utf32 get_next_char_with_metrics(const char *&text, unsigned char &byte_length, unsigned char &pixel_width)
 {
 	size_t len = 0;
-	utf32 const char_code = utf8_decoder_t::decode((utf8 const *)text, len);
+	utf32 const char_code = utf8_decoder_t::decode( (utf8 const *)text, len );
 
-	if(  char_code==UNICODE_NUL  ||  char_code == '\n') {
+	if(  char_code == UNICODE_NUL || char_code == '\n'  ) {
 		// case : end of text reached -> do not advance text pointer
 		// also stop at linebreaks
 		byte_length = 0;
@@ -3562,7 +3570,7 @@ utf32 get_next_char_with_metrics(const char* &text, unsigned char &byte_length, 
 	else {
 		text += len;
 		byte_length = (uint8)len;
-		pixel_width = default_font.get_glyph_advance(char_code);
+		pixel_width = default_font.get_glyph_advance( char_code );
 	}
 	return char_code;
 }
@@ -3571,7 +3579,7 @@ utf32 get_next_char_with_metrics(const char* &text, unsigned char &byte_length, 
 /* returns true, if this is a valid character */
 bool has_character(utf16 char_code)
 {
-	return default_font.is_valid_glyph(char_code);
+	return default_font.is_valid_glyph( char_code );
 }
 
 
@@ -3581,7 +3589,7 @@ bool has_character(utf16 char_code)
  * If an ellipsis len is given, it will only return the last character up to this len if the full length cannot be fitted
  * @returns index of next character. if text[index]==0 the whole string fits
  */
-size_t display_fit_proportional( const char *text, scr_coord_val max_width)
+size_t display_fit_proportional(const char *text, scr_coord_val max_width)
 {
 	size_t max_idx = 0;
 
@@ -3590,7 +3598,7 @@ size_t display_fit_proportional( const char *text, scr_coord_val max_width)
 	scr_coord_val current_offset = 0;
 
 	const char *tmp_text = text;
-	while(  get_next_char_with_metrics(tmp_text, byte_length, pixel_width)  &&  max_width > (current_offset+pixel_width)  ) {
+	while(  get_next_char_with_metrics( tmp_text, byte_length, pixel_width ) && max_width > ( current_offset + pixel_width )  ) {
 		current_offset += pixel_width;
 		max_idx += byte_length;
 	}
@@ -3603,9 +3611,9 @@ size_t display_fit_proportional( const char *text, scr_coord_val max_width)
  * as well as retrieves the char byte count and the screen pixel width
  * CAUTION : The text pointer recedes to point to the previous logical character
  */
-utf32 get_prev_char_with_metrics(const char* &text, const char *const text_start, unsigned char &byte_length, unsigned char &pixel_width)
+utf32 get_prev_char_with_metrics(const char *&text, const char *const text_start, unsigned char &byte_length, unsigned char &pixel_width)
 {
-	if(  text<=text_start  ) {
+	if(  text <= text_start  ) {
 		// case : start of text reached or passed -> do not move the pointer backwards
 		byte_length = 0;
 		pixel_width = 0;
@@ -3616,12 +3624,12 @@ utf32 get_prev_char_with_metrics(const char* &text, const char *const text_start
 	// determine the start of the previous logical character
 	do {
 		--text;
-	} while (  text>text_start  &&  (*text & 0xC0)==0x80  );
+	} while(  text > text_start && ( *text & 0xC0 ) == 0x80  );
 
 	size_t len = 0;
-	char_code = utf8_decoder_t::decode((utf8 const *)text, len);
+	char_code = utf8_decoder_t::decode( (utf8 const *)text, len );
 	byte_length = (uint8)len;
-	pixel_width = default_font.get_glyph_advance(char_code);
+	pixel_width = default_font.get_glyph_advance( char_code );
 
 	return char_code;
 }
@@ -3637,7 +3645,7 @@ scr_coord_val display_calc_proportional_string_len_width(const char *text, size_
 	size_t idx = 0;
 	scr_coord_val width = 0;
 
-	while (get_next_char_with_metrics(text, byte_length, pixel_width)  &&  idx < len) {
+	while(  get_next_char_with_metrics( text, byte_length, pixel_width ) && idx < len  ) {
 		width += pixel_width;
 		idx += byte_length;
 	}
@@ -3650,14 +3658,14 @@ scr_coord_val display_calc_proportional_string_len_width(const char *text, size_
 */
 void display_calc_proportional_multiline_string_len_width(int &xw, int &yh, const char *text)
 {
-	const font_t* const fnt = &default_font;
+	const font_t *const fnt = &default_font;
 	int width = 0;
 	bool last_cr = false;
 
 	xw = yh = 0;
 
-	const utf8 *p = reinterpret_cast<const utf8 *>(text);
-	while (const utf32 iUnicode = utf8_decoder_t::decode(p)) {
+	const utf8 *p = reinterpret_cast<const utf8 *>( text );
+	while(  const utf32 iUnicode = utf8_decoder_t::decode( p )  ) {
 
 		if(  iUnicode == '\n'  ) {
 			// new line: record max width
@@ -3668,10 +3676,10 @@ void display_calc_proportional_multiline_string_len_width(int &xw, int &yh, cons
 			continue;
 		}
 		last_cr = false;
-		width += fnt->get_glyph_advance(iUnicode);
+		width += fnt->get_glyph_advance( iUnicode );
 	}
 	xw = max( xw, width );
-	if (!last_cr) {
+	if(  !last_cr  ) {
 		// extra CR of the last was not already a CR
 		yh += LINESPACE;
 	}
@@ -3687,7 +3695,7 @@ scr_coord_val display_text_proportional_len_clip_rgb(scr_coord_val x, scr_coord_
 	scr_coord_val cL, cR, cT, cB;
 
 	// TAKE CARE: Clipping area may be larger than actual screen size
-	if(  (flags & DT_CLIP)  ) {
+	if(  ( flags & DT_CLIP )  ) {
 		cL = CR.clip_rect.x;
 		cR = CR.clip_rect.xx;
 		cT = CR.clip_rect.y;
@@ -3700,30 +3708,30 @@ scr_coord_val display_text_proportional_len_clip_rgb(scr_coord_val x, scr_coord_
 		cB = disp_height;
 	}
 
-	if (len < 0) {
+	if(  len < 0  ) {
 		// don't know len yet
 		len = 0x7FFF;
 	}
 
 	// adapt x-coordinate for alignment
-	switch (flags & ( ALIGN_LEFT | ALIGN_CENTER_H | ALIGN_RIGHT) ) {
+	switch( flags & ( ALIGN_LEFT | ALIGN_CENTER_H | ALIGN_RIGHT ) ) {
 		case ALIGN_LEFT:
 			// nothing to do
 			break;
 
 		case ALIGN_CENTER_H:
-			x -= display_calc_proportional_string_len_width(txt, len) / 2;
+			x -= display_calc_proportional_string_len_width( txt, len ) / 2;
 			break;
 
 		case ALIGN_RIGHT:
-			x -= display_calc_proportional_string_len_width(txt, len);
+			x -= display_calc_proportional_string_len_width( txt, len );
 			break;
 	}
 
 	// still something to display?
 	const font_t *const fnt = &default_font;
 
-	if (x >= cR || y >= cB || y + fnt->get_linespace() <= cT) {
+	if(  x >= cR || y >= cB || y + fnt->get_linespace() <= cT  ) {
 		// nothing to display
 		return 0;
 	}
@@ -3732,63 +3740,64 @@ scr_coord_val display_text_proportional_len_clip_rgb(scr_coord_val x, scr_coord_
 	const scr_coord_val x0 = x;
 
 	// big loop, draw char by char
-	utf8_decoder_t decoder((utf8 const*)txt);
+	utf8_decoder_t decoder( (utf8 const *)txt );
 	size_t iTextPos = 0; // pointer on text position
 
-	while (iTextPos < (size_t)len  &&  decoder.has_next()) {
+	while(  iTextPos < (size_t)len && decoder.has_next()  ) {
 		// decode char
 		utf32 c = decoder.next();
-		iTextPos = decoder.get_position() - (utf8 const*)txt;
+		iTextPos = decoder.get_position() - (utf8 const *)txt;
 
 		if(  c == '\n'  ) {
 			// stop at linebreak
 			break;
 		}
 		// print unknown character?
-		else if(  !fnt->is_valid_glyph(c)  ) {
+		else if(  !fnt->is_valid_glyph( c )  ) {
 			c = 0;
 		}
 
 		// get the data from the font
-		const font_t::glyph_t& glyph = fnt->get_glyph(c);
+		const font_t::glyph_t &glyph = fnt->get_glyph( c );
 		const uint8 *p = glyph.bitmap;
 
-		int screen_pos = (y + glyph.top) * disp_width + x + glyph.left;
+		int screen_pos = ( y + glyph.top ) * disp_width + x + glyph.left;
 
 		// glyph x clipping
-		int g_left  = max(cL - x - glyph.left, 0);
-		int g_right = min(cR - x - glyph.left, glyph.width);
+		int g_left  = max( cL - x - glyph.left, 0 );
+		int g_right = min( cR - x - glyph.left, glyph.width );
 
 		// all visible rows
-		for (int h = 0; h < glyph.height; h++) {
+		for(  int h = 0; h < glyph.height; h++  ) {
 			const int line = y + glyph.top + h;
-			if(line >= cT && line < cB) {
+			if(  line >= cT && line < cB  ) {
 
-				PIXVAL* dst = textur + screen_pos + g_left;
+				PIXVAL *dst = textur + screen_pos + g_left;
 
 				// all columns
-				for(int gx=g_left; gx<g_right; gx++) {
-					int alpha = p[h*glyph.width + gx];
+				for(  int gx = g_left; gx < g_right; gx++  ) {
+					int alpha = p[h * glyph.width + gx];
 
-					if(alpha > 31) {
+					if(  alpha > 31  ) {
 						// opaque
 						*dst++ = color;
-					} else {
+					}
+					else {
 						// partially transparent -> blend it
 						PIXVAL old_color = *dst;
-						*dst++ = colors_blend_alpha32(old_color, color, alpha);
+						*dst++ = colors_blend_alpha32( old_color, color, alpha );
 					}
 				}
 			}
 			screen_pos += disp_width;
 		}
 
-		x += fnt->get_glyph_advance(c);
+		x += fnt->get_glyph_advance( c );
 	}
 
 	if(  dirty  ) {
 		// here, because only now we know the length also for ALIGN_LEFT text
-		mark_rect_dirty_clip( x0, y, x - 1, y + LINESPACE - 1  CLIP_NUM_PAR);
+		mark_rect_dirty_clip( x0, y, x - 1, y + LINESPACE - 1  CLIP_NUM_PAR );
 	}
 
 	// warning: actual len might be longer, due to clipping!
@@ -3798,7 +3807,7 @@ scr_coord_val display_text_proportional_len_clip_rgb(scr_coord_val x, scr_coord_
 
 /// Displays a string which is abbreviated by the (language specific) ellipsis character if too wide
 /// If enough space is given then it just displays the full string
-void display_proportional_ellipsis_rgb( scr_rect r, const char *text, int align, const PIXVAL color, const bool dirty, bool shadowed, PIXVAL shadow_color)
+void display_proportional_ellipsis_rgb(scr_rect r, const char *text, int align, const PIXVAL color, const bool dirty, bool shadowed, PIXVAL shadow_color)
 {
 	const scr_coord_val ellipsis_width = translator::get_lang()->ellipsis_width;
 	const scr_coord_val max_screen_width = r.w;
@@ -3809,12 +3818,12 @@ void display_proportional_ellipsis_rgb( scr_rect r, const char *text, int align,
 	scr_coord_val current_offset = 0;
 
 	if(  align & ALIGN_CENTER_V  ) {
-		r.y += (r.h - LINESPACE)/2;
+		r.y += ( r.h - LINESPACE ) / 2;
 		align &= ~ALIGN_CENTER_V;
 	}
 
 	const char *tmp_text = text;
-	while(  get_next_char_with_metrics(tmp_text, byte_length, pixel_width)  &&  max_screen_width >= (current_offset+ellipsis_width+pixel_width)  ) {
+	while(  get_next_char_with_metrics( tmp_text, byte_length, pixel_width ) && max_screen_width >= ( current_offset + ellipsis_width + pixel_width )  ) {
 		current_offset += pixel_width;
 		max_idx += byte_length;
 	}
@@ -3822,32 +3831,32 @@ void display_proportional_ellipsis_rgb( scr_rect r, const char *text, int align,
 	scr_coord_val max_offset_before_ellipsis = current_offset;
 
 	// now check if the text would fit completely
-	if(  ellipsis_width  &&  pixel_width > 0  ) {
+	if(  ellipsis_width && pixel_width > 0  ) {
 		// only when while above failed because of exceeding length
 		current_offset += pixel_width;
 		max_idx += byte_length;
 		// check the rest ...
-		while(  get_next_char_with_metrics(tmp_text, byte_length, pixel_width)  &&  max_screen_width >= (current_offset+pixel_width)  ) {
+		while(  get_next_char_with_metrics( tmp_text, byte_length, pixel_width ) && max_screen_width >= ( current_offset + pixel_width )  ) {
 			current_offset += pixel_width;
 			max_idx += byte_length;
 		}
 		// if it does not fit
-		if(  max_screen_width < (current_offset+pixel_width)  ) {
+		if(  max_screen_width < ( current_offset + pixel_width )  ) {
 			scr_coord_val w = 0;
 			// since we know the length already, we try to center the text with the remaining pixels of the last character
 			if(  align & ALIGN_CENTER_H  ) {
-				w = (max_screen_width-max_offset_before_ellipsis-ellipsis_width)/2;
+				w = ( max_screen_width - max_offset_before_ellipsis - ellipsis_width ) / 2;
 			}
-			if (shadowed) {
-				display_text_proportional_len_clip_rgb( r.x+w+1, r.y+1, text, ALIGN_LEFT | DT_CLIP, shadow_color, dirty, max_idx_before_ellipsis  CLIP_NUM_DEFAULT);
+			if(  shadowed  ) {
+				display_text_proportional_len_clip_rgb( r.x + w + 1, r.y + 1, text, ALIGN_LEFT | DT_CLIP, shadow_color, dirty, max_idx_before_ellipsis  CLIP_NUM_DEFAULT );
 			}
-			w += display_text_proportional_len_clip_rgb( r.x+w, r.y, text, ALIGN_LEFT | DT_CLIP, color, dirty, max_idx_before_ellipsis  CLIP_NUM_DEFAULT);
+			w += display_text_proportional_len_clip_rgb( r.x + w, r.y, text, ALIGN_LEFT | DT_CLIP, color, dirty, max_idx_before_ellipsis  CLIP_NUM_DEFAULT );
 
-			if (shadowed) {
-				display_text_proportional_len_clip_rgb( r.x+w+1, r.y+1, translator::translate("..."), ALIGN_LEFT | DT_CLIP, shadow_color, dirty, -1  CLIP_NUM_DEFAULT);
+			if(  shadowed  ) {
+				display_text_proportional_len_clip_rgb( r.x + w + 1, r.y + 1, translator::translate( "..." ), ALIGN_LEFT | DT_CLIP, shadow_color, dirty, -1  CLIP_NUM_DEFAULT );
 			}
 
-			display_text_proportional_len_clip_rgb( r.x+w, r.y, translator::translate("..."), ALIGN_LEFT | DT_CLIP, color, dirty, -1  CLIP_NUM_DEFAULT);
+			display_text_proportional_len_clip_rgb( r.x + w, r.y, translator::translate( "..." ), ALIGN_LEFT | DT_CLIP, color, dirty, -1  CLIP_NUM_DEFAULT );
 			return;
 		}
 		else {
@@ -3856,18 +3865,18 @@ void display_proportional_ellipsis_rgb( scr_rect r, const char *text, int align,
 			current_offset += pixel_width;
 		}
 	}
-	switch (align & ALIGN_RIGHT) {
+	switch( align & ALIGN_RIGHT ) {
 		case ALIGN_CENTER_H:
-			r.x += (max_screen_width - current_offset)/2;
+			r.x += ( max_screen_width - current_offset ) / 2;
 			break;
 		case ALIGN_RIGHT:
 			r.x += max_screen_width - current_offset;
 		default: ;
 	}
-	if (shadowed) {
-		display_text_proportional_len_clip_rgb( r.x+1, r.y+1, text, ALIGN_LEFT | DT_CLIP, shadow_color, dirty, -1  CLIP_NUM_DEFAULT);
+	if(  shadowed  ) {
+		display_text_proportional_len_clip_rgb( r.x + 1, r.y + 1, text, ALIGN_LEFT | DT_CLIP, shadow_color, dirty, -1  CLIP_NUM_DEFAULT );
 	}
-	display_text_proportional_len_clip_rgb( r.x, r.y, text, ALIGN_LEFT | DT_CLIP, color, dirty, -1  CLIP_NUM_DEFAULT);
+	display_text_proportional_len_clip_rgb( r.x, r.y, text, ALIGN_LEFT | DT_CLIP, color, dirty, -1  CLIP_NUM_DEFAULT );
 }
 
 
@@ -3876,30 +3885,30 @@ void display_proportional_ellipsis_rgb( scr_rect r, const char *text, int align,
  */
 void display_ddd_box_rgb(scr_coord_val x1, scr_coord_val y1, scr_coord_val w, scr_coord_val h, PIXVAL tl_color, PIXVAL rd_color, bool dirty)
 {
-	display_fillbox_wh_rgb(x1, y1,         w, 1, tl_color, dirty);
-	display_fillbox_wh_rgb(x1, y1 + h - 1, w, 1, rd_color, dirty);
+	display_fillbox_wh_rgb( x1, y1,         w, 1, tl_color, dirty );
+	display_fillbox_wh_rgb( x1, y1 + h - 1, w, 1, rd_color, dirty );
 
 	h -= 2;
 
-	display_vline_wh_rgb(x1,         y1 + 1, h, tl_color, dirty);
-	display_vline_wh_rgb(x1 + w - 1, y1 + 1, h, rd_color, dirty);
+	display_vline_wh_rgb( x1,         y1 + 1, h, tl_color, dirty );
+	display_vline_wh_rgb( x1 + w - 1, y1 + 1, h, rd_color, dirty );
 }
 
 
 void display_outline_proportional_rgb(scr_coord_val xpos, scr_coord_val ypos, PIXVAL text_color, PIXVAL shadow_color, const char *text, int dirty, sint32 len)
 {
 	const int flags = ALIGN_LEFT | DT_CLIP;
-	display_text_proportional_len_clip_rgb(xpos - 1, ypos    , text, flags, shadow_color, dirty, len  CLIP_NUM_DEFAULT);
-	display_text_proportional_len_clip_rgb(xpos + 1, ypos + 2, text, flags, shadow_color, dirty, len  CLIP_NUM_DEFAULT);
-	display_text_proportional_len_clip_rgb(xpos, ypos + 1, text, flags, text_color, dirty, len  CLIP_NUM_DEFAULT);
+	display_text_proportional_len_clip_rgb( xpos - 1, ypos, text, flags, shadow_color, dirty, len  CLIP_NUM_DEFAULT );
+	display_text_proportional_len_clip_rgb( xpos + 1, ypos + 2, text, flags, shadow_color, dirty, len  CLIP_NUM_DEFAULT );
+	display_text_proportional_len_clip_rgb( xpos, ypos + 1, text, flags, text_color, dirty, len  CLIP_NUM_DEFAULT );
 }
 
 
 void display_shadow_proportional_rgb(scr_coord_val xpos, scr_coord_val ypos, PIXVAL text_color, PIXVAL shadow_color, const char *text, int dirty, sint32 len)
 {
 	const int flags = ALIGN_LEFT | DT_CLIP;
-	display_text_proportional_len_clip_rgb(xpos + 1, ypos + 1 + (12 - LINESPACE) / 2, text, flags, shadow_color, dirty, len  CLIP_NUM_DEFAULT);
-	display_text_proportional_len_clip_rgb(xpos, ypos + (12 - LINESPACE) / 2, text, flags, text_color, dirty, len  CLIP_NUM_DEFAULT);
+	display_text_proportional_len_clip_rgb( xpos + 1, ypos + 1 + ( 12 - LINESPACE ) / 2, text, flags, shadow_color, dirty, len  CLIP_NUM_DEFAULT );
+	display_text_proportional_len_clip_rgb( xpos, ypos + ( 12 - LINESPACE ) / 2, text, flags, text_color, dirty, len  CLIP_NUM_DEFAULT );
 }
 
 
@@ -3908,13 +3917,13 @@ void display_shadow_proportional_rgb(scr_coord_val xpos, scr_coord_val ypos, PIX
  */
 void display_ddd_box_clip_rgb(scr_coord_val x1, scr_coord_val y1, scr_coord_val w, scr_coord_val h, PIXVAL tl_color, PIXVAL rd_color)
 {
-	display_fillbox_wh_clip_rgb(x1, y1,         w, 1, tl_color, true);
-	display_fillbox_wh_clip_rgb(x1, y1 + h - 1, w, 1, rd_color, true);
+	display_fillbox_wh_clip_rgb( x1, y1,         w, 1, tl_color, true );
+	display_fillbox_wh_clip_rgb( x1, y1 + h - 1, w, 1, rd_color, true );
 
 	h -= 2;
 
-	display_vline_wh_clip_rgb(x1,         y1 + 1, h, tl_color, true);
-	display_vline_wh_clip_rgb(x1 + w - 1, y1 + 1, h, rd_color, true);
+	display_vline_wh_clip_rgb( x1,         y1 + 1, h, tl_color, true );
+	display_vline_wh_clip_rgb( x1 + w - 1, y1 + 1, h, rd_color, true );
 }
 
 
@@ -3926,20 +3935,20 @@ void display_ddd_proportional_clip(scr_coord_val xpos, scr_coord_val ypos, FLAGG
 	const int vpadding = LINESPACE / 7;
 	const int hpadding = LINESPACE / 4;
 
-	scr_coord_val width = proportional_string_width(text);
+	scr_coord_val width = proportional_string_width( text );
 
-	PIXVAL lighter = display_blend_colors_alpha32(ddd_color, color_idx_to_rgb(COL_WHITE), 8 /* 25% */);
-	PIXVAL darker  = display_blend_colors_alpha32(ddd_color, color_idx_to_rgb(COL_BLACK), 8 /* 25% */);
+	PIXVAL lighter = display_blend_colors_alpha32( ddd_color, color_idx_to_rgb( COL_WHITE ), 8 /* 25% */ );
+	PIXVAL darker  = display_blend_colors_alpha32( ddd_color, color_idx_to_rgb( COL_BLACK ), 8 /* 25% */ );
 
-	display_fillbox_wh_clip_rgb( xpos+1, ypos - vpadding + 1, width+2*hpadding-2, LINESPACE+2*vpadding-1, ddd_color, dirty CLIP_NUM_PAR);
+	display_fillbox_wh_clip_rgb( xpos + 1, ypos - vpadding + 1, width + 2 * hpadding - 2, LINESPACE + 2 * vpadding - 1, ddd_color, dirty CLIP_NUM_PAR );
 
-	display_fillbox_wh_clip_rgb( xpos, ypos - vpadding, width + 2*hpadding - 2, 1, lighter, dirty );
-	display_fillbox_wh_clip_rgb( xpos, ypos + LINESPACE + vpadding, width + 2*hpadding - 2, 1, darker,  dirty );
+	display_fillbox_wh_clip_rgb( xpos, ypos - vpadding, width + 2 * hpadding - 2, 1, lighter, dirty );
+	display_fillbox_wh_clip_rgb( xpos, ypos + LINESPACE + vpadding, width + 2 * hpadding - 2, 1, darker,  dirty );
 
 	display_vline_wh_clip_rgb( xpos, ypos - vpadding, LINESPACE + vpadding * 2, lighter, dirty );
-	display_vline_wh_clip_rgb( xpos + width + 2*hpadding - 2, ypos - vpadding, LINESPACE + vpadding * 2, darker,  dirty );
+	display_vline_wh_clip_rgb( xpos + width + 2 * hpadding - 2, ypos - vpadding, LINESPACE + vpadding * 2, darker,  dirty );
 
-	display_text_proportional_len_clip_rgb( xpos+hpadding, ypos+1, text, ALIGN_LEFT | DT_CLIP, text_color, dirty, -1);
+	display_text_proportional_len_clip_rgb( xpos + hpadding, ypos + 1, text, ALIGN_LEFT | DT_CLIP, text_color, dirty, -1 );
 }
 
 
@@ -3949,21 +3958,21 @@ void display_ddd_proportional_clip(scr_coord_val xpos, scr_coord_val ypos, FLAGG
 scr_coord_val display_multiline_text_rgb(scr_coord_val x, scr_coord_val y, const char *buf, PIXVAL color)
 {
 	scr_coord_val max_px_len = 0;
-	if (buf != NULL && *buf != '\0') {
+	if(  buf != NULL && *buf != '\0'  ) {
 		const char *next;
 
 		do {
-			next = strchr(buf, '\n');
+			next = strchr( buf, '\n' );
 			const scr_coord_val px_len = display_text_proportional_len_clip_rgb(
-				x, y, buf,
-				ALIGN_LEFT | DT_CLIP, color, true,
-				next != NULL ? (int)(size_t)(next - buf) : -1
-			);
-			if(  px_len>max_px_len  ) {
+			                x, y, buf,
+			                ALIGN_LEFT | DT_CLIP, color, true,
+			                next != NULL ? (int)(size_t)( next - buf ) : -1
+			                   );
+			if(  px_len > max_px_len  ) {
 				max_px_len = px_len;
 			}
 			y += LINESPACE;
-		} while ((void)(buf = (next ? next+1 : NULL)), buf != NULL);
+		} while(  (void)( buf = ( next ? next + 1 : NULL ) ), buf != NULL  );
 	}
 	return max_px_len;
 }
@@ -3981,22 +3990,22 @@ void display_direct_line_rgb(const scr_coord_val x, const scr_coord_val y, const
 	const int dx = xx - x;
 	const int dy = yy - y;
 
-	steps = (abs(dx) > abs(dy) ? abs(dx) : abs(dy));
-	if (steps == 0) {
+	steps = ( abs( dx ) > abs( dy ) ? abs( dx ) : abs( dy ) );
+	if(  steps == 0  ) {
 		steps = 1;
 	}
 
-	xs = ((sint64)dx << 16) / steps;
-	ys = ((sint64)dy << 16) / steps;
+	xs = ( (sint64)dx << 16 ) / steps;
+	ys = ( (sint64)dy << 16 ) / steps;
 
 	xp = (sint64)x << 16;
 	yp = (sint64)y << 16;
 
-	for (i = 0; i <= steps; i++) {
+	for(  i = 0; i <= steps; i++  ) {
 #ifdef DEBUG_FLUSH_BUFFER
-		display_pixel(xp >> 16, yp >> 16, colval, false);
+		display_pixel( xp >> 16, yp >> 16, colval, false );
 #else
-		display_pixel(xp >> 16, yp >> 16, colval);
+		display_pixel( xp >> 16, yp >> 16, colval );
 #endif
 		xp += xs;
 		yp += ys;
@@ -4010,24 +4019,24 @@ void display_direct_line_dotted_rgb(const scr_coord_val x, const scr_coord_val y
 	int i, steps;
 	sint64 xp, yp;
 	sint64 xs, ys;
-	int counter=0;
-	bool mustDraw=true;
+	int counter = 0;
+	bool mustDraw = true;
 
 	const int dx = xx - x;
 	const int dy = yy - y;
 
-	steps = (abs(dx) > abs(dy) ? abs(dx) : abs(dy));
-	if (steps == 0) {
+	steps = ( abs( dx ) > abs( dy ) ? abs( dx ) : abs( dy ) );
+	if(  steps == 0  ) {
 		steps = 1;
 	}
 
-	xs = ((sint64)dx << 16) / steps;
-	ys = ((sint64)dy << 16) / steps;
+	xs = ( (sint64)dx << 16 ) / steps;
+	ys = ( (sint64)dy << 16 ) / steps;
 
 	xp = (sint64)x << 16;
 	yp = (sint64)y << 16;
 
-	for(  i = 0;  i <= steps;  i++  ) {
+	for(  i = 0; i <= steps; i++  ) {
 		counter ++;
 		if(  mustDraw  ) {
 			if(  counter == draw  ) {
@@ -4037,8 +4046,8 @@ void display_direct_line_dotted_rgb(const scr_coord_val x, const scr_coord_val y
 		}
 		if(  !mustDraw  ) {
 			if(  counter == dontDraw  ) {
-				mustDraw=!mustDraw;
-				counter=0;
+				mustDraw = !mustDraw;
+				counter = 0;
 			}
 		}
 
@@ -4052,7 +4061,7 @@ void display_direct_line_dotted_rgb(const scr_coord_val x, const scr_coord_val y
 
 
 // bresenham circle (from wikipedia ...)
-void display_circle_rgb( scr_coord_val x0, scr_coord_val  y0, int radius, const PIXVAL colval )
+void display_circle_rgb(scr_coord_val x0, scr_coord_val  y0, int radius, const PIXVAL colval)
 {
 	int f = 1 - radius;
 	int ddF_x = 1;
@@ -4065,11 +4074,11 @@ void display_circle_rgb( scr_coord_val x0, scr_coord_val  y0, int radius, const 
 	display_pixel( x0 + radius, y0, colval );
 	display_pixel( x0 - radius, y0, colval );
 
-	while(x < y) {
+	while(  x < y  ) {
 		// ddF_x == 2 * x + 1;
 		// ddF_y == -2 * y;
 		// f == x*x + y*y - radius*radius + 2*x - y + 1;
-		if(f >= 0) {
+		if(  f >= 0  ) {
 			y--;
 			ddF_y += 2;
 			f += ddF_y;
@@ -4092,7 +4101,7 @@ void display_circle_rgb( scr_coord_val x0, scr_coord_val  y0, int radius, const 
 
 
 // bresenham circle (from wikipedia ...)
-void display_filled_circle_rgb( scr_coord_val x0, scr_coord_val  y0, int radius, const PIXVAL colval )
+void display_filled_circle_rgb(scr_coord_val x0, scr_coord_val  y0, int radius, const PIXVAL colval)
 {
 	int f = 1 - radius;
 	int ddF_x = 1;
@@ -4100,17 +4109,17 @@ void display_filled_circle_rgb( scr_coord_val x0, scr_coord_val  y0, int radius,
 	int x = 0;
 	int y = radius;
 
-	display_fb_internal( x0-radius, y0, radius+radius+1, 1, colval, false, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
+	display_fb_internal( x0 - radius, y0, radius + radius + 1, 1, colval, false, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
 	display_pixel( x0, y0 + radius, colval );
 	display_pixel( x0, y0 - radius, colval );
 	display_pixel( x0 + radius, y0, colval );
 	display_pixel( x0 - radius, y0, colval );
 
-	while(x < y) {
+	while(  x < y  ) {
 		// ddF_x == 2 * x + 1;
 		// ddF_y == -2 * y;
 		// f == x*x + y*y - radius*radius + 2*x - y + 1;
-		if(f >= 0) {
+		if(  f >= 0  ) {
 			y--;
 			ddF_y += 2;
 			f += ddF_y;
@@ -4119,105 +4128,105 @@ void display_filled_circle_rgb( scr_coord_val x0, scr_coord_val  y0, int radius,
 		x++;
 		ddF_x += 2;
 		f += ddF_x;
-		display_fb_internal( x0-x, y0+y, x+x, 1, colval, false, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
-		display_fb_internal( x0-x, y0-y, x+x, 1, colval, false, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
+		display_fb_internal( x0 - x, y0 + y, x + x, 1, colval, false, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
+		display_fb_internal( x0 - x, y0 - y, x + x, 1, colval, false, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
 
-		display_fb_internal( x0-y, y0+x, y+y, 1, colval, false, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
-		display_fb_internal( x0-y, y0-x, y+y, 1, colval, false, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
+		display_fb_internal( x0 - y, y0 + x, y + y, 1, colval, false, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
+		display_fb_internal( x0 - y, y0 - x, y + y, 1, colval, false, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy );
 	}
 //	mark_rect_dirty_wc( x0-radius, y0-radius, x0+radius+1, y0+radius+1 );
 }
 
 
 
-void display_signal_direction_rgb(scr_coord_val x, scr_coord_val y, uint8 way_dir, uint8 sig_dir, PIXVAL col1, PIXVAL col1_dark, bool is_diagonal, uint8 slope )
+void display_signal_direction_rgb(scr_coord_val x, scr_coord_val y, uint8 way_dir, uint8 sig_dir, PIXVAL col1, PIXVAL col1_dark, bool is_diagonal, uint8 slope)
 {
-	uint8 width  = is_diagonal ? current_tile_raster_width/6*0.353 :current_tile_raster_width/6;
-	const uint8 height = is_diagonal ?current_tile_raster_width/6*0.353 :current_tile_raster_width/12;
-	const uint8 thickness = max( current_tile_raster_width/36, 2);
+	uint8 width  = is_diagonal ? current_tile_raster_width / 6 * 0.353 : current_tile_raster_width / 6;
+	const uint8 height = is_diagonal ? current_tile_raster_width / 6 * 0.353 : current_tile_raster_width / 12;
+	const uint8 thickness = max( current_tile_raster_width / 36, 2 );
 
-	x += current_tile_raster_width/2;
-	y += (current_tile_raster_width*9)/16;
+	x += current_tile_raster_width / 2;
+	y += ( current_tile_raster_width * 9 ) / 16;
 
-	if (is_diagonal) {
+	if(  is_diagonal  ) {
 
-		if (way_dir == ribi_t::northeast || way_dir == ribi_t::southwest) {
+		if(  way_dir == ribi_t::northeast || way_dir == ribi_t::southwest  ) {
 			// vertical
-			x += (way_dir==ribi_t::northeast) ?current_tile_raster_width/4 : (-current_tile_raster_width/4);
-			y += current_tile_raster_width/16;
-			width = width<<2; // 4x
+			x += ( way_dir == ribi_t::northeast ) ? current_tile_raster_width / 4 : ( -current_tile_raster_width / 4 );
+			y += current_tile_raster_width / 16;
+			width = width << 2; // 4x
 
 			// upper
-			for (uint8 xoff = 0; xoff < width/2; xoff++) {
-				const uint8 yoff = (uint8)((xoff+1)/2);
+			for(  uint8 xoff = 0; xoff < width / 2; xoff++  ) {
+				const uint8 yoff = ( uint8 )( ( xoff + 1 ) / 2 );
 				// up
-				if (sig_dir & ribi_t::east || sig_dir & ribi_t::south) {
-					display_vline_wh_clip_rgb(x + xoff, y+yoff, width/4 - yoff, col1, true);
-					display_vline_wh_clip_rgb(x-xoff-1, y+yoff, width/4 - yoff, col1, true);
+				if(  sig_dir & ribi_t::east || sig_dir & ribi_t::south  ) {
+					display_vline_wh_clip_rgb( x + xoff, y + yoff, width / 4 - yoff, col1, true );
+					display_vline_wh_clip_rgb( x - xoff - 1, y + yoff, width / 4 - yoff, col1, true );
 				}
 				// down
-				if (sig_dir & ribi_t::west || sig_dir & ribi_t::north) {
-					display_vline_wh_clip_rgb(x + xoff, y+current_tile_raster_width/6,              width/4-yoff, col1,      true);
-					display_vline_wh_clip_rgb(x + xoff, y+current_tile_raster_width/6+width/4-yoff, thickness,    col1_dark, true);
-					display_vline_wh_clip_rgb(x-xoff-1, y+current_tile_raster_width/6,              width/4-yoff, col1,      true);
-					display_vline_wh_clip_rgb(x-xoff-1, y+current_tile_raster_width/6+width/4-yoff, thickness,    col1_dark, true);
+				if(  sig_dir & ribi_t::west || sig_dir & ribi_t::north  ) {
+					display_vline_wh_clip_rgb( x + xoff, y + current_tile_raster_width / 6,              width / 4 - yoff, col1,      true );
+					display_vline_wh_clip_rgb( x + xoff, y + current_tile_raster_width / 6 + width / 4 - yoff, thickness,    col1_dark, true );
+					display_vline_wh_clip_rgb( x - xoff - 1, y + current_tile_raster_width / 6,              width / 4 - yoff, col1,      true );
+					display_vline_wh_clip_rgb( x - xoff - 1, y + current_tile_raster_width / 6 + width / 4 - yoff, thickness,    col1_dark, true );
 				}
 			}
 			// up
-			if (sig_dir & ribi_t::east || sig_dir & ribi_t::south) {
-				display_fillbox_wh_clip_rgb(x - width/2, y + width/4, width, thickness, col1_dark, true);
+			if(  sig_dir & ribi_t::east || sig_dir & ribi_t::south  ) {
+				display_fillbox_wh_clip_rgb( x - width / 2, y + width / 4, width, thickness, col1_dark, true );
 			}
 		}
 		else {
 			// horizontal
-			y -= current_tile_raster_width/12;
-			if (way_dir == ribi_t::southeast) {
-				y += current_tile_raster_width/4;
+			y -= current_tile_raster_width / 12;
+			if(  way_dir == ribi_t::southeast  ) {
+				y += current_tile_raster_width / 4;
 			}
 
-			for (uint8 xoff = 0; xoff < width*2; xoff++) {
-				const uint8 h = width*2 - (scr_coord_val)(xoff + 1);
+			for(  uint8 xoff = 0; xoff < width * 2; xoff++  ) {
+				const uint8 h = width * 2 - (scr_coord_val)( xoff + 1 );
 				// left
-				if (sig_dir & ribi_t::north || sig_dir & ribi_t::east) {
-					display_vline_wh_clip_rgb(x - xoff - width*2, y + (scr_coord_val)((xoff+1)/2),   h, col1, true);
-					display_vline_wh_clip_rgb(x - xoff - width*2, y + (scr_coord_val)((xoff+1)/2)+h, thickness, col1_dark, true);
+				if(  sig_dir & ribi_t::north || sig_dir & ribi_t::east  ) {
+					display_vline_wh_clip_rgb( x - xoff - width * 2, y + (scr_coord_val)( ( xoff + 1 ) / 2 ),   h, col1, true );
+					display_vline_wh_clip_rgb( x - xoff - width * 2, y + (scr_coord_val)( ( xoff + 1 ) / 2 ) + h, thickness, col1_dark, true );
 				}
 				// right
-				if (sig_dir & ribi_t::south || sig_dir & ribi_t::west) {
-					display_vline_wh_clip_rgb(x + xoff + width*2, y + (scr_coord_val)((xoff+1)/2),   h, col1, true);
-					display_vline_wh_clip_rgb(x + xoff + width*2, y + (scr_coord_val)((xoff+1)/2)+h, thickness, col1_dark, true);
+				if(  sig_dir & ribi_t::south || sig_dir & ribi_t::west  ) {
+					display_vline_wh_clip_rgb( x + xoff + width * 2, y + (scr_coord_val)( ( xoff + 1 ) / 2 ),   h, col1, true );
+					display_vline_wh_clip_rgb( x + xoff + width * 2, y + (scr_coord_val)( ( xoff + 1 ) / 2 ) + h, thickness, col1_dark, true );
 				}
 			}
 		}
 	}
 	else {
-		if (sig_dir & ribi_t::south) {
+		if(  sig_dir & ribi_t::south  ) {
 			// upper right
-			scr_coord_val slope_offset_y = corner_se( slope )*TILE_HEIGHT_STEP;
-			for (uint8 xoff = 0; xoff < width; xoff++) {
-				display_vline_wh_clip_rgb( x + xoff, y - slope_offset_y, (scr_coord_val)(xoff/2) + 1, col1, true );
-				display_vline_wh_clip_rgb( x + xoff, y - slope_offset_y + (scr_coord_val)(xoff/2) + 1, thickness, col1_dark, true );
+			scr_coord_val slope_offset_y = corner_se( slope ) * TILE_HEIGHT_STEP;
+			for(  uint8 xoff = 0; xoff < width; xoff++  ) {
+				display_vline_wh_clip_rgb( x + xoff, y - slope_offset_y, (scr_coord_val)( xoff / 2 ) + 1, col1, true );
+				display_vline_wh_clip_rgb( x + xoff, y - slope_offset_y + (scr_coord_val)( xoff / 2 ) + 1, thickness, col1_dark, true );
 			}
 		}
-		if (sig_dir & ribi_t::east) {
-			scr_coord_val slope_offset_y = corner_se( slope )*TILE_HEIGHT_STEP;
-			for (uint8 xoff = 0; xoff < width; xoff++) {
-				display_vline_wh_clip_rgb(x - xoff - 1, y - slope_offset_y, (scr_coord_val)(xoff/2) + 1, col1, true);
-				display_vline_wh_clip_rgb(x - xoff - 1, y - slope_offset_y + (scr_coord_val)(xoff/2) + 1, thickness, col1_dark, true);
+		if(  sig_dir & ribi_t::east  ) {
+			scr_coord_val slope_offset_y = corner_se( slope ) * TILE_HEIGHT_STEP;
+			for(  uint8 xoff = 0; xoff < width; xoff++  ) {
+				display_vline_wh_clip_rgb( x - xoff - 1, y - slope_offset_y, (scr_coord_val)( xoff / 2 ) + 1, col1, true );
+				display_vline_wh_clip_rgb( x - xoff - 1, y - slope_offset_y + (scr_coord_val)( xoff / 2 ) + 1, thickness, col1_dark, true );
 			}
 		}
-		if (sig_dir & ribi_t::west) {
-			scr_coord_val slope_offset_y = corner_nw( slope )*TILE_HEIGHT_STEP;
-			for (uint8 xoff = 0; xoff < width; xoff++) {
-				display_vline_wh_clip_rgb(x + xoff, y - slope_offset_y + height*2 - (scr_coord_val)(xoff/2) + 1, (scr_coord_val)(xoff/2) + 1, col1, true);
-				display_vline_wh_clip_rgb(x + xoff, y - slope_offset_y + height*2 + 1, thickness, col1_dark, true);
+		if(  sig_dir & ribi_t::west  ) {
+			scr_coord_val slope_offset_y = corner_nw( slope ) * TILE_HEIGHT_STEP;
+			for(  uint8 xoff = 0; xoff < width; xoff++  ) {
+				display_vline_wh_clip_rgb( x + xoff, y - slope_offset_y + height * 2 - (scr_coord_val)( xoff / 2 ) + 1, (scr_coord_val)( xoff / 2 ) + 1, col1, true );
+				display_vline_wh_clip_rgb( x + xoff, y - slope_offset_y + height * 2 + 1, thickness, col1_dark, true );
 			}
 		}
-		if (sig_dir & ribi_t::north) {
-			scr_coord_val slope_offset_y = corner_nw( slope )*TILE_HEIGHT_STEP;
-			for (uint8 xoff = 0; xoff < width; xoff++) {
-				display_vline_wh_clip_rgb(x - xoff - 1, y - slope_offset_y + height*2 - (scr_coord_val)(xoff/2) + 1, (scr_coord_val)(xoff/2) + 1, col1, true);
-				display_vline_wh_clip_rgb(x - xoff - 1, y - slope_offset_y + height*2 + 1, thickness, col1_dark, true);
+		if(  sig_dir & ribi_t::north  ) {
+			scr_coord_val slope_offset_y = corner_nw( slope ) * TILE_HEIGHT_STEP;
+			for(  uint8 xoff = 0; xoff < width; xoff++  ) {
+				display_vline_wh_clip_rgb( x - xoff - 1, y - slope_offset_y + height * 2 - (scr_coord_val)( xoff / 2 ) + 1, (scr_coord_val)( xoff / 2 ) + 1, col1, true );
+				display_vline_wh_clip_rgb( x - xoff - 1, y - slope_offset_y + height * 2 + 1, thickness, col1_dark, true );
 			}
 		}
 	}
@@ -4236,7 +4245,7 @@ void display_signal_direction_rgb(scr_coord_val x, scr_coord_val y, uint8 way_di
  */
 void draw_bezier_rgb(scr_coord_val Ax, scr_coord_val Ay, scr_coord_val Bx, scr_coord_val By, scr_coord_val ADx, scr_coord_val ADy, scr_coord_val BDx, scr_coord_val BDy, const PIXVAL colore, scr_coord_val draw, scr_coord_val dontDraw)
 {
-	scr_coord_val Cx,Cy,Dx,Dy;
+	scr_coord_val Cx, Cy, Dx, Dy;
 	Cx = Ax + ADx;
 	Cy = Ay + ADy;
 	Dx = Bx + BDx;
@@ -4260,25 +4269,25 @@ void draw_bezier_rgb(scr_coord_val Ax, scr_coord_val Ay, scr_coord_val Bx, scr_c
 			else
 				display_direct_line_dotted_rgb(rx,ry,oldx,oldy,draw,dontDraw,colore);
 	  }
-*/
+	*/
 
-	sint32 rx = Ax*32*32*32; // init with a=0, b=32
-	sint32 ry = Ay*32*32*32; // init with a=0, b=32
+	sint32 rx = Ax * 32 * 32 * 32; // init with a=0, b=32
+	sint32 ry = Ay * 32 * 32 * 32; // init with a=0, b=32
 
 	// fixed point: we cycle between 0 and 32, rather than 0 and 1
-	for(  sint32 a=1;  a<=32;  a++  ) {
+	for(  sint32 a = 1; a <= 32; a++  ) {
 		const sint32 b = 32 - a;
 		const sint32 oldx = rx;
 		const sint32 oldy = ry;
-		rx = Ax*b*b*b + 3*Cx*b*b*a + 3*Dx*b*a*a + Bx*a*a*a;
-		ry = Ay*b*b*b + 3*Cy*b*b*a + 3*Dy*b*a*a + By*a*a*a;
+		rx = Ax * b * b * b + 3 * Cx * b * b * a + 3 * Dx * b * a * a + Bx * a * a * a;
+		ry = Ay * b * b * b + 3 * Cy * b * b * a + 3 * Dy * b * a * a + By * a * a * a;
 
 		// fixed point: due to cycling between 0 and 32 (1<<5), we divide by 32^3 == 1<<15 because of cubic interpolation
-		if(  !draw  &&  !dontDraw  ) {
-			display_direct_line_rgb( rx>>15, ry>>15, oldx>>15, oldy>>15, colore );
+		if(  !draw && !dontDraw  ) {
+			display_direct_line_rgb( rx >> 15, ry >> 15, oldx >> 15, oldy >> 15, colore );
 		}
 		else {
-			display_direct_line_dotted_rgb( rx>>15, ry>>15, oldx>>15, oldy>>15, draw, dontDraw, colore );
+			display_direct_line_dotted_rgb( rx >> 15, ry >> 15, oldx >> 15, oldy >> 15, draw, dontDraw, colore );
 		}
 	}
 }
@@ -4288,9 +4297,9 @@ void draw_bezier_rgb(scr_coord_val Ax, scr_coord_val Ay, scr_coord_val Bx, scr_c
 // Only right facing at the moment
 void display_right_triangle_rgb(scr_coord_val x, scr_coord_val y, scr_coord_val height, const PIXVAL colval, const bool dirty)
 {
-	y += (height / 2);
+	y += ( height / 2 );
 	while(  height > 0  ) {
-		display_vline_wh_rgb( x, y-(height/2), height, colval, dirty );
+		display_vline_wh_rgb( x, y - ( height / 2 ), height, colval, dirty );
 		x++;
 		height -= 2;
 	}
@@ -4306,11 +4315,11 @@ void display_right_triangle_rgb(scr_coord_val x, scr_coord_val y, scr_coord_val 
 static inline uint32 get_lowest_set_bit(uint32 val)
 {
 	static const uint8 MultiplyDeBruijnBitPosition[32] =
-	{
+ {
 		0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8, 31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9
 	};
 
-	return MultiplyDeBruijnBitPosition[(((val & -val) * 0x077CB531U)) >> 27];
+	return MultiplyDeBruijnBitPosition[( ( ( val & -val ) * 0x077CB531U ) ) >> 27];
 }
 
 
@@ -4323,96 +4332,96 @@ void display_flush_buffer()
 #ifdef USE_SOFTPOINTER
 	ex_ord_update_mx_my();
 
-	const scr_coord_val ticker_ypos_bottom = display_get_height() - win_get_statusbar_height() - (env_t::menupos == MENU_BOTTOM) * env_t::iconsize.h;
+	const scr_coord_val ticker_ypos_bottom = display_get_height() - win_get_statusbar_height() - ( env_t::menupos == MENU_BOTTOM ) * env_t::iconsize.h;
 	const scr_coord_val ticker_ypos_top = ticker_ypos_bottom - TICKER_HEIGHT;
 
 	// use mouse pointer image if available
-	if (softpointer != -1 && standard_pointer >= 0) {
-		display_color_img(standard_pointer, sys_event.mx, sys_event.my, 0, false, true  CLIP_NUM_DEFAULT);
+	if(  softpointer != -1 && standard_pointer >= 0  ) {
+		display_color_img( standard_pointer, sys_event.mx, sys_event.my, 0, false, true  CLIP_NUM_DEFAULT );
 
 		// if software emulated mouse pointer is over the ticker, redraw it totally at next occurs
-		if (!ticker::empty() && sys_event.my+images[standard_pointer].h >= ticker_ypos_top &&
-		   sys_event.my <= ticker_ypos_bottom) {
-			ticker::set_redraw_all(true);
+		if(  !ticker::empty() && sys_event.my + images[standard_pointer].h >= ticker_ypos_top &&
+		                sys_event.my <= ticker_ypos_bottom  ) {
+			ticker::set_redraw_all( true );
 		}
 	}
 	// no pointer image available, draw a crosshair
 	else {
-		display_fb_internal(sys_event.mx - 1, sys_event.my - 3, 3, 7, color_idx_to_rgb(COL_WHITE), true, 0, disp_width, 0, disp_height);
-		display_fb_internal(sys_event.mx - 3, sys_event.my - 1, 7, 3, color_idx_to_rgb(COL_WHITE), true, 0, disp_width, 0, disp_height);
-		display_direct_line_rgb( sys_event.mx-2, sys_event.my, sys_event.mx+2, sys_event.my, color_idx_to_rgb(COL_BLACK) );
-		display_direct_line_rgb( sys_event.mx, sys_event.my-2, sys_event.mx, sys_event.my+2, color_idx_to_rgb(COL_BLACK) );
+		display_fb_internal( sys_event.mx - 1, sys_event.my - 3, 3, 7, color_idx_to_rgb( COL_WHITE ), true, 0, disp_width, 0, disp_height );
+		display_fb_internal( sys_event.mx - 3, sys_event.my - 1, 7, 3, color_idx_to_rgb( COL_WHITE ), true, 0, disp_width, 0, disp_height );
+		display_direct_line_rgb( sys_event.mx - 2, sys_event.my, sys_event.mx + 2, sys_event.my, color_idx_to_rgb( COL_BLACK ) );
+		display_direct_line_rgb( sys_event.mx, sys_event.my - 2, sys_event.mx, sys_event.my + 2, color_idx_to_rgb( COL_BLACK ) );
 
 		// if crosshair is over the ticker, redraw it totally at next occurs
-		if(!ticker::empty() && sys_event.my+2 >= ticker_ypos_top && sys_event.my-2 <= ticker_ypos_bottom) {
-			ticker::set_redraw_all(true);
+		if(  !ticker::empty() && sys_event.my + 2 >= ticker_ypos_top && sys_event.my - 2 <= ticker_ypos_bottom  ) {
+			ticker::set_redraw_all( true );
 		}
 	}
 	old_my = sys_event.my;
 #endif
 
 	// combine current with last dirty tiles
-	for(  int i = 0;  i < tile_buffer_length;  i++  ) {
+	for(  int i = 0; i < tile_buffer_length; i++  ) {
 		tile_dirty_old[i] |= tile_dirty[i];
 	}
 
 	const int tile_words_per_line = tile_buffer_per_line >> 5;
 	ALLOCA( uint32, masks, tile_words_per_line );
 
-	for(  int x1 = 0;  x1 < tiles_per_line;  x1++  ) {
-		const uint32 x_search_mask = 1 << (x1 & 31); // bit mask for finding bit x set
+	for(  int x1 = 0; x1 < tiles_per_line; x1++  ) {
+		const uint32 x_search_mask = 1 << ( x1 & 31 ); // bit mask for finding bit x set
 		int y1 = 0;
 		do {
-			const int word_max = (0 + (y1 + 1) * tile_buffer_per_line) >> 5; // first word on next line. limit search to < max
-			const int word_x1 = (x1 + y1 * tile_buffer_per_line) >> 5;
-			if(  (tile_dirty_old[word_x1] & x_search_mask) == x_search_mask  ) {
+			const int word_max = ( 0 + ( y1 + 1 ) * tile_buffer_per_line ) >> 5; // first word on next line. limit search to < max
+			const int word_x1 = ( x1 + y1 * tile_buffer_per_line ) >> 5;
+			if(  ( tile_dirty_old[word_x1] & x_search_mask ) == x_search_mask  ) {
 				// found dirty tile at x1, now find contiguous block of dirties - x2
-				const uint32 testval = ~((~(0xFFFFFFFF << (x1 & 31))) | tile_dirty_old[word_x1]);
+				const uint32 testval = ~( ( ~( 0xFFFFFFFF << ( x1 & 31 ) ) ) | tile_dirty_old[word_x1] );
 				int word_x2 = word_x1;
 				int x2;
-				if(  testval == 0  ) { // dirty block spans words
+				if(  testval == 0  ) {   // dirty block spans words
 					masks[0] = tile_dirty_old[word_x1];
 					word_x2++;
-					while(  word_x2 < word_max  &&  tile_dirty_old[word_x2] == 0xFFFFFFFF  ) {
+					while(  word_x2 < word_max && tile_dirty_old[word_x2] == 0xFFFFFFFF  ) {
 						masks[word_x2 - word_x1] = 0xFFFFFFFF; // dirty block spans this entire word
 						word_x2++;
 					}
-					if(  word_x2 >= word_max                   // dirty tiles extend all the way to screen edge
-						 ||  !(tile_dirty_old[word_x2] & 1)  ) { // dirty block actually ended on the word edge
+					if(  word_x2 >= word_max                    // dirty tiles extend all the way to screen edge
+					                || !( tile_dirty_old[word_x2] & 1 ) ) {  // dirty block actually ended on the word edge
 						x2 = 32; // set to whole word
 						word_x2--; // masks already set in while loop above
 					}
 					else { // dirty block ends in word_x2
-						x2 = get_lowest_set_bit(~tile_dirty_old[word_x2]);
-						masks[word_x2-word_x1] = 0xFFFFFFFF >> (32 - x2);
+						x2 = get_lowest_set_bit( ~tile_dirty_old[word_x2] );
+						masks[word_x2 - word_x1] = 0xFFFFFFFF >> ( 32 - x2 );
 					}
 				}
 				else { // dirty block is all within one word - word_x1
-					x2 = get_lowest_set_bit(testval);
-					masks[0] = (0xFFFFFFFF << (32 - x2 + (x1 & 31))) >> (32 - x2);
+					x2 = get_lowest_set_bit( testval );
+					masks[0] = ( 0xFFFFFFFF << ( 32 - x2 + ( x1 & 31 ) ) ) >> ( 32 - x2 );
 				}
 
-				for(  int i = word_x1;  i <= word_x2;  i++  ) { // clear dirty
+				for(  int i = word_x1; i <= word_x2; i++  ) { // clear dirty
 					tile_dirty_old[i] &= ~masks[i - word_x1];
 				}
 
 				// x2 from bit index to tile coords
-				x2 += (x1 & ~31) + ((word_x2 - word_x1) << 5);
+				x2 += ( x1 & ~31 ) + ( ( word_x2 - word_x1 ) << 5 );
 
 				// find how many rows can be combined into one rectangle
 				int y2 = y1 + 1;
 				bool xmatch = true;
-				while(  y2 < tile_lines  &&  xmatch  ) {
-					const int li = (x1 + y2 * tile_buffer_per_line) >> 5;
+				while(  y2 < tile_lines && xmatch  ) {
+					const int li = ( x1 + y2 * tile_buffer_per_line ) >> 5;
 					const int ri = li + word_x2 - word_x1;
-					for(  int i = li;  i <= ri;  i++ ) {
-						if(  (tile_dirty_old[i] & masks[i - li])  !=  masks[i - li]  ) {
+					for(  int i = li; i <= ri; i++ ) {
+						if(  ( tile_dirty_old[i] & masks[i - li] ) !=  masks[i - li]  ) {
 							xmatch = false;
 							break;
 						}
 					}
 					if(  xmatch  ) {
-						for(  int i = li;  i <= ri;  i++  ) { // clear dirty
+						for(  int i = li; i <= ri; i++  ) { // clear dirty
 							tile_dirty_old[i] &= ~masks[i - li];
 						}
 						y2++;
@@ -4420,14 +4429,14 @@ void display_flush_buffer()
 				}
 
 #ifdef DEBUG_FLUSH_BUFFER
-				display_vline_wh_rgb( (x1 << DIRTY_TILE_SHIFT) - 1, y1 << DIRTY_TILE_SHIFT, (y2 - y1) << DIRTY_TILE_SHIFT, color_idx_to_rgb(COL_YELLOW), false);
-				display_vline_wh_rgb( x2 << DIRTY_TILE_SHIFT,  y1 << DIRTY_TILE_SHIFT, (y2 - y1) << DIRTY_TILE_SHIFT, color_idx_to_rgb(COL_YELLOW), false);
-				display_fillbox_wh_rgb( x1 << DIRTY_TILE_SHIFT, y1 << DIRTY_TILE_SHIFT, (x2 - x1) << DIRTY_TILE_SHIFT, 1, color_idx_to_rgb(COL_YELLOW), false);
-				display_fillbox_wh_rgb( x1 << DIRTY_TILE_SHIFT, (y2 << DIRTY_TILE_SHIFT) - 1, (x2 - x1) << DIRTY_TILE_SHIFT, 1, color_idx_to_rgb(COL_YELLOW), false);
-				display_direct_line_rgb( x1 << DIRTY_TILE_SHIFT, y1 << DIRTY_TILE_SHIFT, x2 << DIRTY_TILE_SHIFT, (y2 << DIRTY_TILE_SHIFT) - 1, color_idx_to_rgb(COL_YELLOW) );
-				display_direct_line_rgb( x1 << DIRTY_TILE_SHIFT, (y2 << DIRTY_TILE_SHIFT) - 1, x2 << DIRTY_TILE_SHIFT, y1 << DIRTY_TILE_SHIFT, color_idx_to_rgb(COL_YELLOW) );
+				display_vline_wh_rgb( ( x1 << DIRTY_TILE_SHIFT ) - 1, y1 << DIRTY_TILE_SHIFT, ( y2 - y1 ) << DIRTY_TILE_SHIFT, color_idx_to_rgb( COL_YELLOW ), false );
+				display_vline_wh_rgb( x2 << DIRTY_TILE_SHIFT,  y1 << DIRTY_TILE_SHIFT, ( y2 - y1 ) << DIRTY_TILE_SHIFT, color_idx_to_rgb( COL_YELLOW ), false );
+				display_fillbox_wh_rgb( x1 << DIRTY_TILE_SHIFT, y1 << DIRTY_TILE_SHIFT, ( x2 - x1 ) << DIRTY_TILE_SHIFT, 1, color_idx_to_rgb( COL_YELLOW ), false );
+				display_fillbox_wh_rgb( x1 << DIRTY_TILE_SHIFT, ( y2 << DIRTY_TILE_SHIFT ) - 1, ( x2 - x1 ) << DIRTY_TILE_SHIFT, 1, color_idx_to_rgb( COL_YELLOW ), false );
+				display_direct_line_rgb( x1 << DIRTY_TILE_SHIFT, y1 << DIRTY_TILE_SHIFT, x2 << DIRTY_TILE_SHIFT, ( y2 << DIRTY_TILE_SHIFT ) - 1, color_idx_to_rgb( COL_YELLOW ) );
+				display_direct_line_rgb( x1 << DIRTY_TILE_SHIFT, ( y2 << DIRTY_TILE_SHIFT ) - 1, x2 << DIRTY_TILE_SHIFT, y1 << DIRTY_TILE_SHIFT, color_idx_to_rgb( COL_YELLOW ) );
 #else
-				dr_textur( x1 << DIRTY_TILE_SHIFT, y1 << DIRTY_TILE_SHIFT, (x2 - x1) << DIRTY_TILE_SHIFT, (y2 - y1) << DIRTY_TILE_SHIFT );
+				dr_textur( x1 << DIRTY_TILE_SHIFT, y1 << DIRTY_TILE_SHIFT, ( x2 - x1 ) << DIRTY_TILE_SHIFT, ( y2 - y1 ) << DIRTY_TILE_SHIFT );
 #endif
 				y1 = y2; // continue search from bottom of found rectangle
 			}
@@ -4437,7 +4446,7 @@ void display_flush_buffer()
 		} while(  y1 < tile_lines  );
 	}
 #ifdef DEBUG_FLUSH_BUFFER
-	dr_textur(0, 0, disp_actual_width, disp_height );
+	dr_textur( 0, 0, disp_actual_width, disp_height );
 #endif
 
 	// swap tile buffers
@@ -4455,7 +4464,7 @@ void display_show_pointer(int yesno)
 #ifdef USE_SOFTPOINTER
 	softpointer = yesno;
 #else
-	show_pointer(yesno);
+	show_pointer( yesno );
 #endif
 }
 
@@ -4477,7 +4486,7 @@ void display_show_load_pointer(int loading)
 #ifdef USE_SOFTPOINTER
 	softpointer = !loading;
 #else
-	set_pointer(loading);
+	set_pointer( loading );
 #endif
 }
 
@@ -4495,7 +4504,7 @@ bool simgraph_init(scr_size window_size, sint16 full_screen)
 #endif
 
 	// init rezoom_img()
-	for(  int i = 0;  i < MAX_THREADS;  i++  ) {
+	for(  int i = 0; i < MAX_THREADS; i++  ) {
 #ifdef MULTI_THREAD
 		pthread_mutex_init( &rezoom_img_mutex[i], NULL );
 #endif
@@ -4505,8 +4514,8 @@ bool simgraph_init(scr_size window_size, sint16 full_screen)
 	}
 
 	// get real width from os-dependent routines
-	disp_width = dr_os_open(window_size, full_screen);
-	if(  disp_width<=0  ) {
+	disp_width = dr_os_open( window_size, full_screen );
+	if(  disp_width <= 0  ) {
 		dr_fatal_notify( "Cannot open window!" );
 		return false;
 	}
@@ -4514,22 +4523,22 @@ bool simgraph_init(scr_size window_size, sint16 full_screen)
 	textur = dr_textur_init();
 
 	// init, load, and check fonts
-	if (!display_load_font(env_t::fontname.c_str())) {
+	if(  !display_load_font( env_t::fontname.c_str() )  ) {
 		env_t::fontname = dr_get_system_font();
-		if (!display_load_font(env_t::fontname.c_str())) {
+		if(  !display_load_font( env_t::fontname.c_str() )  ) {
 			env_t::fontname = FONT_PATH_X "cyr.bdf";
-			if (!display_load_font(env_t::fontname.c_str())) {
-				dr_fatal_notify("No fonts found!");
+			if(  !display_load_font( env_t::fontname.c_str() )  ) {
+				dr_fatal_notify( "No fonts found!" );
 				return false;
 			}
 		}
 	}
 
 	// allocate dirty tile flags
-	tiles_per_line = (disp_width + DIRTY_TILE_SIZE - 1) / DIRTY_TILE_SIZE;
-	tile_buffer_per_line = (tiles_per_line + 31) & ~31;
-	tile_lines = (disp_height + DIRTY_TILE_SIZE - 1) / DIRTY_TILE_SIZE;
-	tile_buffer_length = (tile_lines * tile_buffer_per_line / 32);
+	tiles_per_line = ( disp_width + DIRTY_TILE_SIZE - 1 ) / DIRTY_TILE_SIZE;
+	tile_buffer_per_line = ( tiles_per_line + 31 ) & ~31;
+	tile_lines = ( disp_height + DIRTY_TILE_SIZE - 1 ) / DIRTY_TILE_SIZE;
+	tile_buffer_length = ( tile_lines * tile_buffer_per_line / 32 );
 
 	tile_dirty = MALLOCN( uint32, tile_buffer_length );
 	tile_dirty_old = MALLOCN( uint32, tile_buffer_length );
@@ -4538,27 +4547,27 @@ bool simgraph_init(scr_size window_size, sint16 full_screen)
 	MEMZERON( tile_dirty_old, tile_buffer_length );
 
 	// init player colors
-	for( int i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
-		player_offsets[i][0] = i*8;
-		player_offsets[i][1] = i*8+24;
+	for(  int i = 0; i < MAX_PLAYER_COUNT; i++  ) {
+		player_offsets[i][0] = i * 8;
+		player_offsets[i][1] = i * 8 + 24;
 	}
 
-	display_set_clip_wh(0, 0, disp_width, disp_height);
+	display_set_clip_wh( 0, 0, disp_width, disp_height );
 
 	// Calculate daylight rgbmap and save it for unshaded tile drawing
 	player_day = 0;
-	display_day_night_shift(0);
-	memcpy(specialcolormap_all_day, specialcolormap_day_night, 256 * sizeof(PIXVAL));
-	memcpy(rgbmap_all_day, rgbmap_day_night, RGBMAPSIZE * sizeof(PIXVAL));
+	display_day_night_shift( 0 );
+	memcpy( specialcolormap_all_day, specialcolormap_day_night, 256 * sizeof(PIXVAL) );
+	memcpy( rgbmap_all_day, rgbmap_day_night, RGBMAPSIZE * sizeof(PIXVAL) );
 
 	// find out bit depth
 	{
-		PIXVAL c = get_system_color({ 0, 0xFF, 0 });
-		while ((c&1)==0) {
+		PIXVAL c = get_system_color( { 0, 0xFF, 0 } );
+		while(  (  c & 1 ) == 0  ) {
 			c >>= 1;
 		}
 
-		if(c==0x1F) {
+		if(  c == 0x1F  ) {
 			// 5 bits for green channel -> 15 bits per pixel)
 #ifndef RGB555
 			dr_fatal_notify( "Compiled for 16 bit color depth but using 15!" );
@@ -4580,7 +4589,7 @@ bool simgraph_init(scr_size window_size, sint16 full_screen)
  */
 bool is_display_init()
 {
-	return textur != NULL  &&  default_font.is_loaded()  &&  images!=NULL;
+	return textur != NULL && default_font.is_loaded() && images != NULL;
 }
 
 
@@ -4593,14 +4602,14 @@ void simgraph_exit()
 
 	free( tile_dirty_old );
 	free( tile_dirty );
-	display_free_all_images_above(0);
-	free(images);
+	display_free_all_images_above( 0 );
+	free( images );
 
 	tile_dirty = tile_dirty_old = NULL;
 	images = NULL;
 #ifdef MULTI_THREAD
 	pthread_mutex_destroy( &recode_img_mutex );
-	for(  int i = 0;  i < MAX_THREADS;  i++  ) {
+	for(  int i = 0; i < MAX_THREADS; i++  ) {
 		pthread_mutex_destroy( &rezoom_img_mutex[i] );
 	}
 #endif
@@ -4612,29 +4621,29 @@ void simgraph_exit()
 void simgraph_resize(scr_size new_window_size)
 {
 	disp_actual_width = max( 16, new_window_size.w );
-	if(  new_window_size.h<=0  ) {
+	if(  new_window_size.h <= 0  ) {
 		new_window_size.h = 64;
 	}
 	// only resize, if internal values are different
-	if (disp_width != new_window_size.w || disp_height != new_window_size.h) {
-		scr_coord_val new_pitch = dr_textur_resize(&textur, new_window_size.w, new_window_size.h);
-		if(  new_pitch!=disp_width  ||  disp_height != new_window_size.h) {
+	if(  disp_width != new_window_size.w || disp_height != new_window_size.h  ) {
+		scr_coord_val new_pitch = dr_textur_resize( &textur, new_window_size.w, new_window_size.h );
+		if(  new_pitch != disp_width || disp_height != new_window_size.h  ) {
 			disp_width = new_pitch;
 			disp_height = new_window_size.h;
 
 			free( tile_dirty_old );
-			free( tile_dirty);
+			free( tile_dirty );
 
 			// allocate dirty tile flags
-			tiles_per_line = (disp_width + DIRTY_TILE_SIZE - 1) / DIRTY_TILE_SIZE;
-			tile_buffer_per_line = (tiles_per_line + 31) & ~31;
-			tile_lines = (disp_height + DIRTY_TILE_SIZE - 1) / DIRTY_TILE_SIZE;
-			tile_buffer_length = (tile_lines * tile_buffer_per_line / 32);
+			tiles_per_line = ( disp_width + DIRTY_TILE_SIZE - 1 ) / DIRTY_TILE_SIZE;
+			tile_buffer_per_line = ( tiles_per_line + 31 ) & ~31;
+			tile_lines = ( disp_height + DIRTY_TILE_SIZE - 1 ) / DIRTY_TILE_SIZE;
+			tile_buffer_length = ( tile_lines * tile_buffer_per_line / 32 );
 
 			tile_dirty = MALLOCN( uint32, tile_buffer_length );
 			tile_dirty_old = MALLOCN( uint32, tile_buffer_length );
 
-			display_set_clip_wh(0, 0, disp_actual_width, disp_height);
+			display_set_clip_wh( 0, 0, disp_actual_width, disp_height );
 		}
 
 		mark_screen_dirty();
@@ -4648,7 +4657,7 @@ void simgraph_resize(scr_size new_window_size)
  */
 bool display_snapshot( const scr_rect &area )
 {
-	if (access(SCREENSHOT_PATH_X, W_OK) == -1) {
+	if(  access( SCREENSHOT_PATH_X, W_OK ) == -1  ) {
 		return false; // directory not accessible
 	}
 
@@ -4657,26 +4666,26 @@ bool display_snapshot( const scr_rect &area )
 
 	// find the first not used screenshot image
 	do {
-		sprintf(filename, SCREENSHOT_PATH_X "simscr%02d.png", number++);
-	} while (access(filename, W_OK) != -1);
+		sprintf( filename, SCREENSHOT_PATH_X "simscr%02d.png", number++ );
+	} while(  access( filename, W_OK ) != -1  );
 
 	// now save the screenshot
 	scr_rect clipped_area = area;
-	clipped_area.clip(scr_rect(0, 0, disp_actual_width, disp_height));
+	clipped_area.clip( scr_rect( 0, 0, disp_actual_width, disp_height ) );
 
-	raw_image_t img(clipped_area.w, clipped_area.h, raw_image_t::FMT_RGB888);
+	raw_image_t img( clipped_area.w, clipped_area.h, raw_image_t::FMT_RGB888 );
 
-	for (scr_coord_val y = clipped_area.y; y < clipped_area.y + clipped_area.h; ++y) {
-		uint8 *dst = img.access_pixel(0, y);
-		const PIXVAL *row = textur + clipped_area.x + y*disp_width;
+	for(  scr_coord_val y = clipped_area.y; y < clipped_area.y + clipped_area.h; ++y  ) {
+		uint8 *dst = img.access_pixel( 0, y );
+		const PIXVAL *row = textur + clipped_area.x + y * disp_width;
 
-		for (scr_coord_val x = clipped_area.x; x < clipped_area.x + clipped_area.w; ++x) {
-			const rgb888_t pixel = pixval_to_rgb888(*row++);
+		for(  scr_coord_val x = clipped_area.x; x < clipped_area.x + clipped_area.w; ++x  ) {
+			const rgb888_t pixel = pixval_to_rgb888( *row++ );
 			*dst++ = pixel.r;
 			*dst++ = pixel.g;
 			*dst++ = pixel.b;
 		}
 	}
 
-	return img.write_png(filename);
+	return img.write_png( filename );
 }
