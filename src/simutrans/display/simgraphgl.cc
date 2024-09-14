@@ -562,9 +562,6 @@ public:
 				found = true;
 			}
 		}
-		else {
-			glBindTexture( GL_TEXTURE_2D, gltexFromTexname( tilepage.back().texture ) );
-		}
 
 		tex_x = ci.tex_x;
 		tex_y = ci.tex_y;
@@ -600,6 +597,49 @@ public:
 		tiletex.clear();
 		tilepage.clear();
 	}
+
+	void uploadTextureData(TextureAtlas_Texname const &tex,
+	                       unsigned int tex_x, unsigned int tex_y,
+	                       scr_coord_val w, scr_coord_val h,
+	                       scr_coord_val pitch, uint8_t align,
+	                       GLenum format, GLenum type,
+	                       void const *data, size_t size)
+	{
+		assert( gltexFromTexname( tex ) );
+		glBindTexture( GL_TEXTURE_2D, gltexFromTexname( tex ) );
+
+		glPixelStorei( GL_UNPACK_ROW_LENGTH, pitch );
+		glPixelStorei( GL_UNPACK_ALIGNMENT, align );
+		glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
+		glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
+
+		glTexSubImage2D( GL_TEXTURE_2D, 0,
+		                 tex_x, tex_y,
+		                 w, h, format, type,
+		                 data );
+	}
+
+	void uploadTextureData(TextureAtlas_Texname const &tex,
+	                       unsigned int tex_x, unsigned int tex_y,
+	                       scr_coord_val w, scr_coord_val h,
+	                       scr_coord_val pitch, uint8_t align,
+	                       GLenum format, GLenum type,
+	                       std::vector<char> &&data)
+	{
+		assert( gltexFromTexname( tex ) );
+		glBindTexture( GL_TEXTURE_2D, gltexFromTexname( tex ) );
+
+		glPixelStorei( GL_UNPACK_ROW_LENGTH, pitch );
+		glPixelStorei( GL_UNPACK_ALIGNMENT, align );
+		glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
+		glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
+
+		glTexSubImage2D( GL_TEXTURE_2D, 0,
+		                 tex_x, tex_y,
+		                 w, h, format, type,
+		                 data.data() );
+	}
+
 };
 
 
@@ -2887,11 +2927,11 @@ static void createIndexImgTex(unsigned int image_idx)
 	}
 	rgbaatlas.destroyTexture( image_idx * 16 + 2 );
 
-	const PIXVAL * sp = image.base_data;
-	std::vector<PIX32> tmp;
-	tmp.resize( w * h );
+	const PIXVAL *sp = image.base_data;
+	std::vector<char> tmp;
+	tmp.resize( w * h * sizeof(PIX32) );
 	memset( tmp.data(), 0, w * h * sizeof(PIX32) );
-	PIX32 *p = tmp.data();
+	PIX32 *p = (PIX32 *)tmp.data();
 	scr_coord_val y;
 	for(  y = 0; y < h; y++  ) {
 		scr_coord_val xpos = 0;
@@ -2930,19 +2970,9 @@ static void createIndexImgTex(unsigned int image_idx)
 	                           image.index_tex_w, image.index_tex_h );
 
 	if(  isValidTexname( tex )  ) {
-		glBindTexture( GL_TEXTURE_2D, gltexFromTexname( tex ) );
-
-		//now upload the array
-		glPixelStorei( GL_UNPACK_ROW_LENGTH, w );
-		glPixelStorei( GL_UNPACK_ALIGNMENT, 4 );
-		glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
-		glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
-
-		glTexSubImage2D( GL_TEXTURE_2D, 0,
-		                 tex_x, tex_y,
-		                 w, h,
-		                 GL_RGBA, GL_UNSIGNED_BYTE,
-		                 tmp.data() );
+		rgbaatlas.uploadTextureData( tex, tex_x, tex_y, w, h, w, 4,
+		                             GL_RGBA, GL_UNSIGNED_BYTE,
+		                             std::move( tmp ) );
 	}
 
 	image.index_tex = tex;
@@ -2964,11 +2994,11 @@ static void createBaseImgTex(unsigned int image_idx)
 	}
 	rgbaatlas.destroyTexture( image_idx * 16 + 1 );
 
-	const PIXVAL * sp = images[image_idx].base_data;
-	std::vector<PIX32> tmp;
-	tmp.resize( w * h );
+	const PIXVAL *sp = image.base_data;
+	std::vector<char> tmp;
+	tmp.resize( w * h * sizeof(PIX32) );
 	memset( tmp.data(), 0, w * h * sizeof(PIX32) );
-	PIX32 *p = tmp.data();
+	PIX32 *p = (PIX32 *)tmp.data();
 	scr_coord_val y;
 	for(  y = 0; y < h; y++  ) {
 		scr_coord_val xpos = 0;
@@ -3008,19 +3038,9 @@ static void createBaseImgTex(unsigned int image_idx)
 	                           image.base_tex_w, image.base_tex_h );
 
 	if(  isValidTexname( tex )  ) {
-		glBindTexture( GL_TEXTURE_2D, gltexFromTexname( tex ) );
-
-		//now upload the array
-		glPixelStorei( GL_UNPACK_ROW_LENGTH, w );
-		glPixelStorei( GL_UNPACK_ALIGNMENT, 4 );
-		glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
-		glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
-
-		glTexSubImage2D( GL_TEXTURE_2D, 0,
-		                 tex_x, tex_y,
-		                 w, h,
-		                 GL_RGBA, GL_UNSIGNED_BYTE,
-		                 tmp.data() );
+		rgbaatlas.uploadTextureData( tex, tex_x, tex_y, w, h, w, 4,
+		                             GL_RGBA, GL_UNSIGNED_BYTE,
+		                             std::move( tmp ) );
 	}
 
 	image.base_tex = tex;
@@ -3196,19 +3216,11 @@ static TextureAtlas_Texname getArrayTex(const PIXVAL *arr,
 
 		if(  isValidTexname( texname )  ) {
 
-			glBindTexture( GL_TEXTURE_2D, gltexFromTexname( texname ) );
-
-			//now upload the array
-			glPixelStorei( GL_UNPACK_ROW_LENGTH, w );
-			glPixelStorei( GL_UNPACK_ALIGNMENT, 2 );
-			glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
-			glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
-
-			glTexSubImage2D( GL_TEXTURE_2D, 0,
-			                 tex_x, tex_y,
-			                 w, h,
-			                 GL_RGB, GL_UNSIGNED_SHORT_5_6_5,
-			                 arr );
+			rgbaatlas.uploadTextureData( texname,
+			                             tex_x, tex_y,
+			                             w, h, w, 2,
+			                             GL_RGB, GL_UNSIGNED_SHORT_5_6_5,
+			                             arr, byte_size );
 			return texname;
 		}
 		else {
@@ -3267,17 +3279,11 @@ static TextureAtlas_Texname getGlyphTex(uint32_t c, const font_t *fnt,
 	                               tcx, tcy, tcw, tch );
 
 	if(  isValidTexname( tex )  ) {
-		glBindTexture( GL_TEXTURE_2D, gltexFromTexname( tex ) );
-
 		//now upload the array
-		glPixelStorei( GL_UNPACK_ROW_LENGTH, glyph_width );
-		glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
-		glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
-		glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
-
 		const uint8 *d = glyph.bitmap;
-		uint8_t tmp[glyph_width * glyph_height];
-		uint8_t *p = tmp;
+		std::vector<char> tmp;
+		tmp.resize( glyph_width * glyph_height );
+		uint8_t *p = ( uint8_t * )tmp.data();
 		unsigned int i;
 		for(  i = 0;  i < unsigned( glyph_height * glyph_width );  i++  ) {
 			int alpha = *d++;
@@ -3290,10 +3296,11 @@ static TextureAtlas_Texname getGlyphTex(uint32_t c, const font_t *fnt,
 			*p++ = alpha;
 		}
 
-		glTexSubImage2D( GL_TEXTURE_2D, 0,
-		                 tex_x, tex_y,
-		                 glyph_width, glyph_height, GL_ALPHA, GL_UNSIGNED_BYTE,
-		                 tmp );
+		charatlas.uploadTextureData( tex,
+		                             tex_x, tex_y,
+		                             glyph_width, glyph_height, glyph_width, 1,
+		                             GL_ALPHA, GL_UNSIGNED_BYTE,
+		                             std::move( tmp ) );
 	}
 
 	return tex;
