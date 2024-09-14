@@ -442,6 +442,22 @@ private:
 	GLenum tex_type;
 	GLsizei tex_width;
 	GLsizei tex_height;
+	void genTex(TextureAtlas_Texname &texname)
+	{
+		glGenTextures( 1, &gltexFromTexname( texname ) );
+		glBindTexture( GL_TEXTURE_2D, gltexFromTexname( texname ) );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
+		                 GL_CLAMP_TO_EDGE );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
+		                 GL_CLAMP_TO_EDGE );
+		glTexImage2D( GL_TEXTURE_2D, 0, tex_internalformat,
+		              tex_width, tex_height, 0,
+		              tex_format, tex_type,
+		              NULL );
+	}
+
 public:
 	TextureAtlas(GLint tex_internalformat,
 	             GLenum tex_format,
@@ -543,19 +559,9 @@ public:
 			}
 		}
 		if(  !found  ) {
-			GLuint texname;
-			glGenTextures( 1, &texname );
-			glBindTexture( GL_TEXTURE_2D, texname );
-			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
-			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
-			                 GL_CLAMP_TO_EDGE );
-			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
-			                 GL_CLAMP_TO_EDGE );
-			glTexImage2D( GL_TEXTURE_2D, 0, tex_internalformat, tex_width, tex_height, 0,
-			              tex_format, tex_type,
-			              NULL );
-			tilepage.emplace_back( TextureAtlas_Texname( texname ), tex_width, tex_height );
+			TextureAtlas_Texname texname;
+			genTex( texname );
+			tilepage.emplace_back( texname, tex_width, tex_height );
 
 			if(  tilepage.back().findFreeTile( width, height, ci )  ) {
 				tiletex[k] = ci;
