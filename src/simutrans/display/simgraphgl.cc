@@ -306,22 +306,30 @@ MSVC_ALIGN(64) struct clipping_info_t {
 	}
 } GCC_ALIGN(64); // aligned to separate cachelines
 
+typedef GLuint TextureAtlas_Texname;
+static bool isValidTexname(TextureAtlas_Texname const & name) {
+	return name != 0;
+}
+static TextureAtlas_Texname invalidTexname() {
+	return TextureAtlas_Texname( 0 );
+}
+#define gltexFromTexname(name) (name)
 template<typename Key>
 class TextureAtlas
 {
 private:
 	struct TileInfo
 	{
-		GLuint texture;
+		TextureAtlas_Texname texture;
 		GLfloat x, y, w, h;
 		GLuint tex_x, tex_y, tex_w, tex_h;
 	};
 	struct TilePageInfo
 	{
-		GLuint texture;
+		TextureAtlas_Texname texture;
 		GLuint width, height;
 		std::deque<TileInfo> freetiles;
-		TilePageInfo(GLuint texture,
+		TilePageInfo(TextureAtlas_Texname texture,
 		             GLuint width,
 		             GLuint height)
 			: texture( texture )
@@ -456,9 +464,9 @@ public:
 		this->tex_width = tex_width;
 		this->tex_height = tex_height;
 	}
-	GLuint getTexture(Key k,
-	                  GLfloat &x, GLfloat &y,
-	                  GLfloat &w, GLfloat &h)
+	TextureAtlas_Texname getTexture(Key k,
+	                                GLfloat &x, GLfloat &y,
+	                                GLfloat &w, GLfloat &h)
 	{
 		auto it = tiletex.find( k );
 		if(  it != tiletex.end()  ) {
@@ -472,7 +480,7 @@ public:
 		y = 0;
 		w = 0;
 		h = 0;
-		return 0;
+		return invalidTexname();
 	}
 	void cleanupPages()
 	{
@@ -484,7 +492,7 @@ public:
 	{
 		auto it = tiletex.find( k );
 		if(  it != tiletex.end()  ) {
-			GLuint tex = it->second.texture;
+			TextureAtlas_Texname tex = it->second.texture;
 			for(  auto &el : tilepage  ) {
 				if(  el.texture == tex  ) {
 					el.freetiles.emplace_back( it->second );
@@ -497,13 +505,14 @@ public:
 			cleanupPages();
 		}
 	}
-	GLuint createTexture(Key k,
-	                     unsigned int width,
-	                     unsigned int height,
-	                     unsigned int &tex_x,
-	                     unsigned int &tex_y,
-	                     GLfloat &tcx, GLfloat &tcy,
-	                     GLfloat &tcw, GLfloat &tch)
+
+	TextureAtlas_Texname createTexture(Key k,
+	                                   unsigned int width,
+	                                   unsigned int height,
+	                                   unsigned int &tex_x,
+	                                   unsigned int &tex_y,
+	                                   GLfloat &tcx, GLfloat &tcy,
+	                                   GLfloat &tcw, GLfloat &tch)
 	{
 		auto it = tiletex.find( k );
 		if(  it != tiletex.end()  ) {
@@ -521,7 +530,7 @@ public:
 		}
 
 		if(  (int)width > tex_width || (int)height > tex_height  ) {
-			return 0;
+			return invalidTexname();
 		}
 
 		TileInfo ci;
@@ -546,7 +555,7 @@ public:
 			glTexImage2D( GL_TEXTURE_2D, 0, tex_internalformat, tex_width, tex_height, 0,
 			              tex_format, tex_type,
 			              NULL );
-			tilepage.emplace_back( texname, tex_width, tex_height );
+			tilepage.emplace_back( TextureAtlas_Texname( texname ), tex_width, tex_height );
 
 			if(  tilepage.back().findFreeTile( width, height, ci )  ) {
 				tiletex[k] = ci;
@@ -554,7 +563,7 @@ public:
 			}
 		}
 		else {
-			glBindTexture( GL_TEXTURE_2D, tilepage.back().texture );
+			glBindTexture( GL_TEXTURE_2D, gltexFromTexname( tilepage.back().texture ) );
 		}
 
 		tex_x = ci.tex_x;
@@ -586,7 +595,7 @@ public:
 	void clear()
 	{
 		for(  auto &page : tilepage  ) {
-			glDeleteTextures( 1, &page.texture );
+			glDeleteTextures( 1, &gltexFromTexname( page.texture ) );
 		}
 		tiletex.clear();
 		tilepage.clear();
@@ -603,7 +612,7 @@ struct PIX32
 };
 struct ArrayInfo
 {
-	GLuint tex;
+	TextureAtlas_Texname tex;
 	uint64_t hash;
 	int change_ctr;
 	int use_ctr;
@@ -625,9 +634,9 @@ static GLcolorf makeColor_rgb(PIXVAL colval)
 
 struct DrawCommandKey {
 	constant_clipping_info_t cr;
-	GLuint tex;
+	TextureAtlas_Texname tex;
 	GLuint rgbmap_tex;
-	GLuint alphatex;
+	TextureAtlas_Texname alphatex;
 	unsigned int uses_tex: 1;
 	unsigned int uses_rgbmap_tex: 1;
 	unsigned int uses_alphatex: 1;
@@ -658,7 +667,7 @@ struct DrawCommandKey {
 	}
 	bool operator!=(DrawCommandKey const &b) const
 	{
-		return !(*this == b);
+		return !( *this == b );
 	}
 
 };
@@ -813,12 +822,12 @@ struct imd {
 
 	PIXVAL* base_data; // original image data
 
-	GLuint base_tex;
+	TextureAtlas_Texname base_tex;
 	GLfloat base_x1;
 	GLfloat base_y1;
 	GLfloat base_tex_w;
 	GLfloat base_tex_h;
-	GLuint index_tex;
+	TextureAtlas_Texname index_tex;
 	GLfloat index_x1;
 	GLfloat index_y1;
 	GLfloat index_tex_w;
@@ -1778,7 +1787,7 @@ static void runDrawCommand(DrawCommand const &cmd, GLint vertex_first, GLint ver
 
 	if(  cmd.key.uses_tex  ) {
 		glActiveTextureARB( GL_TEXTURE0_ARB );
-		glBindTexture( GL_TEXTURE_2D, cmd.key.tex );
+		glBindTexture( GL_TEXTURE_2D, gltexFromTexname( cmd.key.tex ) );
 	}
 	if(  cmd.key.uses_rgbmap_tex  ) {
 		glActiveTextureARB( GL_TEXTURE1_ARB );
@@ -1786,7 +1795,8 @@ static void runDrawCommand(DrawCommand const &cmd, GLint vertex_first, GLint ver
 	}
 	if(  cmd.key.uses_alphatex  ) {
 		glActiveTextureARB( GL_TEXTURE2_ARB );
-		glBindTexture( GL_TEXTURE_2D, cmd.key.alphatex );
+		assert( gltexFromTexname( cmd.key.alphatex ) );
+		glBindTexture( GL_TEXTURE_2D, gltexFromTexname( cmd.key.alphatex ) );
 	}
 
 	glDrawElements( GL_TRIANGLE_STRIP, vertex_count, GL_UNSIGNED_SHORT, (void *)(uintptr_t)( vertex_first * sizeof(GLushort) ) );
@@ -1846,11 +1856,11 @@ template<> struct hash< DrawCommandKey >
 {
 	std::size_t operator()(DrawCommandKey const &k) const noexcept
 	{
-		std::size_t h = k.alphatex;
+		std::size_t h = gltexFromTexname( k.alphatex );
 		h = h * 8 + (h >> 20);
 		h += k.rgbmap_tex;
 		h = h * 8 + (h >> 20);
-		h += k.tex;
+		h += gltexFromTexname( k.tex );
 		h = h * 8 + (h >> 20);
 		h += k.uses_alphatex;
 		h = h * 8 + (h >> 20);
@@ -2872,7 +2882,7 @@ static void createIndexImgTex(unsigned int image_idx)
 		image.index_y1 = 0;
 		image.index_tex_w = 1;
 		image.index_tex_h = 1;
-		image.index_tex = 0;
+		image.index_tex = invalidTexname();
 		return;
 	}
 	rgbaatlas.destroyTexture( image_idx * 16 + 2 );
@@ -2914,24 +2924,26 @@ static void createIndexImgTex(unsigned int image_idx)
 	}
 
 	unsigned int tex_x, tex_y;
-	GLuint tex = rgbaatlas.createTexture( image_idx * 16 + 2,
-	                                      w, h, tex_x, tex_y,
-	                                      image.index_x1, image.index_y1,
-	                                      image.index_tex_w, image.index_tex_h );
+	TextureAtlas_Texname tex = rgbaatlas.createTexture( image_idx * 16 + 2,
+	                           w, h, tex_x, tex_y,
+	                           image.index_x1, image.index_y1,
+	                           image.index_tex_w, image.index_tex_h );
 
-	glBindTexture( GL_TEXTURE_2D, tex );
+	if(  isValidTexname( tex )  ) {
+		glBindTexture( GL_TEXTURE_2D, gltexFromTexname( tex ) );
 
-	//now upload the array
-	glPixelStorei( GL_UNPACK_ROW_LENGTH, w );
-	glPixelStorei( GL_UNPACK_ALIGNMENT, 4 );
-	glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
-	glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
+		//now upload the array
+		glPixelStorei( GL_UNPACK_ROW_LENGTH, w );
+		glPixelStorei( GL_UNPACK_ALIGNMENT, 4 );
+		glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
+		glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
 
-	glTexSubImage2D( GL_TEXTURE_2D, 0,
-	                 tex_x, tex_y,
-	                 w, h,
-	                 GL_RGBA, GL_UNSIGNED_BYTE,
-	                 tmp.data() );
+		glTexSubImage2D( GL_TEXTURE_2D, 0,
+		                 tex_x, tex_y,
+		                 w, h,
+		                 GL_RGBA, GL_UNSIGNED_BYTE,
+		                 tmp.data() );
+	}
 
 	image.index_tex = tex;
 }
@@ -2947,7 +2959,7 @@ static void createBaseImgTex(unsigned int image_idx)
 		image.base_y1 = 0;
 		image.base_tex_w = 1;
 		image.base_tex_h = 1;
-		image.base_tex = 0;
+		image.base_tex = invalidTexname();
 		return;
 	}
 	rgbaatlas.destroyTexture( image_idx * 16 + 1 );
@@ -2990,24 +3002,26 @@ static void createBaseImgTex(unsigned int image_idx)
 	}
 
 	unsigned int tex_x, tex_y;
-	GLuint tex = rgbaatlas.createTexture( image_idx * 16 + 1,
-	                                      w, h, tex_x, tex_y,
-	                                      image.base_x1, image.base_y1,
-	                                      image.base_tex_w, image.base_tex_h );
+	TextureAtlas_Texname tex = rgbaatlas.createTexture( image_idx * 16 + 1,
+	                           w, h, tex_x, tex_y,
+	                           image.base_x1, image.base_y1,
+	                           image.base_tex_w, image.base_tex_h );
 
-	glBindTexture( GL_TEXTURE_2D, tex );
+	if(  isValidTexname( tex )  ) {
+		glBindTexture( GL_TEXTURE_2D, gltexFromTexname( tex ) );
 
-	//now upload the array
-	glPixelStorei( GL_UNPACK_ROW_LENGTH, w );
-	glPixelStorei( GL_UNPACK_ALIGNMENT, 4 );
-	glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
-	glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
+		//now upload the array
+		glPixelStorei( GL_UNPACK_ROW_LENGTH, w );
+		glPixelStorei( GL_UNPACK_ALIGNMENT, 4 );
+		glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
+		glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
 
-	glTexSubImage2D( GL_TEXTURE_2D, 0,
-	                 tex_x, tex_y,
-	                 w, h,
-	                 GL_RGBA, GL_UNSIGNED_BYTE,
-	                 tmp.data() );
+		glTexSubImage2D( GL_TEXTURE_2D, 0,
+		                 tex_x, tex_y,
+		                 w, h,
+		                 GL_RGBA, GL_UNSIGNED_BYTE,
+		                 tmp.data() );
+	}
 
 	image.base_tex = tex;
 }
@@ -3036,8 +3050,8 @@ void register_image(image_t *image_in)
 	// since we do not recode them, we can work with the original data
 	image->base_data = image_in->data;
 
-	image->base_tex = 0;
-	image->index_tex = 0;
+	image->base_tex = invalidTexname();
+	image->index_tex = invalidTexname();
 
 	image->zoom_num = 1;
 	image->zoom_den = 1;
@@ -3120,30 +3134,31 @@ static uint64_t tex_hash(const void *ptr, size_t size)
 
 //these do change relatively often and keep their data around, so we can
 //key our internal data off their data pointer
-static GLuint getArrayTex(const PIXVAL *arr, scr_coord_val w, scr_coord_val h,
-                          GLfloat &tcx, GLfloat &tcy, GLfloat &tcw, GLfloat &tch)
+static TextureAtlas_Texname getArrayTex(const PIXVAL *arr,
+                scr_coord_val w, scr_coord_val h,
+                GLfloat &tcx, GLfloat &tcy, GLfloat &tcw, GLfloat &tch)
 {
 	if(  w * h == 0  ) {
 		tcx = 0;
 		tcy = 0;
 		tcw = 1;
 		tch = 1;
-		return 0;
+		return invalidTexname();
 	}
 	size_t byte_size = w * h * sizeof(PIXVAL);
 	auto it = arrayInfo.find( (void const *)arr );
 	if(  it == arrayInfo.end()  ) {
 		it = arrayInfo.insert( std::make_pair
 		                       ( (void const *)arr, ArrayInfo() ) ).first;
-		it->second.tex = 0;
+		it->second.tex = invalidTexname();
 		it->second.hash = tex_hash( arr, byte_size );
 		it->second.use_ctr = 1;
 		it->second.change_ctr = 1;
 	}
-	else if(  it->second.tex == 0  ) {
-		GLuint texname = rgbaatlas.getTexture( (uintptr_t)arr,
-		                                       tcx, tcy, tcw, tch );
-		if(  texname != 0  ) {
+	else if(  !isValidTexname( it->second.tex )  ) {
+		TextureAtlas_Texname texname = rgbaatlas.getTexture( (uintptr_t)arr,
+		                               tcx, tcy, tcw, tch );
+		if(  isValidTexname(texname)  ) {
 			//check if it has been changed, but only if it is not
 			//changing often(then we avoid the hash function overhead
 			//and go straight to reuploading)
@@ -3162,8 +3177,8 @@ static GLuint getArrayTex(const PIXVAL *arr, scr_coord_val w, scr_coord_val h,
 			else {
 				rgbaatlas.destroyTexture( (uintptr_t)arr );
 
-				glGenTextures( 1, &texname );
-				glBindTexture( GL_TEXTURE_2D, texname );
+				glGenTextures( 1, &gltexFromTexname( texname ) );
+				glBindTexture( GL_TEXTURE_2D, gltexFromTexname( texname ) );
 				glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
 				glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
 				glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
@@ -3173,13 +3188,15 @@ static GLuint getArrayTex(const PIXVAL *arr, scr_coord_val w, scr_coord_val h,
 		}
 	}
 
-	if(  !it->second.tex  ) {
+	if(  !isValidTexname( it->second.tex )  ) {
 		unsigned int tex_x, tex_y;
-		GLuint texname = rgbaatlas.createTexture( (uintptr_t)arr,
-		                 w, h, tex_x, tex_y, tcx, tcy, tcw, tch );
+		TextureAtlas_Texname texname = rgbaatlas.createTexture(
+		                (uintptr_t)arr,
+		                w, h, tex_x, tex_y, tcx, tcy, tcw, tch );
 
-		if(  texname != 0  ) {
-			glBindTexture( GL_TEXTURE_2D, texname );
+		if(  isValidTexname( texname )  ) {
+
+			glBindTexture( GL_TEXTURE_2D, gltexFromTexname( texname ) );
 
 			//now upload the array
 			glPixelStorei( GL_UNPACK_ROW_LENGTH, w );
@@ -3197,9 +3214,9 @@ static GLuint getArrayTex(const PIXVAL *arr, scr_coord_val w, scr_coord_val h,
 		else {
 			rgbaatlas.destroyTexture( (uintptr_t)arr );
 
-			GLuint texname;
-			glGenTextures( 1, &texname );
-			glBindTexture( GL_TEXTURE_2D, texname );
+			TextureAtlas_Texname texname;
+			glGenTextures( 1, &gltexFromTexname( texname ) );
+			glBindTexture( GL_TEXTURE_2D, gltexFromTexname( texname ) );
 			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
 			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
 			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
@@ -3207,9 +3224,9 @@ static GLuint getArrayTex(const PIXVAL *arr, scr_coord_val w, scr_coord_val h,
 			it->second.tex = texname;
 		}
 	}
-
-	GLuint texname = it->second.tex;
-	glBindTexture( GL_TEXTURE_2D, texname );
+	TextureAtlas_Texname texname = it->second.tex;
+	assert( gltexFromTexname( texname ) );
+	glBindTexture( GL_TEXTURE_2D, gltexFromTexname( texname ) );
 
 	//now upload the array
 	glPixelStorei( GL_UNPACK_ROW_LENGTH, w );
@@ -3229,12 +3246,12 @@ static GLuint getArrayTex(const PIXVAL *arr, scr_coord_val w, scr_coord_val h,
 	return texname;
 }
 
-static GLuint getGlyphTex(uint32_t c, const font_t *fnt,
-                          GLfloat &tcx, GLfloat &tcy,
-                          GLfloat &tcw, GLfloat &tch)
+static TextureAtlas_Texname getGlyphTex(uint32_t c, const font_t *fnt,
+                GLfloat &tcx, GLfloat &tcy,
+                GLfloat &tcw, GLfloat &tch)
 {
-	GLuint tex = charatlas.getTexture( c, tcx, tcy, tcw, tch );
-	if(  tex != 0  ) {
+	TextureAtlas_Texname tex = charatlas.getTexture( c, tcx, tcy, tcw, tch );
+	if(  isValidTexname( tex )  ) {
 		return tex;
 	}
 
@@ -3249,33 +3266,35 @@ static GLuint getGlyphTex(uint32_t c, const font_t *fnt,
 	                               tex_x, tex_y,
 	                               tcx, tcy, tcw, tch );
 
-	glBindTexture( GL_TEXTURE_2D, tex );
+	if(  isValidTexname( tex )  ) {
+		glBindTexture( GL_TEXTURE_2D, gltexFromTexname( tex ) );
 
-	//now upload the array
-	glPixelStorei( GL_UNPACK_ROW_LENGTH, glyph_width );
-	glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
-	glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
-	glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
+		//now upload the array
+		glPixelStorei( GL_UNPACK_ROW_LENGTH, glyph_width );
+		glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
+		glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
+		glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
 
-	const uint8 *d = glyph.bitmap;
-	uint8_t tmp[glyph_width * glyph_height];
-	uint8_t *p = tmp;
-	unsigned int i;
-	for(  i = 0;  i < unsigned(glyph_height * glyph_width);  i++  ) {
-		int alpha = *d++;
-		if(  alpha > 31  ) {
-			alpha = 0xff;
+		const uint8 *d = glyph.bitmap;
+		uint8_t tmp[glyph_width * glyph_height];
+		uint8_t *p = tmp;
+		unsigned int i;
+		for(  i = 0;  i < unsigned( glyph_height * glyph_width );  i++  ) {
+			int alpha = *d++;
+			if(  alpha > 31  ) {
+				alpha = 0xff;
+			}
+			else {
+				alpha = ( alpha * 0x21 ) / 4;
+			}
+			*p++ = alpha;
 		}
-		else {
-			alpha = (alpha * 0x21) / 4;
-		}
-		*p++ = alpha;
+
+		glTexSubImage2D( GL_TEXTURE_2D, 0,
+		                 tex_x, tex_y,
+		                 glyph_width, glyph_height, GL_ALPHA, GL_UNSIGNED_BYTE,
+		                 tmp );
 	}
-
-	glTexSubImage2D( GL_TEXTURE_2D,0,
-	                 tex_x, tex_y,
-	                 glyph_width, glyph_height, GL_ALPHA, GL_UNSIGNED_BYTE,
-	                 tmp );
 
 	return tex;
 }
@@ -3301,12 +3320,12 @@ static void display_img_pc(const image_id n,
 	const scr_coord_val yoff = clip_wh( &yp, &h, CR.clip_rect.y, CR.clip_rect.yy );
 
 	if(  w > 0 && h > 0  ) {
-		if(  images[n].index_tex == 0  ) {
+		if(  !isValidTexname( images[n].index_tex )  ) {
 			createIndexImgTex( n );
 		}
 		//same as above
 		const struct imd image = images[n];
-		GLuint tex = image.index_tex;
+		TextureAtlas_Texname tex = image.index_tex;
 		GLfloat x1 = image.index_x1;
 		GLfloat y1 = image.index_y1;
 		GLfloat tex_w = image.index_tex_w;
@@ -3322,7 +3341,7 @@ static void display_img_pc(const image_id n,
 		cmdkey.cr = CR;
 		cmdkey.tex = tex;
 		cmdkey.rgbmap_tex = rgbmap_tex;
-		cmdkey.alphatex = 0;
+		cmdkey.alphatex = invalidTexname();
 		cmdkey.uses_tex = 1;
 		cmdkey.uses_rgbmap_tex = 1;
 		cmdkey.uses_alphatex = 0;
@@ -3662,9 +3681,9 @@ void display_blend_wh_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, s
 
 		DrawCommandKey cmdkey;
 		cmdkey.cr.poly_active = 0;
-		cmdkey.tex = 0;
+		cmdkey.tex = invalidTexname();
 		cmdkey.rgbmap_tex = 0;
-		cmdkey.alphatex = 0;
+		cmdkey.alphatex = invalidTexname();
 		cmdkey.uses_tex = 1;
 		cmdkey.uses_rgbmap_tex = 0;
 		cmdkey.uses_alphatex = 0;
@@ -3694,7 +3713,7 @@ static void display_img_blend_wc(const image_id n,
                                  scr_coord_val w, scr_coord_val h,
                                  GLuint rgbmap_tex, float alpha  CLIP_NUM_DEF)
 {
-	GLuint tex = images[n].index_tex;
+	TextureAtlas_Texname tex = images[n].index_tex;
 	GLfloat x1 = images[n].index_x1;
 	GLfloat y1 = images[n].index_y1;
 	GLfloat tex_w = images[n].index_tex_w;
@@ -3711,7 +3730,7 @@ static void display_img_blend_wc(const image_id n,
 		cmdkey.cr.poly_active = 0;
 		cmdkey.tex = tex;
 		cmdkey.rgbmap_tex = rgbmap_tex;
-		cmdkey.alphatex = 0;
+		cmdkey.alphatex = invalidTexname();
 		cmdkey.uses_tex = 1;
 		cmdkey.uses_rgbmap_tex = 1;
 		cmdkey.uses_alphatex = 0;
@@ -3737,7 +3756,7 @@ static void display_img_blend_wc_colour(const image_id n,
                                         scr_coord_val w, scr_coord_val h,
                                         PIXVAL colour, float alpha  CLIP_NUM_DEF)
 {
-	GLuint tex = images[n].index_tex;
+	TextureAtlas_Texname tex = images[n].index_tex;
 	GLfloat x1 = images[n].index_x1;
 	GLfloat y1 = images[n].index_y1;
 	GLfloat tex_w = images[n].index_tex_w;
@@ -3754,7 +3773,7 @@ static void display_img_blend_wc_colour(const image_id n,
 		cmdkey.cr.poly_active = 0;
 		cmdkey.tex = tex;
 		cmdkey.rgbmap_tex = 0;
-		cmdkey.alphatex = 0;
+		cmdkey.alphatex = invalidTexname();
 		cmdkey.uses_tex = 1;
 		cmdkey.uses_rgbmap_tex = 0;
 		cmdkey.uses_alphatex = 0;
@@ -3789,7 +3808,7 @@ static void display_img_alpha_wc(const image_id n, const image_id alpha_n,
 	//more exact: r/g/b channel from alphatex is selected by alpha_flags
 	//to be the alpha channel for this blt.
 
-	GLuint tex = images[n].index_tex;
+	TextureAtlas_Texname tex = images[n].index_tex;
 	GLfloat tx1 = images[n].index_x1;
 	GLfloat ty1 = images[n].index_y1;
 	GLfloat tw = images[n].index_tex_w;
@@ -3798,7 +3817,7 @@ static void display_img_alpha_wc(const image_id n, const image_id alpha_n,
 	GLfloat txscale = tw / w;
 	GLfloat tyscale = th / h;
 
-	GLuint alphatex = images[alpha_n].base_tex;
+	TextureAtlas_Texname alphatex = images[alpha_n].base_tex;
 	GLfloat ax1 = images[alpha_n].base_x1;
 	GLfloat ay1 = images[alpha_n].base_y1;
 	GLfloat aw = images[alpha_n].base_tex_w;
@@ -3863,7 +3882,7 @@ void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_va
 		const PIXVAL color = color_index & 0xFFFF;
 		float alpha = ( color_index & TRANSPARENT_FLAGS ) / TRANSPARENT25_FLAG / 4.0;
 
-		if(  images[n].index_tex == 0  ) {
+		if(  !isValidTexname( images[n].index_tex )  ) {
 			createIndexImgTex( n );
 		}
 		if(  color_index&OUTLINE_FLAG  ) {
@@ -3903,10 +3922,10 @@ void display_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const 
 		// get the real color
 		const PIXVAL color = color_index & 0xFFFF;
 
-		if(  images[n].index_tex == 0  ) {
+		if(  !isValidTexname( images[n].index_tex )  ) {
 			createIndexImgTex( n );
 		}
-		if(  images[alpha_n].base_tex == 0  ) {
+		if(  !isValidTexname( images[alpha_n].base_tex )  ) {
 			createBaseImgTex( alpha_n );
 		}
 
@@ -3946,7 +3965,7 @@ void display_base_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp
 			float alpha = ( color_index & TRANSPARENT_FLAGS ) / TRANSPARENT25_FLAG / 4.0;
 
 			// recode is needed only for blending
-			if(  images[n].index_tex == 0  ) {
+			if(  !isValidTexname( images[n].index_tex )  ) {
 				createIndexImgTex( n );
 			}
 			if(  !( color_index & OUTLINE_FLAG )  ) {
@@ -4008,10 +4027,10 @@ void display_base_img_alpha(const image_id n, const image_id alpha_n, const unsi
 				// no player
 				activate_player_color( 0, daynight );
 			}
-			if(  images[n].index_tex == 0  ) {
+			if(  !isValidTexname( images[n].index_tex )  ) {
 				createIndexImgTex( n );
 			}
-			if(  images[alpha_n].base_tex == 0  ) {
+			if(  !isValidTexname( images[alpha_n].base_tex )  ) {
 				createBaseImgTex( alpha_n );
 			}
 
@@ -4057,9 +4076,9 @@ static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_va
 	if(  clip_lr( &xp, &w, cL, cR ) && clip_lr( &yp, &h, cT, cB )  ) {
 		DrawCommandKey cmdkey;
 		cmdkey.cr.poly_active = 0;
-		cmdkey.tex = 0;
+		cmdkey.tex = invalidTexname();
 		cmdkey.rgbmap_tex = 0;
-		cmdkey.alphatex = 0;
+		cmdkey.alphatex = invalidTexname();
 		cmdkey.uses_tex = 1;
 		cmdkey.uses_rgbmap_tex = 0;
 		cmdkey.uses_alphatex = 0;
@@ -4111,9 +4130,9 @@ static void display_vl_internal(const scr_coord_val xp, scr_coord_val yp, scr_co
 	if(  xp >= cL && xp < cR && clip_lr( &yp, &h, cT, cB )  ) {
 		DrawCommandKey cmdkey;
 		cmdkey.cr.poly_active = 0;
-		cmdkey.tex = 0;
+		cmdkey.tex = invalidTexname();
 		cmdkey.rgbmap_tex = 0;
-		cmdkey.alphatex = 0;
+		cmdkey.alphatex = invalidTexname();
 		cmdkey.uses_tex = 1;
 		cmdkey.uses_rgbmap_tex = 0;
 		cmdkey.uses_alphatex = 0;
@@ -4160,13 +4179,13 @@ void display_array_wh(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_c
 
 	if(  w > 0 && h > 0  ) {
 		GLfloat tcx = 0, tcy = 0, tcw = 1, tch = 1;
-		GLuint texname = getArrayTex( arr, arr_w, arr_h,
-		                              tcx, tcy, tcw, tch );
+		TextureAtlas_Texname texname = getArrayTex( arr, arr_w, arr_h,
+		                               tcx, tcy, tcw, tch );
 		DrawCommandKey cmdkey;
 		cmdkey.cr.poly_active = 0;
 		cmdkey.tex = texname;
 		cmdkey.rgbmap_tex = 0;
-		cmdkey.alphatex = 0;
+		cmdkey.alphatex = invalidTexname();
 		cmdkey.uses_tex = 1;
 		cmdkey.uses_rgbmap_tex = 0;
 		cmdkey.uses_alphatex = 0;
@@ -4482,15 +4501,15 @@ scr_coord_val display_text_proportional_len_clip_rgb(scr_coord_val x, scr_coord_
 
 			if(  w > 0 && h > 0  ) {
 				GLfloat glx = 0, gly = 0, glw = 0, glh = 0;
-				GLuint texname = getGlyphTex( c, fnt,
-				                              glx, gly,
-				                              glw, glh );
+				TextureAtlas_Texname texname = getGlyphTex( c, fnt,
+				                               glx, gly,
+				                               glw, glh );
 
 				DrawCommandKey cmdkey;
 				cmdkey.cr.poly_active = 0;
 				cmdkey.tex = texname;
 				cmdkey.rgbmap_tex = 0;
-				cmdkey.alphatex = 0;
+				cmdkey.alphatex = invalidTexname();
 				cmdkey.uses_tex = 1;
 				cmdkey.uses_rgbmap_tex = 0;
 				cmdkey.uses_alphatex = 0;
@@ -4838,9 +4857,9 @@ void display_direct_line_rgb(const scr_coord_val x, const scr_coord_val y, const
 
 	DrawCommandKey cmdkey;
 	cmdkey.cr.poly_active = 0;
-	cmdkey.tex = 0;
+	cmdkey.tex = invalidTexname();
 	cmdkey.rgbmap_tex = 0;
-	cmdkey.alphatex = 0;
+	cmdkey.alphatex = invalidTexname();
 	cmdkey.uses_tex = 1;
 	cmdkey.uses_rgbmap_tex = 0;
 	cmdkey.uses_alphatex = 0;
@@ -5374,9 +5393,9 @@ static void display_quad_rgb(scr_coord_val x0, scr_coord_val y0,
 
 	DrawCommandKey cmdkey;
 	cmdkey.cr.poly_active = 0;
-	cmdkey.tex = 0;
+	cmdkey.tex = invalidTexname();
 	cmdkey.rgbmap_tex = 0;
-	cmdkey.alphatex = 0;
+	cmdkey.alphatex = invalidTexname();
 	cmdkey.uses_tex = 1;
 	cmdkey.uses_rgbmap_tex = 0;
 	cmdkey.uses_alphatex = 0;
