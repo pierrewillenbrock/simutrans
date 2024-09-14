@@ -364,11 +364,6 @@ public:
 		this->tex_width = tex_width;
 		this->tex_height = tex_height;
 	}
-	bool hasTexture(Key k)
-	{
-		auto it = tiletex.find(k);
-		return it != tiletex.end();
-	}
 	GLuint getTexture(Key k,
 	                  GLfloat &x, GLfloat &y,
 	                  GLfloat &w, GLfloat &h)
@@ -381,7 +376,11 @@ public:
 			h = it->second.h;
 			return it->second.texture;
 		}
-		return -1;
+		x = 0;
+		y = 0;
+		w = 0;
+		h = 0;
+		return 0;
 	}
 	void cleanupPages()
 	{
@@ -2018,8 +2017,9 @@ static GLuint getIndexImgTex(struct imd &image,
 		tch = 1;
 		return 0;
 	}
-	if(  rgbaatlas.hasTexture( image_idx * 16 + 2 )  ) {
-		return rgbaatlas.getTexture( image_idx * 16 + 2, tcx, tcy, tcw, tch );
+	GLuint tex = rgbaatlas.getTexture( image_idx * 16 + 2, tcx, tcy, tcw, tch );
+	if(  tex != 0  ) {
+		return tex;
 	}
 
 	std::vector<PIX32> tmp;
@@ -2058,8 +2058,8 @@ static GLuint getIndexImgTex(struct imd &image,
 	}
 
 	unsigned int tex_x, tex_y;
-	GLuint tex = rgbaatlas.createTexture( image_idx * 16 + 2,
-	                                      w, h, tex_x, tex_y, tcx, tcy, tcw, tch );
+	tex = rgbaatlas.createTexture( image_idx * 16 + 2,
+	                               w, h, tex_x, tex_y, tcx, tcy, tcw, tch );
 
 	glBindTexture( GL_TEXTURE_2D, tex );
 
@@ -2092,8 +2092,10 @@ static GLuint getBaseImgTex(struct imd &image,
 		tch = 1;
 		return 0;
 	}
-	if(  rgbaatlas.hasTexture( image_idx * 16 + 1 )  ) {
-		return rgbaatlas.getTexture( image_idx * 16 + 1, tcx, tcy, tcw, tch );
+
+	GLuint tex = rgbaatlas.getTexture( image_idx * 16 + 1, tcx, tcy, tcw, tch );
+	if(  tex != 0  ) {
+		return tex;
 	}
 
 	std::vector<PIX32> tmp;
@@ -2133,8 +2135,8 @@ static GLuint getBaseImgTex(struct imd &image,
 	}
 
 	unsigned int tex_x, tex_y;
-	GLuint tex = rgbaatlas.createTexture( image_idx * 16 + 1,
-	                                      w, h, tex_x, tex_y, tcx, tcy, tcw, tch );
+	tex = rgbaatlas.createTexture( image_idx * 16 + 1,
+	                               w, h, tex_x, tex_y, tcx, tcy, tcw, tch );
 
 	glBindTexture( GL_TEXTURE_2D, tex );
 
@@ -2281,34 +2283,36 @@ static GLuint getArrayTex(const PIXVAL *arr, scr_coord_val w, scr_coord_val h,
 		it->second.use_ctr = 1;
 		it->second.change_ctr = 1;
 	}
-	else if(  it->second.tex == 0 && rgbaatlas.hasTexture( (uintptr_t)arr )  ) {
-		//check if it has been changed, but only if it is not
-		//changing often(then we avoid the hash function overhead
-		//and go straight to reuploading)
-		if(  it->second.use_ctr < 100 ||
-		                it->second.use_ctr / 3 < it->second.change_ctr  ) {
-			uint64_t hash = tex_hash( arr, byte_size );
-			if(  hash == it->second.hash  ) {
-				it->second.use_ctr++;
-				GLuint tex = rgbaatlas.getTexture( (uintptr_t)arr, tcx, tcy, tcw, tch );
-				return tex;
+	else if(  it->second.tex == 0  ) {
+		GLuint texname = rgbaatlas.getTexture( (uintptr_t)arr,
+		                                       tcx, tcy, tcw, tch );
+		if(  texname != 0  ) {
+			//check if it has been changed, but only if it is not
+			//changing often(then we avoid the hash function overhead
+			//and go straight to reuploading)
+			if(  it->second.use_ctr < 100 ||
+			                it->second.use_ctr / 3 < it->second.change_ctr  ) {
+				uint64_t hash = tex_hash( arr, byte_size );
+				if(  hash == it->second.hash  ) {
+					it->second.use_ctr++;
+					return texname;
+				}
+				else {
+					it->second.hash = hash;
+				}
+				it->second.change_ctr++;
 			}
 			else {
-				it->second.hash = hash;
-			}
-			it->second.change_ctr++;
-		}
-		else {
-			rgbaatlas.destroyTexture( (uintptr_t)arr );
+				rgbaatlas.destroyTexture( (uintptr_t)arr );
 
-			GLuint texname;
-			glGenTextures( 1, &texname );
-			glBindTexture( GL_TEXTURE_2D, texname );
-			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
-			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
-			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
-			it->second.tex = texname;
+				glGenTextures( 1, &texname );
+				glBindTexture( GL_TEXTURE_2D, texname );
+				glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+				glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+				glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+				glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+				it->second.tex = texname;
+			}
 		}
 	}
 
@@ -2372,8 +2376,9 @@ static GLuint getGlyphTex(uint32_t c, const font_t *fnt,
                           GLfloat &tcx, GLfloat &tcy,
                           GLfloat &tcw, GLfloat &tch)
 {
-	if(  charatlas.hasTexture( c )  ) {
-		return charatlas.getTexture( c, tcx, tcy, tcw, tch );
+	GLuint tex = charatlas.getTexture( c, tcx, tcy, tcw, tch );
+	if(  tex != 0  ) {
+		return tex;
 	}
 
 	const font_t::glyph_t &glyph = fnt->get_glyph( c );
@@ -2382,10 +2387,10 @@ static GLuint getGlyphTex(uint32_t c, const font_t *fnt,
 	//we ignore the y_offset.
 
 	unsigned int tex_x = 0, tex_y = 0;
-	GLuint tex = charatlas.createTexture( c,
-	                                      glyph_width, glyph_height,
-	                                      tex_x, tex_y,
-	                                      tcx, tcy, tcw, tch );
+	tex = charatlas.createTexture( c,
+	                               glyph_width, glyph_height,
+	                               tex_x, tex_y,
+	                               tcx, tcy, tcw, tch );
 
 	glBindTexture( GL_TEXTURE_2D, tex );
 
