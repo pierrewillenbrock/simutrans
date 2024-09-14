@@ -483,6 +483,10 @@ struct DrawCommand
 	GLfloat ty1;
 	GLfloat tx2;
 	GLfloat ty2;
+	GLfloat ax1;
+	GLfloat ay1;
+	GLfloat ax2;
+	GLfloat ay2;
 	GLcolorf alpha;
 	GLcolorf color;
 };
@@ -630,7 +634,8 @@ static std::vector<imd> images;
 
 static std::unordered_map<uint64_t, GLuint> rgbmap_cache;
 static std::unordered_map<void const *,ArrayInfo> arrayInfo;
-static TextureAtlas<uint32_t> charatlas(GL_ALPHA,GL_ALPHA,256,256,GL_UNSIGNED_BYTE);
+static TextureAtlas<uint32_t> charatlas(GL_ALPHA,GL_ALPHA,1024,1024,GL_UNSIGNED_BYTE);
+static TextureAtlas<uintptr_t> rgbaatlas(GL_RGBA,GL_RGBA,4096,4096,GL_UNSIGNED_BYTE);
 
 static uint8 player_night=0xFF;
 static uint8 player_day=0xFF;
@@ -751,7 +756,7 @@ static char const combined_fragmentShaderText[] =
 	"uniform sampler2D s_texColor,s_texAlpha,s_texRGBMap;\n"
 	"varying vec4 v_alphaMask;\n"
 	"void main () {\n"
-	"   vec4 alpha = texture2D(s_texAlpha,gl_TexCoord[0].st);\n"
+	"   vec4 alpha = texture2D(s_texAlpha,gl_TexCoord[1].st);\n"
 	"   vec4 index = texture2D(s_texColor,gl_TexCoord[0].st);\n"
 	"   vec3 indexedrgb = texture2D(s_texRGBMap,index.st).rgb;\n"
 	"   vec3 rgb = indexedrgb;\n"
@@ -771,6 +776,7 @@ static char const vertexShaderText[] =
 	"void main () {\n"
 	"   gl_Position = ftransform();\n"
 	"   gl_TexCoord[0] = gl_TextureMatrix[0] * gl_MultiTexCoord0;\n"
+	"   gl_TexCoord[1] = gl_TextureMatrix[0] * gl_MultiTexCoord1;\n"
 	"   gl_FrontColor = gl_Color;\n"
 	"   v_alphaMask = a_alphaMask;\n"
 	"}\n";
@@ -1371,12 +1377,16 @@ static void runDrawCommand(DrawCommand const &cmd)
 	glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
 	glBegin( GL_QUADS );
 	glTexCoord2f( cmd.tx1,  cmd.ty1 );
+	glMultiTexCoord2f( GL_TEXTURE1, cmd.ax1, cmd.ay1 );
 	glVertex2i( cmd.vx1, cmd.vy1 );
 	glTexCoord2f( cmd.tx2,  cmd.ty1 );
+	glMultiTexCoord2f( GL_TEXTURE1, cmd.ax2, cmd.ay1 );
 	glVertex2i( cmd.vx2, cmd.vy1 );
 	glTexCoord2f( cmd.tx2, cmd.ty2 );
+	glMultiTexCoord2f( GL_TEXTURE1, cmd.ax2, cmd.ay2 );
 	glVertex2i( cmd.vx2, cmd.vy2 );
 	glTexCoord2f( cmd.tx1, cmd.ty2 );
+	glMultiTexCoord2f( GL_TEXTURE1, cmd.ax1, cmd.ay2 );
 	glVertex2i( cmd.vx1, cmd.vy2 );
 	glEnd();
 
@@ -1796,31 +1806,23 @@ void display_set_player_color_scheme(const int player, const uint8 col1, const u
 
 
 static GLuint getIndexImgTex(struct imd &image,
-                             const PIXVAL *sp)
+                             const PIXVAL *sp,
+                             GLfloat &tcx, GLfloat &tcy, GLfloat &tcw, GLfloat &tch)
 {
+	unsigned int image_idx = &image - images.data();
 	scr_coord_val w = image.base_w;
 	scr_coord_val h = image.base_h;
 
-	if(  image.index_tex != 0  ) {
-		return image.index_tex;
-	}
 	if(  h <= 0 || w <= 0  ) {
+		tcx = 0;
+		tcy = 0;
+		tcw = 1;
+		tch = 1;
 		return 0;
 	}
-
-	GLuint ret;
-	glGenTextures( 1, &ret );
-	glBindTexture( GL_TEXTURE_2D, ret );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
-
-	//now upload the array
-	glPixelStorei( GL_UNPACK_ROW_LENGTH, w );
-	glPixelStorei( GL_UNPACK_ALIGNMENT, 4 );
-	glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
-	glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
+	if(  rgbaatlas.hasTexture( image_idx * 16 + 2 )  ) {
+		return rgbaatlas.getTexture( image_idx * 16 + 2, tcx, tcy, tcw, tch );
+	}
 
 	std::vector<PIX32> tmp;
 	tmp.resize( w * h );
@@ -1857,40 +1859,44 @@ static GLuint getIndexImgTex(struct imd &image,
 		p += w;
 	}
 
-	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0,
-	              GL_RGBA, GL_UNSIGNED_BYTE,
-	              tmp.data() );
+	unsigned int tex_x, tex_y;
+	GLuint tex = rgbaatlas.createTexture( image_idx * 16 + 2,
+	                                      w, h, tex_x, tex_y, tcx, tcy, tcw, tch );
 
-	image.index_tex = ret;
-
-	return ret;
-}
-
-static GLuint getBaseImgTex(struct imd &image,
-                            const PIXVAL *sp)
-{
-	scr_coord_val w = image.base_w;
-	scr_coord_val h = image.base_h;
-	if(  image.base_tex != 0  ) {
-		return image.base_tex;
-	}
-	if(  h <= 0 || w <= 0  ) {
-		return 0;
-	}
-
-	GLuint ret;
-	glGenTextures( 1, &ret );
-	glBindTexture( GL_TEXTURE_2D, ret );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+	glBindTexture( GL_TEXTURE_2D, tex );
 
 	//now upload the array
 	glPixelStorei( GL_UNPACK_ROW_LENGTH, w );
 	glPixelStorei( GL_UNPACK_ALIGNMENT, 4 );
 	glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
 	glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
+
+	glTexSubImage2D( GL_TEXTURE_2D, 0,
+	                 tex_x, tex_y,
+	                 w, h,
+	                 GL_RGBA, GL_UNSIGNED_BYTE,
+	                 tmp.data() );
+
+	return tex;
+}
+
+static GLuint getBaseImgTex(struct imd &image,
+                            const PIXVAL *sp,
+                            GLfloat &tcx, GLfloat &tcy, GLfloat &tcw, GLfloat &tch)
+{
+	unsigned int image_idx = &image - images.data();
+	scr_coord_val w = image.base_w;
+	scr_coord_val h = image.base_h;
+	if(  h <= 0 || w <= 0  ) {
+		tcx = 0;
+		tcy = 0;
+		tcw = 1;
+		tch = 1;
+		return 0;
+	}
+	if(  rgbaatlas.hasTexture( image_idx * 16 + 1 )  ) {
+		return rgbaatlas.getTexture( image_idx * 16 + 1, tcx, tcy, tcw, tch );
+	}
 
 	std::vector<PIX32> tmp;
 	tmp.resize( w * h );
@@ -1928,13 +1934,25 @@ static GLuint getBaseImgTex(struct imd &image,
 		p += w;
 	}
 
-	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0,
-	              GL_RGBA, GL_UNSIGNED_BYTE,
-	              tmp.data() );
+	unsigned int tex_x, tex_y;
+	GLuint tex = rgbaatlas.createTexture( image_idx * 16 + 1,
+	                                      w, h, tex_x, tex_y, tcx, tcy, tcw, tch );
 
-	image.base_tex = ret;
+	glBindTexture( GL_TEXTURE_2D, tex );
 
-	return ret;
+	//now upload the array
+	glPixelStorei( GL_UNPACK_ROW_LENGTH, w );
+	glPixelStorei( GL_UNPACK_ALIGNMENT, 4 );
+	glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
+	glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
+
+	glTexSubImage2D( GL_TEXTURE_2D, 0,
+	                 tex_x, tex_y,
+	                 w, h,
+	                 GL_RGBA, GL_UNSIGNED_BYTE,
+	                 tmp.data() );
+
+	return tex;
 }
 
 
@@ -1980,13 +1998,9 @@ void display_free_all_images_above( image_id above )
 {
 	flushDrawCommands();
 
-	for(  auto it = images.begin() + above; it != images.end(); it++  ) {
-		if(  it->base_tex  ) {
-			glDeleteTextures( 1, &( it->base_tex ) );
-		}
-		if(  it->index_tex  ) {
-			glDeleteTextures( 1, &( it->index_tex ) );
-		}
+	for(  unsigned int i = above; i < images.size(); i++  ) {
+		rgbaatlas.destroyTexture( i * 16 + 1 );
+		rgbaatlas.destroyTexture( i * 16 + 2 );
 	}
 	images.resize( above );
 }
@@ -2049,47 +2063,93 @@ static uint64_t tex_hash(const void *ptr, size_t size)
 
 //these do change relatively often and keep their data around, so we can
 //key our internal data off their data pointer
-static GLuint getArrayTex(const PIXVAL *arr, scr_coord_val w, scr_coord_val h)
+static GLuint getArrayTex(const PIXVAL *arr, scr_coord_val w, scr_coord_val h,
+                          GLfloat &tcx, GLfloat &tcy, GLfloat &tcw, GLfloat &tch)
 {
 	if(  w * h == 0  ) {
+		tcx = 0;
+		tcy = 0;
+		tcw = 1;
+		tch = 1;
 		return 0;
 	}
 	size_t byte_size = w * h * sizeof(PIXVAL);
 	auto it = arrayInfo.find( (void const *)arr );
-	if(  it != arrayInfo.end()  ) {
+	if(  it == arrayInfo.end()  ) {
+		it = arrayInfo.insert( std::make_pair
+		                       ( (void const *)arr, ArrayInfo() ) ).first;
+		it->second.tex = 0;
+		it->second.hash = tex_hash( arr, byte_size );
+		it->second.use_ctr = 1;
+		it->second.change_ctr = 1;
+	}
+	else if(  it->second.tex == 0 && rgbaatlas.hasTexture( (uintptr_t)arr )  ) {
 		//check if it has been changed, but only if it is not
 		//changing often(then we avoid the hash function overhead
 		//and go straight to reuploading)
-		if(  it->second.use_ctr > 100 &&
+		if(  it->second.use_ctr < 100 ||
 		                it->second.use_ctr / 3 < it->second.change_ctr  ) {
 			uint64_t hash = tex_hash( arr, byte_size );
 			if(  hash == it->second.hash  ) {
 				it->second.use_ctr++;
-				return it->second.tex;
+				return rgbaatlas.getTexture( (uintptr_t)arr, tcx, tcy, tcw, tch );
 			}
 			else {
 				it->second.hash = hash;
 			}
 			it->second.change_ctr++;
 		}
-	}
-	else {
-		it = arrayInfo.insert( std::make_pair
-		                       ( (void const *)arr, ArrayInfo() ) ).first;
-		GLuint texname;
-		glGenTextures( 1, &texname );
-		it->second.tex = texname;
-		it->second.hash = tex_hash( arr, byte_size );
-		it->second.use_ctr = 1;
-		it->second.change_ctr = 1;
+		else {
+			rgbaatlas.destroyTexture( (uintptr_t)arr );
+
+			GLuint texname;
+			glGenTextures( 1, &texname );
+			glBindTexture( GL_TEXTURE_2D, texname );
+			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+			it->second.tex = texname;
+		}
 	}
 
-	GLuint texname = arrayInfo[(const void *)arr].tex;
+	if(  !it->second.tex  ) {
+		unsigned int tex_x, tex_y;
+		GLuint texname = rgbaatlas.createTexture( (uintptr_t)arr,
+		                 w, h, tex_x, tex_y, tcx, tcy, tcw, tch );
+
+		if(  texname != 0  ) {
+			glBindTexture( GL_TEXTURE_2D, texname );
+
+			//now upload the array
+			glPixelStorei( GL_UNPACK_ROW_LENGTH, w );
+			glPixelStorei( GL_UNPACK_ALIGNMENT, 2 );
+			glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
+			glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
+
+			glTexSubImage2D( GL_TEXTURE_2D, 0,
+			                 tex_x, tex_y,
+			                 w, h,
+			                 GL_RGB, GL_UNSIGNED_SHORT_5_6_5,
+			                 arr );
+			return texname;
+		}
+		else {
+			rgbaatlas.destroyTexture( (uintptr_t)arr );
+
+			GLuint texname;
+			glGenTextures( 1, &texname );
+			glBindTexture( GL_TEXTURE_2D, texname );
+			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+			it->second.tex = texname;
+		}
+	}
+
+	GLuint texname = it->second.tex;
 	glBindTexture( GL_TEXTURE_2D, texname );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
 
 	//now upload the array
 	glPixelStorei( GL_UNPACK_ROW_LENGTH, w );
@@ -2098,10 +2158,14 @@ static GLuint getArrayTex(const PIXVAL *arr, scr_coord_val w, scr_coord_val h)
 	glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
 
 	//this already uses raw RGB 565 as defined by get_system_color
-	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGB, w, h, 0,
+	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0,
 	              GL_RGB, GL_UNSIGNED_SHORT_5_6_5,
 	              arr );
 
+	tcx = 0;
+	tcy = 0;
+	tcw = 1;
+	tch = 1;
 	return texname;
 }
 
@@ -2123,6 +2187,8 @@ static GLuint getGlyphTex(uint32_t c, const font_t *fnt,
 	                                      glyph_width, glyph_height,
 	                                      tex_x, tex_y,
 	                                      tcx, tcy, tcw, tch );
+
+	glBindTexture( GL_TEXTURE_2D, tex );
 
 	//now upload the array
 	glPixelStorei( GL_UNPACK_ROW_LENGTH, glyph_width );
@@ -2155,7 +2221,8 @@ static GLuint getGlyphTex(uint32_t c, const font_t *fnt,
 
 
 static void display_img_pc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h,
-                           GLuint tex, GLuint rgbmap_tex  CLIP_NUM_DEF)
+                           GLuint tex, GLuint rgbmap_tex,
+                           GLfloat x1, GLfloat y1, GLfloat x2, GLfloat y2 CLIP_NUM_DEF)
 {
 	scr_coord_val rw = w;
 	scr_coord_val rh = h;
@@ -2170,10 +2237,14 @@ static void display_img_pc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, 
 		cmd.vy1 = yp;
 		cmd.vx2 = xp + w;
 		cmd.vy2 = yp + h;
-		cmd.tx1 = xoff / float( rw );
-		cmd.ty1 = yoff / float( rh );
-		cmd.tx2 = ( xoff + w ) / float( rw );
-		cmd.ty2 = ( yoff + h ) / float( rh );
+		cmd.tx1 = x1 + xoff / float( rw ) * ( x2 - x1 );
+		cmd.ty1 = y1 + yoff / float( rh ) * ( y2 - y1 );
+		cmd.tx2 = x1 + ( xoff + w ) / float( rw ) * ( x2 - x1 );
+		cmd.ty2 = y1 + ( yoff + h ) / float( rh ) * ( y2 - y1 );
+		cmd.ax1 = 0;
+		cmd.ay1 = 0;
+		cmd.ax2 = 0;
+		cmd.ay2 = 0;
 		cmd.tex = tex;
 		cmd.rgbmap_tex = rgbmap_tex;
 		cmd.alphatex = 0;
@@ -2236,7 +2307,10 @@ void display_img_aux(const image_id n, scr_coord_val xp, scr_coord_val yp, const
 
 		rezoom_img( n );
 		sp = images[n].base_data;
-		tex = getIndexImgTex( images[n], sp );
+		GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
+		tex = getIndexImgTex( images[n], sp, x1, y1, tcw, tch );
+		x2 = x1 + tcw;
+		y2 = y1 + tch;
 
 		activate_player_color( use_player, true );
 		// now, since zooming may have change this image
@@ -2248,7 +2322,8 @@ void display_img_aux(const image_id n, scr_coord_val xp, scr_coord_val yp, const
 		display_img_pc( xp, yp,
 		                ceil( images[n].base_w * zoom ),
 		                ceil( images[n].base_h * zoom ),
-		                tex, rgbmap_day_night_tex  CLIP_NUM_PAR );
+		                tex, rgbmap_day_night_tex,
+		                x1, y1, x2, y2  CLIP_NUM_PAR );
 	}
 }
 
@@ -2452,10 +2527,15 @@ void display_color_img(const image_id n, scr_coord_val xp, scr_coord_val yp, sin
 			// color replacement needs the original data => sp points to non-cached data
 			const PIXVAL *sp = images[n].base_data;
 
-			GLuint tex = getIndexImgTex( images[n], sp );
+			GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
+			GLuint tex = getIndexImgTex( images[n], sp, x1, y1, tcw, tch );
+			x2 = x1 + tcw;
+			y2 = y1 + tch;
 			display_img_pc( x, y,
-			                images[n].base_w, images[n].base_h,
-			                tex, rgbmap_current_tex  CLIP_NUM_PAR );
+			                images[n].base_w,
+			                images[n].base_h,
+			                tex, rgbmap_current_tex,
+			                x1, y1, x2, y2  CLIP_NUM_PAR );
 		}
 	} // number ok
 }
@@ -2495,10 +2575,14 @@ void display_base_img(const image_id n, scr_coord_val xp, scr_coord_val yp, cons
 		// color replacement needs the original data => sp points to non-cached data
 		const PIXVAL *sp = images[n].base_data;
 
-		GLuint tex = getIndexImgTex( images[n], sp );
+		GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
+		GLuint tex = getIndexImgTex( images[n], sp, x1, y1, tcw, tch );
+		x2 = x1 + tcw;
+		y2 = y1 + tch;
 		display_img_pc( x, y,
 		                images[n].base_w, images[n].base_h,
-		                tex, rgbmap_current_tex  CLIP_NUM_PAR );
+		                tex, rgbmap_current_tex,
+		                x1, y1, x2, y2  CLIP_NUM_PAR );
 	} // number ok
 }
 
@@ -2563,6 +2647,10 @@ void display_blend_wh_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, s
 		cmd.ty1 = yoff / float( rh );
 		cmd.tx2 = ( xoff + w ) / float( rw );
 		cmd.ty2 = ( yoff + h ) / float( rh );
+		cmd.ax1 = 0;
+		cmd.ay1 = 0;
+		cmd.ax2 = 0;
+		cmd.ay2 = 0;
 		cmd.vx1 = xp;
 		cmd.vy1 = yp;
 		cmd.vx2 = xp + w;
@@ -2580,7 +2668,7 @@ void display_blend_wh_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, s
 }
 
 
-static void display_img_blend_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, GLuint tex, GLuint rgbmap_tex, float alpha  CLIP_NUM_DEF)
+static void display_img_blend_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, GLuint tex, GLuint rgbmap_tex, float alpha, GLfloat x1, GLfloat y1, GLfloat x2, GLfloat y2  CLIP_NUM_DEF)
 {
 	scr_coord_val rw = w;
 	scr_coord_val rh = h;
@@ -2601,10 +2689,14 @@ static void display_img_blend_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 		cmd.color.b = 0;
 		cmd.color.a = 0;
 		cmd.cr.number_of_clips = 0;
-		cmd.tx1 = xoff / float( rw );
-		cmd.ty1 = yoff / float( rh );
-		cmd.tx2 = ( xoff + w ) / float( rw );
-		cmd.ty2 = ( yoff + h ) / float( rh );
+		cmd.tx1 = x1 + xoff / float( rw ) * ( x2 - x1 );
+		cmd.ty1 = y1 + yoff / float( rh ) * ( y2 - y1 );
+		cmd.tx2 = x1 + ( xoff + w ) / float( rw ) * ( x2 - x1 );
+		cmd.ty2 = y1 + ( yoff + h ) / float( rh ) * ( y2 - y1 );
+		cmd.ax1 = 0;
+		cmd.ay1 = 0;
+		cmd.ax2 = 0;
+		cmd.ay2 = 0;
 		cmd.vx1 = xp;
 		cmd.vy1 = yp;
 		cmd.vx2 = xp + w;
@@ -2614,7 +2706,7 @@ static void display_img_blend_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 	}
 }
 
-static void display_img_blend_wc_colour(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, GLuint tex, PIXVAL colour, float alpha  CLIP_NUM_DEF)
+static void display_img_blend_wc_colour(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, GLuint tex, PIXVAL colour, float alpha, GLfloat x1, GLfloat y1, GLfloat x2, GLfloat y2  CLIP_NUM_DEF)
 {
 	scr_coord_val rw = w;
 	scr_coord_val rh = h;
@@ -2635,10 +2727,14 @@ static void display_img_blend_wc_colour(scr_coord_val xp, scr_coord_val yp, scr_
 		cmd.color.b = ( colour & 0x001f ) / float( 0x001f );
 		cmd.color.a = 1.0;
 		cmd.cr.number_of_clips = 0;
-		cmd.tx1 = xoff / float( rw );
-		cmd.ty1 = yoff / float( rh );
-		cmd.tx2 = ( xoff + w ) / float( rw );
-		cmd.ty2 = ( yoff + h ) / float( rh );
+		cmd.tx1 = x1 + xoff / float( rw ) * ( x2 - x1 );
+		cmd.ty1 = y1 + yoff / float( rh ) * ( y2 - y1 );
+		cmd.tx2 = x1 + ( xoff + w ) / float( rw ) * ( x2 - x1 );
+		cmd.ty2 = y1 + ( yoff + h ) / float( rh ) * ( y2 - y1 );
+		cmd.ax1 = 0;
+		cmd.ay1 = 0;
+		cmd.ax2 = 0;
+		cmd.ay2 = 0;
 		cmd.vx1 = xp;
 		cmd.vy1 = yp;
 		cmd.vx2 = xp + w;
@@ -2650,7 +2746,7 @@ static void display_img_blend_wc_colour(scr_coord_val xp, scr_coord_val yp, scr_
 
 /* from here code for transparent images */
 
-static void display_img_alpha_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, GLuint tex, GLuint rgbmap_tex, GLuint alphatex, const uint8 alpha_flags, PIXVAL  CLIP_NUM_DEF )
+static void display_img_alpha_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, GLuint tex, GLuint rgbmap_tex, GLuint alphatex, const uint8 alpha_flags, PIXVAL, GLfloat tx1, GLfloat ty1, GLfloat tx2, GLfloat ty2, GLfloat ax1, GLfloat ay1, GLfloat ax2, GLfloat ay2  CLIP_NUM_DEF )
 {
 	//more exact: r/g/b channel from alphatex is selected by alpha_flags
 	//to be the alpha channel for this blt.
@@ -2675,10 +2771,14 @@ static void display_img_alpha_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 		cmd.color.g = 0;
 		cmd.color.b = 0;
 		cmd.color.a = 0;
-		cmd.tx1 = xoff / float( rw );
-		cmd.ty1 = yoff / float( rh );
-		cmd.tx2 = ( xoff + w ) / float( rw );
-		cmd.ty2 = ( yoff + h ) / float( rh );
+		cmd.tx1 = tx1 + xoff / float( rw ) * ( tx2 - tx1 );
+		cmd.ty1 = ty1 + yoff / float( rh ) * ( ty2 - ty1 );
+		cmd.tx2 = tx1 + ( xoff + w ) / float( rw ) * ( tx2 - tx1 );
+		cmd.ty2 = ty1 + ( yoff + h ) / float( rh ) * ( ty2 - ty1 );
+		cmd.ax1 = ax1 + xoff / float( rw ) * ( ax2 - ax1 );
+		cmd.ay1 = ay1 + yoff / float( rh ) * ( ay2 - ay1 );
+		cmd.ax2 = ax1 + ( xoff + w ) / float( rw ) * ( ax2 - ax1 );
+		cmd.ay2 = ay1 + ( yoff + h ) / float( rh ) * ( ay2 - ay1 );
 		cmd.vx1 = xp;
 		cmd.vy1 = yp;
 		cmd.vx2 = xp + w;
@@ -2709,18 +2809,26 @@ void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_va
 		float alpha = ( color_index & TRANSPARENT_FLAGS ) / TRANSPARENT25_FLAG / 4.0;
 
 		if(  color_index & OUTLINE_FLAG  ) {
-			GLuint tex = getIndexImgTex( images[n], sp );
+			GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
+			GLuint tex = getIndexImgTex( images[n], sp, x1, y1, tcw, tch );
+			x2 = x1 + tcw;
+			y2 = y1 + tch;
 			display_img_blend_wc_colour( xp, yp,
 			                             ceil( images[n].base_w * zoom ),
 			                             ceil( images[n].base_h * zoom ),
-			                             tex, color, alpha  CLIP_NUM_PAR );
+			                             tex, color, alpha,
+			                             x1, y1, x2, y2 CLIP_NUM_PAR );
 		}
 		else {
-			GLuint tex = getIndexImgTex( images[n], sp );
+			GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
+			GLuint tex = getIndexImgTex( images[n], sp, x1, y1, tcw, tch );
+			x2 = x1 + tcw;
+			y2 = y1 + tch;
 			display_img_blend_wc( xp, yp,
 			                      ceil( images[n].base_w * zoom ),
 			                      ceil( images[n].base_h * zoom ),
-			                      tex, rgbmap_day_night_tex, alpha  CLIP_NUM_PAR );
+			                      tex, rgbmap_day_night_tex, alpha,
+			                      x1, y1, x2, y2  CLIP_NUM_PAR );
 		}
 	}
 }
@@ -2745,14 +2853,22 @@ void display_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const 
 		// get the real color
 		const PIXVAL color = color_index & 0xFFFF;
 
-		GLuint tex = getIndexImgTex( images[n], sp );
-		GLuint alphatex = getBaseImgTex( images[alpha_n], alphamap );
+		GLfloat tx1 = 0, ty1 = 0, tx2 = 1, ty2 = 1, tw = 1, th = 1;
+		GLfloat ax1 = 0, ay1 = 0, ax2 = 1, ay2 = 1, aw = 1, ah = 1;
+		GLuint tex = getIndexImgTex( images[n], sp, tx1, ty1, tw, th );
+		tx2 = tx1 + tw;
+		ty2 = ty1 + th;
+		GLuint alphatex = getBaseImgTex( images[alpha_n], alphamap, ax1, ay1, aw, ah );
+		ax2 = ax1 + aw;
+		ay2 = ay1 + ah;
 		display_img_alpha_wc( xp, yp,
 		                      ceil( images[n].base_w * zoom ),
 		                      ceil( images[n].base_h * zoom ),
 		                      tex, rgbmap_day_night_tex,
 		                      alphatex, alpha_flags,
-		                      color  CLIP_NUM_PAR );
+		                      color,
+		                      tx1, ty1, tx2, ty2,
+		                      ax1, ay1, ax2, ay2  CLIP_NUM_PAR );
 	}
 }
 
@@ -2795,17 +2911,25 @@ void display_base_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp
 					// no player
 					activate_player_color( 0, daynight );
 				}
-				tex = getIndexImgTex( images[n], sp );
+				GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
+				tex = getIndexImgTex( images[n], sp, x1, y1, tcw, tch );
+				x2 = x1 + tcw;
+				y2 = y1 + tch;
 				display_img_blend_wc( x, y,
 				                      images[n].base_w, images[n].base_h,
-				                      tex, rgbmap_current_tex, alpha  CLIP_NUM_PAR );
+				                      tex, rgbmap_current_tex, alpha,
+				                      x1, y1, x2, y2 CLIP_NUM_PAR );
 			}
 			else {
-				tex = getIndexImgTex( images[n], sp );
+				GLfloat x1 = 0, y1 = 0, x2 = 1, y2 = 1, tcw = 1, tch = 1;
+				tex = getIndexImgTex( images[n], sp, x1, y1, tcw, tch );
+				x2 = x1 + tcw;
+				y2 = y1 + tch;
 				display_img_blend_wc_colour( x, y,
 				                             images[n].base_w, images[n].base_h,
 				                             tex,
-				                             color, alpha  CLIP_NUM_PAR );
+				                             color, alpha,
+				                             x1, y1, x2, y2 CLIP_NUM_PAR );
 			}
 		}
 	} // number ok
@@ -2845,14 +2969,22 @@ void display_base_img_alpha(const image_id n, const image_id alpha_n, const unsi
 				// no player
 				activate_player_color( 0, daynight );
 			}
-			GLuint tex = getIndexImgTex( images[n], sp );
-			GLuint alphatex = getBaseImgTex( images[n], alphamap );
+			GLfloat tx1 = 0, ty1 = 0, tx2 = 1, ty2 = 1, tw = 1, th = 1;
+			GLfloat ax1 = 0, ay1 = 0, ax2 = 1, ay2 = 1, aw = 1, ah = 1;
+			GLuint tex = getIndexImgTex( images[n], sp, tx1, ty1, tw, th );
+			tx2 = tx1 + tw;
+			ty2 = ty1 + th;
+			GLuint alphatex = getBaseImgTex( images[n], alphamap, ax1, ay1, aw, ah );
+			ax2 = ax1 + aw;
+			ay2 = ay1 + ah;
 
 			display_img_alpha_wc( x, y,
 			                      images[n].base_w, images[n].base_h,
 			                      tex, rgbmap_current_tex,
 			                      alphatex, alpha_flags,
-			                      color  CLIP_NUM_PAR );
+			                      color,
+			                      tx1, ty1, tx2, ty2,
+			                      ax1, ay1, ax2, ay2  CLIP_NUM_PAR );
 		}
 	} // number ok
 }
@@ -2904,6 +3036,10 @@ static void display_pixel(scr_coord_val x, scr_coord_val y, PIXVAL color)
 		cmd.ty1 = 0;
 		cmd.tx2 = 0;
 		cmd.ty2 = 0;
+		cmd.ax1 = 0;
+		cmd.ay1 = 0;
+		cmd.ax2 = 0;
+		cmd.ay2 = 0;
 		cmd.vx1 = x;
 		cmd.vy1 = y;
 		cmd.vx2 = x + 1;
@@ -2936,6 +3072,10 @@ static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_va
 		cmd.ty1 = 0;
 		cmd.tx2 = 0;
 		cmd.ty2 = 0;
+		cmd.ax1 = 0;
+		cmd.ay1 = 0;
+		cmd.ax2 = 0;
+		cmd.ay2 = 0;
 		cmd.vx1 = xp;
 		cmd.vy1 = yp;
 		cmd.vx2 = xp + w;
@@ -2990,6 +3130,10 @@ static void display_vl_internal(const scr_coord_val xp, scr_coord_val yp, scr_co
 		cmd.ty1 = 0;
 		cmd.tx2 = 0;
 		cmd.ty2 = 0;
+		cmd.ax1 = 0;
+		cmd.ay1 = 0;
+		cmd.ax2 = 0;
+		cmd.ay2 = 0;
 		cmd.vx1 = xp;
 		cmd.vy1 = yp;
 		cmd.vx2 = xp + 1;
@@ -3023,7 +3167,9 @@ void display_array_wh(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_c
 	const scr_coord_val yoff = clip_wh( &yp, &h, CR0.clip_rect.y, CR0.clip_rect.yy );
 
 	if(  w > 0 && h > 0  ) {
-		GLuint texname = getArrayTex( arr, arr_w, arr_h );
+		GLfloat tcx = 0, tcy = 0, tcw = 1, tch = 1;
+		GLuint texname = getArrayTex( arr, arr_w, arr_h,
+		                              tcx, tcy, tcw, tch );
 		DrawCommand cmd;
 		cmd.cr.number_of_clips = 0;
 		cmd.tex = texname;
@@ -3037,10 +3183,14 @@ void display_array_wh(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_c
 		cmd.color.g = 0;
 		cmd.color.b = 0;
 		cmd.color.a = 0.5;
-		cmd.tx1 = xoff / float( arr_w );
-		cmd.ty1 = yoff / float( arr_h );
-		cmd.tx2 = ( xoff + w ) / float( arr_w );
-		cmd.ty2 = ( yoff + h ) / float( arr_h );
+		cmd.tx1 = tcx + xoff / float( arr_w ) * tcw;
+		cmd.ty1 = tcy + yoff / float( arr_h ) * tch;
+		cmd.tx2 = tcx + ( xoff + w ) / float( arr_w ) * tcw;
+		cmd.ty2 = tcy + ( yoff + h ) / float( arr_h ) * tch;
+		cmd.ax1 = 0;
+		cmd.ay1 = 0;
+		cmd.ax2 = 0;
+		cmd.ay2 = 0;
 		cmd.vx1 = xp;
 		cmd.vy1 = yp;
 		cmd.vx2 = xp + w;
@@ -3365,6 +3515,10 @@ scr_coord_val display_text_proportional_len_clip_rgb(scr_coord_val x, scr_coord_
 				cmd.ty1 = gly + ty / float( rh ) * glh;
 				cmd.tx2 = glx + ( tx + w ) / float( rw ) * glw;
 				cmd.ty2 = gly + ( ty + h ) / float( rh ) * glh;
+				cmd.ax1 = 0;
+				cmd.ay1 = 0;
+				cmd.ax2 = 0;
+				cmd.ay2 = 0;
 				cmd.vx1 = sx;
 				cmd.vy1 = sy;
 				cmd.vx2 = sx + w;
