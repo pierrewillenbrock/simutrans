@@ -48,7 +48,7 @@
 #endif
 
 #ifdef MULTI_THREAD
-#error simgraphgl does not support MULTI_THREAD drawing
+//#error simgraphgl does not support MULTI_THREAD drawing
 #endif
 // to pass the extra clipnum when not needed use this
 #ifdef MULTI_THREAD
@@ -56,6 +56,8 @@
 #else
 #define CLIPNUM_IGNORE
 #endif
+
+static pthread_t simgraph_main_thread;
 
 
 
@@ -293,6 +295,46 @@ MSVC_ALIGN(64) struct clipping_info_t {
 	}
 } GCC_ALIGN(64); // aligned to separate cachelines
 
+#ifdef MULTI_THREAD
+#define MUTEX_LOCK(m) pthread_mutex_lock( &m )
+#define MUTEX_UNLOCK(m) pthread_mutex_unlock( &m )
+#else
+#define MUTEX_LOCK(mutex) (void)0
+#define MUTEX_UNLOCK(m) (void)0
+#endif
+
+#ifdef MULTI_THREAD
+struct TextureAtlas_Texname {
+	GLuint gltex = 0;
+	unsigned char page = 0;
+	unsigned char atlas = 0;
+	unsigned char valid = 0;
+	bool operator==(TextureAtlas_Texname const &o) const
+	{
+		if(  !valid && !o.valid  ) {
+			return true;
+		}
+		if(  valid != o.valid  ) {
+			return false;
+		}
+		return atlas == o.atlas && page == o.page; //the gltex is just along for the ride. primary key is atlas:page, but texnames are not compared between atlases
+	}
+	bool operator!=(TextureAtlas_Texname const &o) const
+	{
+		return !operator==( o );
+	}
+};
+static bool isValidTexname(TextureAtlas_Texname const &name)
+{
+	return name.valid != 0;
+}
+static TextureAtlas_Texname invalidTexname()
+{
+	return TextureAtlas_Texname();
+}
+#define gltexFromTexname(name) ((name).gltex)
+
+#else
 typedef GLuint TextureAtlas_Texname;
 static bool isValidTexname(TextureAtlas_Texname const & name) {
 	return name != 0;
@@ -301,10 +343,15 @@ static TextureAtlas_Texname invalidTexname() {
 	return TextureAtlas_Texname( 0 );
 }
 #define gltexFromTexname(name) (name)
+#endif
+
 template<typename Key>
 class TextureAtlas
 {
 private:
+#ifdef MULTI_THREAD
+	pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+#endif
 	struct TileInfo
 	{
 		TextureAtlas_Texname texture;
@@ -313,6 +360,9 @@ private:
 	};
 	struct TilePageInfo
 	{
+		//this structure stores information about a texture page.
+		//gl handle, size, unused/free space.
+		//space is only allocated, never given back(freed)
 		TextureAtlas_Texname texture;
 		GLuint width, height;
 		std::deque<TileInfo> freetiles;
@@ -420,17 +470,56 @@ private:
 		void cleanup()
 		{
 			//TODO need a better structure to store free space
+			//requirements:
+			//* fast searchability for a block of a given minimum size
+			//* searchability should be guided in a way to optimize
+			//    space usage
+			//* fast space allocation(no deallocation needed!)
+
+
+			//we could use some kind of quadmap to organize free
+			//space. that way, the free space would be
+			//kind of easy to navigate left/right to check if a
+			//given node may have enough space to the sides to accomodate
+			//a given allocation.
+
+			//from point of view of finding the space, a 2d index
+			//over all the _possible_ size combinations from
+			//every position would be ideal.
+			//pretty sure that would be expensive during removal
+			//of space. (which always go hand in hand!)
 		}
 	};
+	struct UploadInfo
+	{
+		TextureAtlas_Texname tex;
+		unsigned int tex_x;
+		unsigned int tex_y;
+		scr_coord_val w;
+		scr_coord_val h;
+		scr_coord_val pitch;
+		uint8_t align;
+		GLenum format;
+		GLenum type;
+		std::vector<char> data;
+	};
+
 	std::unordered_map<Key, TileInfo> tiletex;
 	std::vector<TilePageInfo> tilepage;
+	std::vector<UploadInfo> uploads;
 	GLint tex_internalformat;
 	GLenum tex_format;
 	GLenum tex_type;
 	GLsizei tex_width;
 	GLsizei tex_height;
+	uint8_t atlasid;
+#ifdef MULTI_THREAD
+	bool need_gen_tex = false;
+#endif
+
 	void genTex(TextureAtlas_Texname &texname)
 	{
+		assert( simgraph_main_thread == pthread_self() );
 		glGenTextures( 1, &gltexFromTexname( texname ) );
 		glBindTexture( GL_TEXTURE_2D, gltexFromTexname( texname ) );
 		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
@@ -450,12 +539,15 @@ public:
 	             GLenum tex_format,
 	             GLsizei tex_width,
 	             GLsizei tex_height,
-	             GLenum tex_type)
+	             GLenum tex_type,
+	             uint8_t atlasid
+	            )
 		: tex_internalformat( tex_internalformat )
 		, tex_format( tex_format )
 		, tex_type( tex_type )
 		, tex_width( tex_width )
 		, tex_height( tex_height )
+		, atlasid( atlasid )
 	{
 	}
 	/** Change page texture size
@@ -464,34 +556,50 @@ public:
 	 */
 	void setTextureSize(GLsizei tex_width, GLsizei tex_height)
 	{
+		MUTEX_LOCK( mutex );
+
 		this->tex_width = tex_width;
 		this->tex_height = tex_height;
+
+		MUTEX_UNLOCK( mutex );
 	}
 	TextureAtlas_Texname getTexture( Key k,
 	                                 GLfloat &x, GLfloat &y,
 	                                 GLfloat &w, GLfloat &h )
 	{
+		MUTEX_LOCK( mutex );
+
 		auto it = tiletex.find( k );
 		if(  it != tiletex.end()  ) {
 			x = it->second.x;
 			y = it->second.y;
 			w = it->second.w;
 			h = it->second.h;
+
+			MUTEX_UNLOCK( mutex );
+
 			return it->second.texture;
 		}
 		x = 0;
 		y = 0;
 		w = 0;
 		h = 0;
+
+		MUTEX_UNLOCK( mutex );
+
 		return invalidTexname();
 	}
 	void cleanupPages()
 	{
+		MUTEX_LOCK( mutex );
+
 		for(  auto &el : tilepage  ) {
 			el.cleanup();
 		}
+
+		MUTEX_UNLOCK( mutex );
 	}
-	void destroyTexture(Key k, bool runcleanup = true)
+	void destroyTexture_locked(Key k)
 	{
 		auto it = tiletex.find( k );
 		if(  it != tiletex.end()  ) {
@@ -504,6 +612,15 @@ public:
 			}
 			tiletex.erase( it );
 		}
+	}
+	void destroyTexture(Key k, bool runcleanup = true)
+	{
+		MUTEX_LOCK( mutex );
+
+		destroyTexture_locked( k );
+
+		MUTEX_UNLOCK( mutex );
+
 		if(  runcleanup  ) {
 			cleanupPages();
 		}
@@ -517,6 +634,8 @@ public:
 	                                   GLfloat &tcx, GLfloat &tcy,
 	                                   GLfloat &tcw, GLfloat &tch)
 	{
+		MUTEX_LOCK( mutex );
+
 		auto it = tiletex.find( k );
 		if(  it != tiletex.end()  ) {
 			if(  width == it->second.tex_w &&
@@ -527,12 +646,19 @@ public:
 				tcy = it->second.y;
 				tcw = it->second.w;
 				tch = it->second.h;
-				return it->second.texture;
+				TextureAtlas_Texname texname = it->second.texture;
+
+				MUTEX_UNLOCK( mutex );
+
+				return texname;
 			}
-			destroyTexture( k, false );
+			destroyTexture_locked(k);
 		}
 
 		if(  (int)width > tex_width || (int)height > tex_height  ) {
+
+			MUTEX_UNLOCK( mutex );
+
 			return invalidTexname();
 		}
 
@@ -547,7 +673,20 @@ public:
 		}
 		if(  !found  ) {
 			TextureAtlas_Texname texname;
+#ifdef MULTI_THREAD
+			texname.valid = 1;
+			texname.page = tilepage.size();
+			texname.atlas = atlasid;
+			if(  simgraph_main_thread == pthread_self() && false  ) {
+				genTex( texname );
+			}
+			else {
+				gltexFromTexname( texname ) = 0;
+				need_gen_tex = true;
+			}
+#else
 			genTex( texname );
+#endif
 			tilepage.emplace_back( texname, tex_width, tex_height );
 
 			if(  tilepage.back().findFreeTile( width, height, ci )  ) {
@@ -583,15 +722,24 @@ public:
 		tcy = ci.y;
 		tcw = ci.w;
 		tch = ci.h;
-		return ci.texture;
+		TextureAtlas_Texname texname = ci.texture;
+
+		MUTEX_UNLOCK( mutex );
+
+		return texname;
 	}
 	void clear()
 	{
+		MUTEX_LOCK( mutex );
+
+		assert( simgraph_main_thread == pthread_self() );
 		for(  auto &page : tilepage  ) {
 			glDeleteTextures( 1, &gltexFromTexname( page.texture ) );
 		}
 		tiletex.clear();
 		tilepage.clear();
+
+		MUTEX_UNLOCK( mutex );
 	}
 
 	void doUpload( TextureAtlas_Texname const &tex,
@@ -601,7 +749,7 @@ public:
 	               GLenum format, GLenum type,
 	               void const *data )
 	{
-		assert( gltexFromTexname( tex ) );
+		assert( isValidTexname( tex ) );
 		glBindTexture( GL_TEXTURE_2D, gltexFromTexname( tex ) );
 
 		glPixelStorei( GL_UNPACK_ROW_LENGTH, pitch );
@@ -615,6 +763,90 @@ public:
 		                 data );
 	}
 
+#ifdef MULTI_THREAD
+	void deferUpload( TextureAtlas_Texname const &tex,
+	                  unsigned int tex_x, unsigned int tex_y,
+	                  scr_coord_val w, scr_coord_val h,
+	                  scr_coord_val pitch, uint8_t align,
+	                  GLenum format, GLenum type,
+	                  void const *data, size_t size )
+	{
+		UploadInfo i;
+		i.tex = tex.tex;
+		i.tex_x = tex_x;
+		i.tex_y = tex_y;
+		i.w = w;
+		i.h = h;
+		i.pitch = pitch;
+		i.align = align;
+		i.format = format;
+		i.type = type;
+		i.data.resize( size );
+		memcpy( i.data.data(), data, size );
+		uploads.emplace_back( std::move( i ) );
+	}
+
+	void deferUpload( TextureAtlas_Texname const &tex,
+	                  unsigned int tex_x, unsigned int tex_y,
+	                  scr_coord_val w, scr_coord_val h,
+	                  scr_coord_val pitch, uint8_t align,
+	                  GLenum format, GLenum type,
+	                  std::vector<char> &&data )
+	{
+		UploadInfo i;
+		i.page = tex.page;
+		i.tex_x = tex_x;
+		i.tex_y = tex_y;
+		i.w = w;
+		i.h = h;
+		i.pitch = pitch;
+		i.align = align;
+		i.format = format;
+		i.type = type;
+		i.data = std::move( data );
+		MUTEX_LOCK( mutex );
+		uploads.emplace_back( std::move( i ) );
+		MUTEX_UNLOCK( mutex );
+	}
+
+	void uploadUploads()
+	{
+		assert( simgraph_main_thread == pthread_self() );
+		for(  auto &el : uploads  ) {
+			doUpload( el.tex, el.tex_x, el.tex_y, el.w, el.h,
+			          el.pitch, el.align, el.format, el.type,
+			          el.data.data() );
+		}
+		uploads.clear();
+	}
+
+	bool realizeTexPages() {
+		if(  !need_gen_tex  ) {
+			uploadUploads();
+			return false;
+		}
+		for(  auto &page : tilepage  ) {
+			if(  gltexFromTexname( page.texture ) == 0  ) {
+				genTex( page.texture );
+			}
+		}
+
+		need_gen_tex = false;
+
+		uploadUploads();
+
+		return true;
+	}
+
+	void updateTexname(TextureAtlas_Texname &tex)
+	{
+		if(  tex.atlas != atlasid  ) {
+			return;
+		}
+		gltexFromTexname( tex ) = gltexFromTexname( tilepage[tex.page].texture );
+	}
+#endif
+
 	void uploadTextureData(TextureAtlas_Texname const &tex,
 	                       unsigned int tex_x, unsigned int tex_y,
 	                       scr_coord_val w, scr_coord_val h,
@@ -622,8 +854,19 @@ public:
 	                       GLenum format, GLenum type,
 	                       void const *data, size_t size)
 	{
+#ifndef MULTI_THREAD
 		(void)size;
-		doUpload( tex, tex_x, tex_y, w, h, pitch, align, format, type, data );
+#endif
+#ifdef MULTI_THREAD
+		if(  simgraph_main_thread == pthread_self() && false  ) {
+#endif
+			doUpload( tex, tex_x, tex_y, w, h, pitch, align, format, type, data );
+#ifdef MULTI_THREAD
+		}
+		else {
+			deferUpload( tex, tex_x, tex_y, w, h, pitch, align, format, type, data, size );
+		}
+#endif
 	}
 
 	void uploadTextureData(TextureAtlas_Texname const &tex,
@@ -633,7 +876,16 @@ public:
 	                       GLenum format, GLenum type,
 	                       std::vector<char> &&data)
 	{
-		doUpload( tex, tex_x, tex_y, w, h, pitch, align, format, type, data.data() );
+#ifdef MULTI_THREAD
+		if(  simgraph_main_thread == pthread_self() && false  ) {
+#endif
+			doUpload( tex, tex_x, tex_y, w, h, pitch, align, format, type, data.data() );
+#ifdef MULTI_THREAD
+		}
+		else {
+			deferUpload( tex, tex_x, tex_y, w, h, pitch, align, format, type, std::move( data ) );
+		}
+#endif
 	}
 
 };
@@ -920,8 +1172,11 @@ static std::vector<imd> images;
 
 static std::unordered_map<uint64_t, GLuint> rgbmap_cache;
 static std::unordered_map<void const *,ArrayInfo> arrayInfo;
-static TextureAtlas<uint32_t> charatlas(GL_ALPHA,GL_ALPHA,1024,1024,GL_UNSIGNED_BYTE);
-static TextureAtlas<uintptr_t> rgbaatlas(GL_RGBA,GL_RGBA,4096,4096,GL_UNSIGNED_BYTE);
+#define CHARATLASID 1
+#define RGBAATLASID 2
+#define UNTILEDATLASID 3
+static TextureAtlas<uint32_t> charatlas(GL_ALPHA, GL_ALPHA, 1024, 1024, GL_UNSIGNED_BYTE, CHARATLASID);
+static TextureAtlas<uintptr_t> rgbaatlas(GL_RGBA, GL_RGBA, 4096, 4096, GL_UNSIGNED_BYTE, RGBAATLASID);
 
 static uint8 player_night=0xFF;
 static uint8 player_day=0xFF;
@@ -2094,11 +2349,20 @@ template<> struct hash< DrawCommandKey >
 {
 	std::size_t operator()(DrawCommandKey const &k) const noexcept
 	{
-		std::size_t h = gltexFromTexname( k.alphatex );
+		std::size_t h = 0;
+#ifdef MULTI_THREAD
+		h += k.alphatex.page;
+#else
+		h += gltexFromTexname( k.alphatex );
+#endif
 		h = h * 8 + (h >> 20);
 		h += k.rgbmap_tex;
 		h = h * 8 + (h >> 20);
+#ifdef MULTI_THREAD
+		h += k.tex.page;
+#else
 		h += gltexFromTexname( k.tex );
+#endif
 		h = h * 8 + (h >> 20);
 		h += k.uses_alphatex;
 		h = h * 8 + (h >> 20);
@@ -2424,9 +2688,23 @@ struct DrawCommandBatch
 
 struct DrawCommandBatches
 {
+#ifdef MULTI_THREAD
+	pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+#endif
 	unsigned int batchesPos = 0;
 	int zpos;
 	std::vector< DrawCommandBatch > batches;
+
+	//for having multithreaded batch accumulation, we would need
+	//to know when the drawing commands expect a consistent
+	//combined display. otherwise, once it does, we have
+	//uncommited draws hanging around while getting
+	//draws that should happen on top of them, but due to
+	//independent z-order, the drawing order is undefined.
+	//so, at the very least, a common zpos is required.
+	//there may be merit in running the actual addition in parallel,
+	//but we have to do an r/w lock for adding another batch.
+
 	void clear()
 	{
 		for(  auto &b : batches  ) {
@@ -2445,6 +2723,12 @@ struct DrawCommandBatches
 	                    GLcolorf alpha, GLcolorf color
 	                    CLIP_NUM_DEF)
 	{
+#ifdef MULTI_THREAD
+		(void)CLIP_NUM_VAR;
+#endif
+
+		MUTEX_LOCK( mutex );
+
 		if(  batches.size() <= batchesPos  ) {
 			batches.resize( batchesPos + 1 );
 		}
@@ -2462,6 +2746,8 @@ struct DrawCommandBatches
 		else {
 			zpos++;
 		}
+
+		MUTEX_UNLOCK( mutex );
 	}
 	void addDrawCommand(DrawCommandKey const &key,
 	                    scr_coord_val vx1, scr_coord_val vy1,
@@ -2479,6 +2765,12 @@ struct DrawCommandBatches
 	                    GLcolorf alpha, GLcolorf color
 	                    CLIP_NUM_DEF)
 	{
+#ifdef MULTI_THREAD
+		(void)CLIP_NUM_VAR;
+#endif
+
+		MUTEX_LOCK( mutex );
+
 		if(  batches.size() <= batchesPos  ) {
 			batches.resize( batchesPos + 1 );
 		}
@@ -2499,6 +2791,8 @@ struct DrawCommandBatches
 		else {
 			zpos++;
 		}
+
+		MUTEX_UNLOCK( mutex );
 	}
 };
 static DrawCommandBatches drawCommandBatches;
@@ -2522,6 +2816,105 @@ static void flushDrawCommands(DrawCommandKey const &key,
 
 static void flushDrawCommands()
 {
+#ifdef MULTI_THREAD
+
+	MUTEX_LOCK( drawCommandBatches.mutex );
+
+	if(  rgbaatlas.realizeTexPages() || charatlas.realizeTexPages()  ) {
+		for(  auto &batch : drawCommandBatches.batches  ) {
+			std::vector< std::pair<simgraphgl::DrawCommandKey, DrawCommandList> > unordered_reinserts;
+			for(  auto it = batch.unordered_list.begin();
+			                it != batch.unordered_list.end();  ) {
+				if(  ( isValidTexname( it->first.alphatex ) &&
+				                gltexFromTexname( it->first.alphatex ) == 0 ) ||
+				                ( isValidTexname( it->first.tex ) &&
+				                  gltexFromTexname( it->first.tex ) == 0 )  ) {
+					DrawCommandKey key = it->first;
+					DrawCommandList c = it->second;
+
+					if(  isValidTexname( key.alphatex ) &&
+					                gltexFromTexname( key.alphatex ) == 0  ) {
+						switch( key.alphatex.atlas )
+						{
+						case CHARATLASID:
+							charatlas.updateTexname( key.alphatex );
+							break;
+						case RGBAATLASID:
+							rgbaatlas.updateTexname( key.alphatex );
+							break;
+						default:
+							assert( false );
+						}
+					}
+
+					if(  isValidTexname( key.tex ) &&
+					                gltexFromTexname( key.tex ) == 0  ) {
+						switch( key.tex.atlas )
+						{
+						case CHARATLASID:
+							charatlas.updateTexname( key.tex );
+							break;
+						case RGBAATLASID:
+							rgbaatlas.updateTexname( key.tex );
+							break;
+						default:
+							assert( false );
+						}
+					}
+
+					unordered_reinserts.emplace_back( std::make_pair(
+					                key, c
+					                               ) );
+
+					it = batch.unordered_list.erase( it );
+				}
+				else {
+					it++;
+				}
+			}
+			batch.unordered_list.insert( unordered_reinserts.begin(),
+			                             unordered_reinserts.end() );
+			for(  auto &el : batch.ordered_list  ) {
+				DrawCommandKey &key = el.first;
+
+				if(  ( isValidTexname( key.alphatex ) &&
+				                gltexFromTexname( key.alphatex ) == 0 ) ||
+				                ( isValidTexname( key.tex ) &&
+				                  gltexFromTexname( key.tex ) == 0 )  ) {
+					if(  isValidTexname( key.alphatex ) &&
+					                gltexFromTexname( key.alphatex ) == 0  ) {
+						switch( key.alphatex.atlas )
+						{
+						case CHARATLASID:
+							charatlas.updateTexname( key.alphatex );
+							break;
+						case RGBAATLASID:
+							rgbaatlas.updateTexname( key.alphatex );
+							break;
+						default:
+							assert( false );
+						}
+					}
+
+					if(  isValidTexname( key.tex ) &&
+					                gltexFromTexname( key.tex ) == 0  ) {
+						switch( key.tex.atlas )
+						{
+						case CHARATLASID:
+							charatlas.updateTexname( key.tex );
+							break;
+						case RGBAATLASID:
+							rgbaatlas.updateTexname( key.tex );
+							break;
+						default:
+							assert( false );
+						}
+					}
+				}
+			}
+		}
+	}
+#endif
 
 	//setup uniforms that stay static for the duration of the flush
 	//uniforms are properties of the program, not global information like
@@ -2629,6 +3022,8 @@ static void flushDrawCommands()
 	       ordered_used_lists,ordered_lists,batches);*/
 
 	drawCommandBatches.clear();
+
+	MUTEX_UNLOCK( drawCommandBatches.mutex );
 }
 
 static void scrollDrawCommands(scr_coord_val /*start_y*/, scr_coord_val /*x_offset*/, scr_coord_val /*h*/)
@@ -2704,6 +3099,7 @@ static void updateRGBMap(GLuint &tex, PIXVAL *rgbmap, uint64_t code)
 		tex = rgbmap_cache[code];
 		return;
 	}
+	assert( simgraph_main_thread == pthread_self() );
 	glGenTextures( 1, &tex );
 
 	scr_coord_val w = 256;
@@ -3376,6 +3772,12 @@ static TextureAtlas_Texname getArrayTex(const PIXVAL *arr,
 			else {
 				rgbaatlas.destroyTexture( (uintptr_t)arr );
 
+				assert( simgraph_main_thread == pthread_self() );
+#ifdef MULTI_THREAD
+				texname.valid = 1;
+				texname.page = ~0;
+				texname.atlas = UNTILEDATLASID;
+#endif
 				glGenTextures( 1, &gltexFromTexname( texname ) );
 				glBindTexture( GL_TEXTURE_2D, gltexFromTexname( texname ) );
 				glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
@@ -3406,7 +3808,13 @@ static TextureAtlas_Texname getArrayTex(const PIXVAL *arr,
 			rgbaatlas.destroyTexture( (uintptr_t)arr );
 
 			TextureAtlas_Texname texname;
+			assert( simgraph_main_thread == pthread_self() );
 			glGenTextures( 1, &gltexFromTexname( texname ) );
+#ifdef MULTI_THREAD
+			texname.valid = 1;
+			texname.page = ~0;
+			texname.atlas = UNTILEDATLASID;
+#endif
 			glBindTexture( GL_TEXTURE_2D, gltexFromTexname( texname ) );
 			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
 			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
@@ -3415,6 +3823,7 @@ static TextureAtlas_Texname getArrayTex(const PIXVAL *arr,
 			it->second.tex = texname;
 		}
 	}
+	assert( simgraph_main_thread == pthread_self() );
 	TextureAtlas_Texname texname = it->second.tex;
 	assert( gltexFromTexname( texname ) );
 	glBindTexture( GL_TEXTURE_2D, gltexFromTexname( texname ) );
@@ -4592,6 +5001,7 @@ static scr_size simgraphgl_calc_multiline_text_size(const char *text)
  */
 static scr_coord_val simgraphgl_draw_text_clipped_n(scr_coord_val x, scr_coord_val y, const char* txt, control_alignment_t flags, const PIXVAL color, bool /*dirty*/, sint32 len  CLIP_NUM_DEF)
 {
+	assert( simgraph_main_thread == pthread_self() );
 	scr_coord_val cL, cR, cT, cB;
 
 	// TAKE CARE: Clipping area may be larger than actual screen size
@@ -4733,6 +5143,7 @@ static scr_coord_val simgraphgl_draw_text_clipped_n(scr_coord_val x, scr_coord_v
 /// If enough space is given then it just displays the full string
 static void simgraphgl_draw_text_ellipsis_shadowed(scr_rect r, const char *text, int align, const PIXVAL color, const bool dirty, bool shadowed, PIXVAL shadow_color)
 {
+	assert( simgraph_main_thread == pthread_self() );
 	const scr_coord_val ellipsis_width = translator::get_lang()->ellipsis_width;
 	const scr_coord_val max_screen_width = r.w;
 	size_t max_idx = 0;
@@ -4809,6 +5220,7 @@ static void simgraphgl_draw_text_ellipsis_shadowed(scr_rect r, const char *text,
  */
 static void simgraphgl_draw_box3d(scr_coord_val x1, scr_coord_val y1, scr_coord_val w, scr_coord_val h, PIXVAL tl_color, PIXVAL rd_color, bool dirty)
 {
+	assert( simgraph_main_thread == pthread_self() );
 	simgraphgl_draw_rect( x1, y1,         w, 1, tl_color, dirty );
 	simgraphgl_draw_rect( x1, y1 + h - 1, w, 1, rd_color, dirty );
 
@@ -5849,6 +6261,7 @@ static void simgraphgl_draw_right_triangle(scr_coord_val x, scr_coord_val y, scr
  */
 static void simgraphgl_flush_framebuffer()
 {
+	assert( simgraph_main_thread == pthread_self() );
 	flushDrawCommands();
 	dr_textur( 0, 0, disp_width, disp_height );
 }
@@ -5941,6 +6354,7 @@ static GLuint linkProgram(GLuint vertex, GLuint fragment, char const *name)
  */
 static bool simgraphgl_init(scr_size window_size, sint16 full_screen)
 {
+	simgraph_main_thread = pthread_self();
 	disp_actual_width = window_size.w;
 	disp_height = window_size.h;
 
@@ -6120,6 +6534,7 @@ static bool simgraphgl_is_display_init()
  */
 static void simgraphgl_exit()
 {
+	assert( simgraph_main_thread == pthread_self() );
 	rgbaatlas.clear();
 	charatlas.clear();
 
@@ -6142,6 +6557,7 @@ static void simgraphgl_exit()
  */
 static void simgraphgl_on_window_resized(scr_size new_window_size)
 {
+	assert( simgraph_main_thread == pthread_self() );
 	disp_actual_width = max( 16, new_window_size.w );
 	if(  new_window_size.h <= 0  ) {
 		new_window_size.h = 64;
@@ -6164,6 +6580,7 @@ static void simgraphgl_on_window_resized(scr_size new_window_size)
  */
 static bool simgraphgl_take_screenshot(const scr_rect &area)
 {
+	assert( simgraph_main_thread == pthread_self() );
 	if(  access( SCREENSHOT_PATH_X, W_OK ) == -1  ) {
 		return false; // directory not accessible
 	}
