@@ -11,6 +11,7 @@
 #include <map>
 #include <unordered_map>
 #include <vector>
+#include <deque>
 
 #include "../simtypes.h"
 
@@ -157,15 +158,292 @@ MSVC_ALIGN(64) struct clipping_info_t {
 	clip_line_t poly_clips[MAX_POLY_CLIPS];
 } GCC_ALIGN(64); // aligned to separate cachelines
 
-//todo: use char pages and cache used glyphs there
-struct CharInfo {
-	GLuint texture;
-	GLfloat x, y, w, h;
-};
-struct CharPageInfo {
-	GLuint texture;
-	GLuint width, height;
-	GLuint curx, cury, lineheight;
+template<typename Key>
+class TextureAtlas
+{
+private:
+	struct TileInfo
+	{
+		GLuint texture;
+		GLfloat x, y, w, h;
+		GLuint tex_x, tex_y, tex_w, tex_h;
+	};
+	struct TilePageInfo
+	{
+		GLuint texture;
+		GLuint width, height;
+		std::deque<TileInfo> freetiles;
+		TilePageInfo(GLuint texture,
+		             GLuint width,
+		             GLuint height)
+			: texture( texture )
+			, width( width )
+			, height( height )
+		{
+			TileInfo ti;
+			ti.texture = texture;
+			ti.x = 0;
+			ti.y = 0;
+			ti.w = 1.0;
+			ti.h = 1.0;
+			ti.tex_x = 0;
+			ti.tex_y = 0;
+			ti.tex_w = width;
+			ti.tex_h = height;
+			freetiles.emplace_back( ti );
+		}
+		bool findFreeTile(GLuint min_w, GLuint min_h, TileInfo &ti)
+		{
+			auto best = freetiles.end();
+			for(  auto it = freetiles.begin();
+			                it != freetiles.end(); it++  ) {
+				if(  min_w > it->tex_w || min_h > it->tex_h  ) {
+					continue;
+				}
+				if(  best != freetiles.end() &&
+				                best->tex_w * best->tex_h <=
+				                it->tex_w * it->tex_h  ) {
+					continue;
+				}
+				best = it;
+			}
+			if(  best != freetiles.end()  ) {
+				if(  best->tex_w == min_w && best->tex_h == min_h  ) {
+					ti = *best;
+					ti.x = ti.tex_x * 1.0f / width;
+					ti.y = ti.tex_y * 1.0f / height;
+					ti.w = ti.tex_w * 1.0f / width;
+					ti.h = ti.tex_h * 1.0f / height;
+					freetiles.erase( best );
+					return true;
+				}
+				if(  best->tex_w == min_w  ) {
+					TileInfo ti0, ti1;
+					ti0 = *best;
+					ti1 = *best;
+					ti0.tex_h = min_h;
+					ti1.tex_h -= min_h;
+					ti1.tex_y += min_h;
+					ti = ti0;
+					ti.x = ti.tex_x * 1.0f / width;
+					ti.y = ti.tex_y * 1.0f / height;
+					ti.w = ti.tex_w * 1.0f / width;
+					ti.h = ti.tex_h * 1.0f / height;
+					freetiles.erase( best );
+					freetiles.emplace_back( ti1 );
+					return true;
+				}
+				if(  best->tex_h == min_h  ) {
+					TileInfo ti0, ti1;
+					ti0 = *best;
+					ti1 = *best;
+					ti0.tex_w = min_w;
+					ti1.tex_w -= min_w;
+					ti1.tex_x += min_w;
+					ti = ti0;
+					ti.x = ti.tex_x * 1.0f / width;
+					ti.y = ti.tex_y * 1.0f / height;
+					ti.w = ti.tex_w * 1.0f / width;
+					ti.h = ti.tex_h * 1.0f / height;
+					freetiles.erase( best );
+					freetiles.emplace_back( ti1 );
+					return true;
+				}
+				TileInfo ti0, ti1, ti2;
+				ti0 = *best;
+				ti1 = *best;
+				ti2 = *best;
+				//split it.
+				ti0.tex_w = min_w;
+				ti1.tex_w -= min_w;
+				ti1.tex_x += min_w;
+				ti0.tex_h = min_h;
+				ti1.tex_h = min_h;
+				ti2.tex_h -= min_h;
+				ti2.tex_y += min_h;
+
+				ti = ti0;
+				ti.x = ti.tex_x * 1.0f / width;
+				ti.y = ti.tex_y * 1.0f / height;
+				ti.w = ti.tex_w * 1.0f / width;
+				ti.h = ti.tex_h * 1.0f / height;
+				freetiles.erase( best );
+				freetiles.emplace_back( ti1 );
+				freetiles.emplace_back( ti2 );
+				return true;
+			}
+			return false;
+		}
+		void cleanup()
+		{
+			//TODO need a better structure to store free space
+		}
+	};
+	std::unordered_map<Key, TileInfo> tiletex;
+	std::vector<TilePageInfo> tilepage;
+	GLint tex_internalformat;
+	GLenum tex_format;
+	GLenum tex_type;
+	GLsizei tex_width;
+	GLsizei tex_height;
+public:
+	TextureAtlas(GLint tex_internalformat,
+	             GLenum tex_format,
+	             GLsizei tex_width,
+	             GLsizei tex_height,
+	             GLenum tex_type)
+		: tex_internalformat( tex_internalformat )
+		, tex_format( tex_format )
+		, tex_type( tex_type )
+		, tex_width( tex_width )
+		, tex_height( tex_height )
+	{
+	}
+	/** Change page texture size
+	 *
+	 * Only affects newly created pages
+	 */
+	void setTextureSize(GLsizei tex_width, GLsizei tex_height)
+	{
+		this->tex_width = tex_width;
+		this->tex_height = tex_height;
+	}
+	bool hasTexture(Key k)
+	{
+		auto it = tiletex.find(k);
+		return it != tiletex.end();
+	}
+	GLuint getTexture(Key k,
+	                  GLfloat &x, GLfloat &y,
+	                  GLfloat &w, GLfloat &h)
+	{
+		auto it = tiletex.find( k );
+		if(  it != tiletex.end()  ) {
+			x = it->second.x;
+			y = it->second.y;
+			w = it->second.w;
+			h = it->second.h;
+			return it->second.texture;
+		}
+		return -1;
+	}
+	void cleanupPages()
+	{
+		for(  auto &el : tilepage  ) {
+			el.cleanup();
+		}
+	}
+	void destroyTexture(Key k, bool runcleanup = true)
+	{
+		auto it = tiletex.find( k );
+		if(  it != tiletex.end()  ) {
+			GLuint tex = it->second.texture;
+			for(  auto &el : tilepage  ) {
+				if(  el.texture == tex  ) {
+					el.freetiles.emplace_back( it->second );
+					break;
+				}
+			}
+			tiletex.erase( it );
+		}
+		if(  runcleanup  ) {
+			cleanupPages();
+		}
+	}
+	GLuint createTexture(Key k,
+	                     unsigned int width,
+	                     unsigned int height,
+	                     unsigned int &tex_x,
+	                     unsigned int &tex_y,
+	                     GLfloat &tcx, GLfloat &tcy,
+	                     GLfloat &tcw, GLfloat &tch)
+	{
+		auto it = tiletex.find( k );
+		if(  it != tiletex.end()  ) {
+			if(  width == it->second.tex_w &&
+			                height == it->second.tex_h  ) {
+				tex_x = it->second.tex_x;
+				tex_y = it->second.tex_y;
+				tcx = it->second.x;
+				tcy = it->second.y;
+				tcw = it->second.w;
+				tch = it->second.h;
+				return it->second.texture;
+			}
+			destroyTexture( k, false );
+		}
+
+		if(  (int)width > tex_width || (int)height > tex_height  ) {
+			return 0;
+		}
+
+		TileInfo ci;
+		bool found = false;
+		//check if we have space in the current charpage
+		for(  auto &el : tilepage  ) {
+			if(  el.findFreeTile( width, height, ci )  ) {
+				tiletex[k] = ci;
+				found = true;
+			}
+		}
+		if(  !found  ) {
+			GLuint texname;
+			glGenTextures( 1, &texname );
+			glBindTexture( GL_TEXTURE_2D, texname );
+			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
+			                 GL_CLAMP_TO_EDGE );
+			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
+			                 GL_CLAMP_TO_EDGE );
+			glTexImage2D( GL_TEXTURE_2D, 0, tex_internalformat, tex_width, tex_height, 0,
+			              tex_format, tex_type,
+			              NULL );
+			tilepage.emplace_back( texname, tex_width, tex_height );
+
+			if(  tilepage.back().findFreeTile( width, height, ci )  ) {
+				tiletex[k] = ci;
+				found = true;
+			}
+		}
+		else {
+			glBindTexture( GL_TEXTURE_2D, tilepage.back().texture );
+		}
+
+		tex_x = ci.tex_x;
+		tex_y = ci.tex_y;
+
+		/*
+		glBindTexture(GL_TEXTURE_2D,texname);
+
+		//now upload the array
+		const uint8 tmp_pitch = 12;
+		glPixelStorei(GL_UNPACK_ROW_LENGTH, tmp_pitch);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+		glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+
+		//format and type can be chosen freely from the compatible values
+		glTexSubImage2D(GL_TEXTURE_2D,0,
+		                tex_x, tex_y,
+		                width,height,GL_ALPHA,GL_UNSIGNED_BYTE,
+		                tmp);
+		*/
+
+		tcx = ci.x;
+		tcy = ci.y;
+		tcw = ci.w;
+		tch = ci.h;
+		return ci.texture;
+	}
+	void clear()
+	{
+		for(  auto &page : tilepage  ) {
+			glDeleteTextures( 1, &page.texture );
+		}
+		tiletex.clear();
+		tilepage.clear();
+	}
 };
 
 struct PIX32
@@ -325,8 +603,7 @@ static std::vector<imd> images;
 
 static std::unordered_map<uint64_t, GLuint> rgbmap_cache;
 static std::unordered_map<void const *,ArrayInfo> arrayInfo;
-static std::map<uint32_t,CharInfo> chartex;
-static std::vector<CharPageInfo> charpage;
+static TextureAtlas<uint32_t> charatlas(GL_ALPHA,GL_ALPHA,256,256,GL_UNSIGNED_BYTE);
 
 static uint8 player_night=0xFF;
 static uint8 player_day=0xFF;
@@ -1693,18 +1970,12 @@ static GLuint getArrayTex(const PIXVAL *arr, scr_coord_val w, scr_coord_val h)
 	return texname;
 }
 
-
 static GLuint getGlyphTex(uint32_t c, const font_t *fnt,
                           GLfloat &tcx, GLfloat &tcy,
                           GLfloat &tcw, GLfloat &tch)
 {
-	auto it = chartex.find( c );
-	if(  it != chartex.end()  ) {
-		tcx = it->second.x;
-		tcy = it->second.y;
-		tcw = it->second.w;
-		tch = it->second.h;
-		return it->second.texture;
+	if(  charatlas.hasTexture( c )  ) {
+		return charatlas.getTexture( c, tcx, tcy, tcw, tch );
 	}
 
 	const font_t::glyph_t &glyph = fnt->get_glyph( c );
@@ -1712,45 +1983,11 @@ static GLuint getGlyphTex(uint32_t c, const font_t *fnt,
 	sint16 glyph_height = glyph.height;
 	//we ignore the y_offset.
 
-	//check if we have space in the current charpage
-	if(  charpage.empty()  ||
-	                !( /* does it fit at the current position? */
-	                                ( charpage.back().curx + glyph_width <= charpage.back().width  &&
-	                                  charpage.back().cury + glyph_height <= charpage.back().height )  ||
-	                                /* does it fit at the first positon of the next line? */
-	                                ( charpage.back().cury + charpage.back().lineheight +
-	                                  unsigned( glyph_height ) <= charpage.back().height  &&
-	                                  unsigned( glyph_width ) <= charpage.back().width ) )  ) {
-		GLuint texname;
-		glGenTextures( 1, &texname );
-		glBindTexture( GL_TEXTURE_2D, texname );
-		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
-		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
-		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
-		                 GL_CLAMP_TO_EDGE );
-		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
-		                 GL_CLAMP_TO_EDGE );
-		glTexImage2D( GL_TEXTURE_2D, 0, GL_ALPHA, 256, 256, 0,
-		              GL_ALPHA, GL_UNSIGNED_BYTE,
-		              NULL );
-		CharPageInfo pi = {texname,
-		                   256, 256,
-		                   0, 0, 0
-		                  };
-		charpage.emplace_back( pi );
-	}
-	else {
-		glBindTexture( GL_TEXTURE_2D, charpage.back().texture );
-	}
-
-	/* does it fit on the current line? */
-	if(  !( charpage.back().curx + glyph_width <= charpage.back().width  &&
-	                charpage.back().cury + glyph_height <= charpage.back().height )  ) {
-		/* move to next line */
-		charpage.back().curx = 0;
-		charpage.back().cury += charpage.back().lineheight;
-		charpage.back().lineheight = glyph_height;
-	}
+	unsigned int tex_x = 0, tex_y = 0;
+	GLuint tex = charatlas.createTexture( c,
+	                                      glyph_width, glyph_height,
+	                                      tex_x, tex_y,
+	                                      tcx, tcy, tcw, tch );
 
 	//now upload the array
 	glPixelStorei( GL_UNPACK_ROW_LENGTH, glyph_width );
@@ -1774,33 +2011,11 @@ static GLuint getGlyphTex(uint32_t c, const font_t *fnt,
 	}
 
 	glTexSubImage2D( GL_TEXTURE_2D, 0,
-	                 charpage.back().curx, charpage.back().cury,
+	                 tex_x, tex_y,
 	                 glyph_width, glyph_height, GL_ALPHA, GL_UNSIGNED_BYTE,
 	                 tmp );
 
-	CharInfo ci = { charpage.back().texture,
-	                charpage.back().curx / float( charpage.back().width ),
-	                charpage.back().cury / float( charpage.back().height ),
-	                glyph_width / float( charpage.back().width ),
-	                glyph_height / float( charpage.back().height )
-	              };
-	chartex[c] = ci;
-
-	if(  charpage.back().lineheight < unsigned( glyph_height )  ) {
-		charpage.back().lineheight = glyph_height;
-	}
-	charpage.back().curx += glyph_width;
-	if(  charpage.back().curx >= charpage.back().width  ) {
-		charpage.back().curx = 0;
-		charpage.back().cury += charpage.back().lineheight;
-		charpage.back().lineheight = 0;
-	}
-
-	tcx = ci.x;
-	tcy = ci.y;
-	tcw = ci.w;
-	tch = ci.h;
-	return ci.texture;
+	return tex;
 }
 
 
@@ -2771,11 +2986,7 @@ bool display_load_font(const char *fname, bool reload)
 
 		env_t::fontname = fname;
 
-		for(  auto it = charpage.begin(); it != charpage.end(); it++  ) {
-			glDeleteTextures( 1, &it->texture );
-		}
-		chartex.clear();
-		charpage.clear();
+		charatlas.clear();
 		return default_font.is_loaded();
 	}
 
