@@ -80,6 +80,9 @@ static pthread_t simgraph_main_thread;
 #endif
 static int standard_pointer = -1;
 
+#define MAX_GL_Z_POS 32767
+#define MIN_GL_Z_POS (-32768)
+
 namespace simgraphgl {
 
 template <typename T> struct GLcolor { T r,g,b,a; };
@@ -2978,8 +2981,7 @@ struct DrawCommandBatches
 #define POS_UPDATE_METHOD_FETCHADD
 #undef POS_UPDATE_METHOD_LOCKED
 #ifdef POS_UPDATE_METHOD_LOCKED
-	unsigned int _batchesPos;
-	int zpos;
+	unsigned int pos;
 #endif
 #if defined(POS_UPDATE_METHOD_CMPXCHG) || defined(POS_UPDATE_METHOD_FETCHADD)
 	std::atomic<unsigned int> pos;
@@ -2997,55 +2999,29 @@ struct DrawCommandBatches
 	//but we have to do an r/w lock for adding another batch.
 
 	DrawCommandBatches()
-#if defined(POS_UPDATE_METHOD_CMPXCHG) || defined(POS_UPDATE_METHOD_FETCHADD)
 		: pos( 0 )
-#endif
 	{
 	}
 	unsigned int batchesPos() {
-#ifdef POS_UPDATE_METHOD_CMPXCHG
 		unsigned int my_pos = pos;
-		return my_pos >> 16;
-#endif
-#ifdef POS_UPDATE_METHOD_FETCHADD
-		unsigned int my_pos = pos;
-		return my_pos / 65535;
-#endif
-#ifdef POS_UPDATE_METHOD_LOCKED
-		return _batchesPos;
-#endif
+		return my_pos / (MAX_GL_Z_POS - MIN_GL_Z_POS);
 	}
+
 	void clear()
 	{
 		for(  auto &b : batches  ) {
 			b.clear();
 		}
-#if defined(POS_UPDATE_METHOD_CMPXCHG) || defined(POS_UPDATE_METHOD_FETCHADD)
 		pos = 0;
-#endif
-#ifdef POS_UPDATE_METHOD_LOCKED
-		_batchesPos = 0;
-		zpos = -32767;
-#endif
 	}
+
 	void getNextBatchesPosAndZpos(unsigned int &my_batchesPos, int &my_zpos) {
 #ifdef POS_UPDATE_METHOD_CMPXCHG
 		while(  true  ) {
 			unsigned int my_pos = pos;
-			my_batchesPos = my_pos >> 16;
-			my_zpos = (int)( my_pos & 0xffff ) - 32767;
-			unsigned int new_batchesPos;
-			int new_zpos;
-			if(  my_zpos >= 32767  ) {
-				new_zpos = -32767;
-				new_batchesPos = my_batchesPos + 1;
-			}
-			else {
-				new_batchesPos = my_batchesPos;
-				new_zpos = my_zpos + 1;
-			}
-			unsigned int new_pos = ( new_batchesPos << 16 ) |
-			                       ( ( ( unsigned )( new_zpos + 32767 ) ) & 0xffff );
+			my_batchesPos = my_pos / (MAX_GL_Z_POS - MIN_GL_Z_POS);
+			my_zpos = ( my_pos % (MAX_GL_Z_POS - MIN_GL_Z_POS) ) + MIN_GL_Z_POS;
+			unsigned int new_pos = my_pos + 1;
 			if(  pos.compare_exchange_weak( my_pos, new_pos, std::memory_order_seq_cst, std::memory_order_relaxed )  ) {
 				break;
 			}
@@ -3053,23 +3029,18 @@ struct DrawCommandBatches
 #endif
 #ifdef POS_UPDATE_METHOD_FETCHADD
 		unsigned int my_pos = pos.fetch_add( 1 );
-		my_batchesPos = my_pos / 65535;
-		my_zpos = ( my_pos % 65535 ) - 32767;
+		my_batchesPos = my_pos / (MAX_GL_Z_POS - MIN_GL_Z_POS);
+		my_zpos = ( my_pos % (MAX_GL_Z_POS - MIN_GL_Z_POS) ) + MIN_GL_Z_POS;
 #endif
 #ifdef POS_UPDATE_METHOD_LOCKED
 		MUTEX_LOCK( mutex );
 
-		my_batchesPos = _batchesPos;
-		my_zpos = zpos;
-		if(  my_zpos >= 32767  ) {
-			zpos = -32767;
-			_batchesPos = my_batchesPos + 1;
-		}
-		else {
-			zpos = my_zpos + 1;
-		}
+		unsigned int my_pos = pos;
+		pos++;
+		my_batchesPos = my_pos / (MAX_GL_Z_POS - MIN_GL_Z_POS);
+		my_zpos = ( my_pos % (MAX_GL_Z_POS - MIN_GL_Z_POS) ) + MIN_GL_Z_POS;
 
-		MUTEX_UNLOCK( &mutex );
+		MUTEX_UNLOCK( mutex );
 #endif
 
 		//his does not depend on the above, the my_* are already
