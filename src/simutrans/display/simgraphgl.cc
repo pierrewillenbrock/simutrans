@@ -758,24 +758,83 @@ public:
 		MUTEX_UNLOCK( mutex );
 	}
 
+	void doUpload( TextureAtlas_Texname const &tex,
+	               unsigned int tex_x, unsigned int tex_y,
+	               scr_coord_val w, scr_coord_val h,
+	               scr_coord_val pitch, uint8_t align,
+	               GLenum format, GLenum type,
+	               void const *data )
+	{
+		assert( gltexFromTexname( tex ) != 0 );
+		glBindTexture( GL_TEXTURE_2D, gltexFromTexname( tex ) );
+
+		glPixelStorei( GL_UNPACK_ROW_LENGTH, pitch );
+		glPixelStorei( GL_UNPACK_ALIGNMENT, align );
+		glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
+		glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
+
+		glTexSubImage2D( GL_TEXTURE_2D, 0,
+		                 tex_x, tex_y,
+		                 w, h, format, type,
+		                 data );
+	}
+
 #ifdef MULTI_THREAD
+	void deferUpload( TextureAtlas_Texname const &tex,
+	                  unsigned int tex_x, unsigned int tex_y,
+	                  scr_coord_val w, scr_coord_val h,
+	                  scr_coord_val pitch, uint8_t align,
+	                  GLenum format, GLenum type,
+	                  void const *data, size_t size )
+	{
+		UploadInfo i;
+		i.page = tex.page;
+		i.tex_x = tex_x;
+		i.tex_y = tex_y;
+		i.w = w;
+		i.h = h;
+		i.pitch = pitch;
+		i.align = align;
+		i.format = format;
+		i.type = type;
+		i.data.resize( size );
+		memcpy( i.data.data(), data, size );
+		MUTEX_LOCK( mutex );
+		uploads.emplace_back( std::move( i ) );
+		MUTEX_UNLOCK( mutex );
+	}
+
+	void deferUpload( TextureAtlas_Texname const &tex,
+	                  unsigned int tex_x, unsigned int tex_y,
+	                  scr_coord_val w, scr_coord_val h,
+	                  scr_coord_val pitch, uint8_t align,
+	                  GLenum format, GLenum type,
+	                  std::vector<char> &&data )
+	{
+		UploadInfo i;
+		i.page = tex.page;
+		i.tex_x = tex_x;
+		i.tex_y = tex_y;
+		i.w = w;
+		i.h = h;
+		i.pitch = pitch;
+		i.align = align;
+		i.format = format;
+		i.type = type;
+		i.data = std::move( data );
+		MUTEX_LOCK( mutex );
+		uploads.emplace_back( std::move( i ) );
+		MUTEX_UNLOCK( mutex );
+	}
+
 	void uploadUploads()
 	{
 		assert( simgraph_main_thread == pthread_self() );
 		MUTEX_LOCK( mutex );
 		for(  auto &el : uploads  ) {
-			assert( gltexFromTexname( tilepage[el.page].texture ) != 0 );
-			glBindTexture( GL_TEXTURE_2D, gltexFromTexname( tilepage[el.page].texture ) );
-
-			glPixelStorei( GL_UNPACK_ROW_LENGTH, el.pitch );
-			glPixelStorei( GL_UNPACK_ALIGNMENT, el.align );
-			glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
-			glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
-
-			glTexSubImage2D( GL_TEXTURE_2D,0,
-			                 el.tex_x, el.tex_y,
-			                 el.w, el.h, el.format, el.type,
-			                 el.data.data() );
+			doUpload( tilepage[el.page].texture, el.tex_x, el.tex_y, el.w, el.h,
+			          el.pitch, el.align, el.format, el.type,
+			          el.data.data() );
 		}
 		uploads.clear();
 		MUTEX_UNLOCK( mutex );
@@ -825,36 +884,11 @@ public:
 		assert( tex.atlas == atlasid );
 		if(  simgraph_main_thread == pthread_self() && false  ) {
 #endif
-			assert( gltexFromTexname( tex ) );
-			glBindTexture( GL_TEXTURE_2D, gltexFromTexname( tex ) );
-
-			glPixelStorei( GL_UNPACK_ROW_LENGTH, pitch );
-			glPixelStorei( GL_UNPACK_ALIGNMENT, align );
-			glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
-			glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
-
-			glTexSubImage2D( GL_TEXTURE_2D, 0,
-			                 tex_x, tex_y,
-			                 w, h, format, type,
-			                 data );
+			doUpload( tex, tex_x, tex_y, w, h, pitch, align, format, type, data );
 #ifdef MULTI_THREAD
 		}
 		else {
-			UploadInfo i;
-			i.page = tex.page;
-			i.tex_x = tex_x;
-			i.tex_y = tex_y;
-			i.w = w;
-			i.h = h;
-			i.pitch = pitch;
-			i.align = align;
-			i.format = format;
-			i.type = type;
-			i.data.resize( size );
-			memcpy( i.data.data(), data, size );
-			MUTEX_LOCK( mutex );
-			uploads.emplace_back( i );
-			MUTEX_UNLOCK( mutex );
+			deferUpload( tex, tex_x, tex_y, w, h, pitch, align, format, type, data, size );
 		}
 #endif
 	}
@@ -870,35 +904,11 @@ public:
 		assert( tex.atlas == atlasid );
 		if(  simgraph_main_thread == pthread_self() && false  ) {
 #endif
-			assert( gltexFromTexname( tex ) );
-			glBindTexture( GL_TEXTURE_2D, gltexFromTexname( tex ) );
-
-			glPixelStorei( GL_UNPACK_ROW_LENGTH, pitch );
-			glPixelStorei( GL_UNPACK_ALIGNMENT, align );
-			glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
-			glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
-
-			glTexSubImage2D( GL_TEXTURE_2D, 0,
-			                 tex_x, tex_y,
-			                 w, h, format, type,
-			                 data.data() );
+			doUpload( tex, tex_x, tex_y, w, h, pitch, align, format, type, data.data() );
 #ifdef MULTI_THREAD
 		}
 		else {
-			UploadInfo i;
-			i.page = tex.page;
-			i.tex_x = tex_x;
-			i.tex_y = tex_y;
-			i.w = w;
-			i.h = h;
-			i.pitch = pitch;
-			i.align = align;
-			i.format = format;
-			i.type = type;
-			i.data = std::move( data );
-			MUTEX_LOCK( mutex );
-			uploads.emplace_back( i );
-			MUTEX_UNLOCK( mutex );
+			deferUpload( tex, tex_x, tex_y, w, h, pitch, align, format, type, std::move( data ) );
 		}
 #endif
 	}
@@ -1143,25 +1153,81 @@ public:
 		MUTEX_UNLOCK( mutex );
 	}
 
+	void doUpload( TextureAtlas_Texname const &tex,
+	               scr_coord_val w, scr_coord_val h,
+	               scr_coord_val pitch, uint8_t align,
+	               GLenum internalformat,
+	               GLenum format, GLenum type,
+	               void const *data )
+	{
+		assert( gltexFromTexname( tex ) != 0 );
+		glBindTexture( GL_TEXTURE_2D, gltexFromTexname( tex ) );
+
+		glPixelStorei( GL_UNPACK_ROW_LENGTH, pitch );
+		glPixelStorei( GL_UNPACK_ALIGNMENT, align );
+		glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
+		glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
+
+		glTexImage2D( GL_TEXTURE_2D, 0,
+		              internalformat,
+		              w, h, 0,
+		              format, type,
+		              data );
+	}
+
 #ifdef MULTI_THREAD
+	void deferUpload( TextureAtlas_Texname const &tex,
+	                  scr_coord_val w, scr_coord_val h,
+	                  scr_coord_val pitch, uint8_t align,
+	                  GLenum internalformat,
+	                  GLenum format, GLenum type,
+	                  void const *data, size_t size )
+	{
+		UploadInfo i;
+		i.page = tex.page;
+		i.w = w;
+		i.h = h;
+		i.pitch = pitch;
+		i.align = align;
+		i.internalformat = internalformat;
+		i.format = format;
+		i.type = type;
+		i.data.resize( size );
+		memcpy( i.data.data(), data, size );
+		MUTEX_LOCK( mutex );
+		uploads.emplace_back( std::move( i ) );
+		MUTEX_UNLOCK( mutex );
+	}
+
+	void deferUpload( TextureAtlas_Texname const &tex,
+	                        scr_coord_val w, scr_coord_val h,
+	                        scr_coord_val pitch, uint8_t align,
+	                        GLenum internalformat,
+	                        GLenum format, GLenum type,
+	                        std::vector<char> &&data )
+	{
+		UploadInfo i;
+		i.page = tex.page;
+		i.w = w;
+		i.h = h;
+		i.pitch = pitch;
+		i.align = align;
+		i.internalformat = internalformat;
+		i.format = format;
+		i.type = type;
+		i.data = std::move( data );
+		MUTEX_LOCK( mutex );
+		uploads.emplace_back( std::move( i ) );
+		MUTEX_UNLOCK( mutex );
+	}
+
 	void uploadUploads()
 	{
 		assert( simgraph_main_thread == pthread_self() );
 		MUTEX_LOCK( mutex );
 		for(  auto &el : uploads  ) {
-			assert( gltexFromTexname( tilepage[el.page] ) != 0 );
-			glBindTexture( GL_TEXTURE_2D, gltexFromTexname( tilepage[el.page] ) );
-
-			glPixelStorei( GL_UNPACK_ROW_LENGTH, el.pitch );
-			glPixelStorei( GL_UNPACK_ALIGNMENT, el.align );
-			glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
-			glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
-
-			glTexImage2D( GL_TEXTURE_2D, 0,
-			              el.internalformat,
-			              el.w, el.h, 0,
-			              el.format, el.type,
-			              el.data.data() );
+			doUpload( tilepage[el.page], el.w, el.h, el.pitch, el.align,
+			          el.internalformat, el.format, el.type, el.data.data() );
 		}
 		uploads.clear();
 		MUTEX_UNLOCK( mutex );
@@ -1203,34 +1269,11 @@ public:
 		assert( tex.atlas == atlasid );
 		if(  simgraph_main_thread == pthread_self() && false  ) {
 #endif
-			assert( gltexFromTexname( tex ) );
-			glBindTexture( GL_TEXTURE_2D, gltexFromTexname( tex ) );
-
-			glPixelStorei( GL_UNPACK_ROW_LENGTH, pitch );
-			glPixelStorei( GL_UNPACK_ALIGNMENT, align );
-			glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
-			glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
-
-			glTexImage2D( GL_TEXTURE_2D, 0, internalformat,
-			              w, h, 0,
-			              format, type,
-			              data );
+			doUpload( tex, w, h, pitch, align, internalformat, format, type, data );
 #ifdef MULTI_THREAD
-		} else {
-			UploadInfo i;
-			i.page = tex.page;
-			i.w = w;
-			i.h = h;
-			i.pitch = pitch;
-			i.align = align;
-			i.internalformat = internalformat;
-			i.format = format;
-			i.type = type;
-			i.data.resize( size );
-			memcpy( i.data.data(), data, size );
-			MUTEX_LOCK( mutex );
-			uploads.emplace_back( i );
-			MUTEX_UNLOCK( mutex );
+		}
+		else {
+			deferUpload( tex, w, h, pitch, align, internalformat, format, type, data, size );
 		}
 #endif
 	}
@@ -1246,34 +1289,11 @@ public:
 		assert( tex.atlas == atlasid );
 		if(  simgraph_main_thread == pthread_self() && false  ) {
 #endif
-			assert( gltexFromTexname( tex ) );
-			glBindTexture( GL_TEXTURE_2D, gltexFromTexname( tex ) );
-
-			glPixelStorei( GL_UNPACK_ROW_LENGTH, pitch );
-			glPixelStorei( GL_UNPACK_ALIGNMENT, align );
-			glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
-			glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
-
-			glTexImage2D( GL_TEXTURE_2D, 0, internalformat,
-			              w, h, 0,
-			              format, type,
-			              data.data() );
+			doUpload( tex, w, h, pitch, align, internalformat, format, type, data.data() );
 #ifdef MULTI_THREAD
 		}
 		else {
-			UploadInfo i;
-			i.page = tex.page;
-			i.w = w;
-			i.h = h;
-			i.pitch = pitch;
-			i.align = align;
-			i.internalformat = internalformat;
-			i.format = format;
-			i.type = type;
-			i.data = std::move( data );
-			MUTEX_LOCK( mutex );
-			uploads.emplace_back( i );
-			MUTEX_UNLOCK( mutex );
+			deferUpload( tex, w, h, pitch, align, internalformat, format, type, std::move(data) );
 		}
 #endif
 	}
