@@ -13,6 +13,7 @@
 #include <unordered_set>
 #include <vector>
 #include <deque>
+#include <atomic>
 
 #include "../simtypes.h"
 
@@ -897,6 +898,110 @@ public:
 			MUTEX_UNLOCK( mutex );
 		}
 #endif
+	}
+
+	void dumpDebug() const
+	{
+		printf( "<TiledTextureAtlasDump>\n" );
+
+		printf( "  <TileTex>\n" );
+		for(  auto &tt : tiletex  ) {
+			printf( "    <TileTexEntry>\n" );
+			printf( "      <Key value=\"%lld\" />\n", ( long long unsigned int )tt.first );
+			printf( "      <TileInfo>\n" );
+#ifdef MULTI_THREAD
+			printf( "        <Texture>\n" );
+			printf( "          <GLTex value=\"%d\" />\n", gltexFromTexname( tt.second.texture ) );
+			printf( "          <Page value=\"%d\" />\n", tt.second.texture.page );
+			printf( "          <Atlas value=\"%d\" />\n", tt.second.texture.atlas );
+			printf( "          <Valid value=\"%d\" />\n", tt.second.texture.valid );
+			printf( "        </Texture>\n" );
+#else
+			printf( "        <Texture value=\"%d\" />\n", tt.second.texture );
+#endif
+			printf( "        <X value=\"%g\" />\n", tt.second.x );
+			printf( "        <Y value=\"%g\" />\n", tt.second.y );
+			printf( "        <W value=\"%g\" />\n", tt.second.w );
+			printf( "        <H value=\"%g\" />\n", tt.second.h );
+			printf( "        <TexX value=\"%d\" />\n", tt.second.tex_x );
+			printf( "        <TexY value=\"%d\" />\n", tt.second.tex_y );
+			printf( "        <TexW value=\"%d\" />\n", tt.second.tex_w );
+			printf( "        <TexH value=\"%d\" />\n", tt.second.tex_h );
+			printf( "      </TileInfo>\n" );
+			printf( "    </TileTexEntry>\n" );
+		}
+		printf( "  </TileTex>\n" );
+
+		printf( "  <TilePage>\n" );
+		for(  auto &tp : tilepage  ) {
+			printf( "    <TilePageInfo>\n" );
+#ifdef MULTI_THREAD
+			printf( "      <Texture>\n" );
+			printf( "        <GLTex value=\"%d\" />\n", gltexFromTexname( tp.texture ) );
+			printf( "        <Page value=\"%d\" />\n", tp.texture.page );
+			printf( "        <Atlas value=\"%d\" />\n", tp.texture.atlas );
+			printf( "        <Valid value=\"%d\" />\n", tp.texture.valid );
+			printf( "      </Texture>\n" );
+#else
+			printf( "      <Texture value=\"%d\" />\n", tp.texture );
+#endif
+			printf( "      <Width value=\"%d\" />\n", tp.width );
+			printf( "      <Height value=\"%d\" />\n", tp.height );
+			printf( "      <FreeTiles>\n" );
+			for(  auto &ft : tp.freetiles  ) {
+				printf( "        <TileInfo>\n" );
+#ifdef MULTI_THREAD
+				printf( "          <Texture>\n" );
+				printf( "            <GLTex value=\"%d\" />\n", gltexFromTexname( ft.texture ) );
+				printf( "            <Page value=\"%d\" />\n", ft.texture.page );
+				printf( "            <Atlas value=\"%d\" />\n", ft.texture.atlas );
+				printf( "            <Valid value=\"%d\" />\n", ft.texture.valid );
+				printf( "          </Texture>\n" );
+#else
+				printf( "          <Texture value=\"%d\" />\n", ft.texture );
+#endif
+				printf( "          <X value=\"%g\" />\n", ft.x );
+				printf( "          <Y value=\"%g\" />\n", ft.y );
+				printf( "          <W value=\"%g\" />\n", ft.w );
+				printf( "          <H value=\"%g\" />\n", ft.h );
+				printf( "          <TexX value=\"%d\" />\n", ft.tex_x );
+				printf( "          <TexY value=\"%d\" />\n", ft.tex_y );
+				printf( "          <TexW value=\"%d\" />\n", ft.tex_w );
+				printf( "          <TexH value=\"%d\" />\n", ft.tex_h );
+				printf( "        </TileInfo>\n" );
+			}
+			printf( "      </FreeTiles>\n" );
+			printf( "    </TilePageInfo>\n" );
+		}
+		printf( "  </TilePage>\n" );
+
+		printf( "  <TexInternalFormat value=\"%d\" />\n", tex_internalformat );
+		printf( "  <TexFormat value=\"%d\" />\n", tex_format );
+		printf( "  <TexType value=\"%d\" />\n", tex_type );
+		printf( "  <TexWidth value=\"%d\" />\n", tex_width );
+		printf( "  <TexHeight value=\"%d\" />\n", tex_height );
+		printf( "  <AtlasID value=\"%d\" />\n", atlasid );
+#ifdef MULTI_THREAD
+		printf( "  <NeedGenTex value=\"%s\" />\n", need_gen_tex ? "true" : "false" );
+		printf( "  <Uploads>\n" );
+		for(  auto &u : uploads  ) {
+			printf( "    <UploadInfo>\n" );
+			printf( "      <Page value=\"%d\" />\n", u.page );
+			printf( "      <TexX value=\"%d\" />\n", u.tex_x );
+			printf( "      <TexY value=\"%d\" />\n", u.tex_y );
+			printf( "      <W value=\"%d\" />\n", u.w );
+			printf( "      <H value=\"%d\" />\n", u.h );
+			printf( "      <Pitch value=\"%d\" />\n", u.pitch );
+			printf( "      <Align value=\"%d\" />\n", u.align );
+			printf( "      <Format value=\"%d\" />\n", u.format );
+			printf( "      <Type value=\"%d\" />\n", u.type );
+			printf( "      <Data size=\"%zu\" />\n", u.data.size() );
+			printf( "    </UploadInfo>\n" );
+		}
+		printf( "  </Uploads>\n" );
+#endif
+
+		printf( "</TiledTextureAtlasDump>\n" );
 	}
 
 };
@@ -2714,17 +2819,34 @@ struct DrawCommandList {
 
 struct DrawCommandBatch
 {
-	std::unordered_map< DrawCommandKey, DrawCommandList> unused_unordered_list;
-	std::unordered_map< DrawCommandKey, DrawCommandList> unordered_list;
+#ifdef MULTI_THREAD
+	pthread_mutex_t ordered_mutex = PTHREAD_MUTEX_INITIALIZER;
+	pthread_rwlock_t ordered_list_rwlock = PTHREAD_RWLOCK_INITIALIZER;
+#define DCB_UNORDERED_ARRAY_SUFFIX [MAX_THREADS]
+#define DCB_UNORDERED_ARRAY_INDEX(i) [i]
+#else
+#define DCB_UNORDERED_ARRAY_SUFFIX
+#define DCB_UNORDERED_ARRAY_INDEX(i)
+#endif
+	std::unordered_map< DrawCommandKey, DrawCommandList> unused_unordered_list
+	DCB_UNORDERED_ARRAY_SUFFIX;
+	std::unordered_map< DrawCommandKey, DrawCommandList> unordered_list
+	DCB_UNORDERED_ARRAY_SUFFIX;
 	std::vector< std::pair< DrawCommandKey, DrawCommandList> > ordered_list;
 	int ordered_list_pos;
 	DrawCommandBatch() : ordered_list_pos(-1) {}
 	void clear()
 	{
-		unused_unordered_list = std::move( unordered_list );
-		for(  auto &l : unused_unordered_list  ) {
-			l.second.clear();
+#ifdef MULTI_THREAD
+		for(  unsigned int i = 0; i < MAX_THREADS; i++  ) {
+#endif
+			unused_unordered_list DCB_UNORDERED_ARRAY_INDEX( i ) = std::move( unordered_list DCB_UNORDERED_ARRAY_INDEX( i ) );
+			for(  auto &l : unused_unordered_list DCB_UNORDERED_ARRAY_INDEX(i)  ) {
+				l.second.clear();
+			}
+#ifdef MULTI_THREAD
 		}
+#endif
 		ordered_list_pos = -1;
 		for(  auto &l : ordered_list  ) {
 			l.second.clear();
@@ -2738,7 +2860,8 @@ struct DrawCommandBatch
 	                    GLfloat tx2, GLfloat ty2,
 	                    GLfloat ax1, GLfloat ay1,
 	                    GLfloat ax2, GLfloat ay2,
-	                    GLcolorf alpha, GLcolorf color)
+	                    GLcolorf alpha, GLcolorf color
+	                    CLIP_NUM_DEF)
 	{
 		//non-binary alpha may be produced when:
 		//alpha.a is not zero or alpha.a is not 1
@@ -2747,18 +2870,21 @@ struct DrawCommandBatch
 		                ( alpha.g == 0 || alpha.g == 1 ) &&
 		                ( alpha.b == 0 || alpha.b == 1 ) &&
 		                ( alpha.a == 0 || alpha.a == 1 )  ) {
-			auto it = unused_unordered_list.find( key );
-			if(  it != unused_unordered_list.end()  ) {
-				unordered_list[key] = std::move( it->second );
-				unused_unordered_list.erase( it );
+			auto it = unused_unordered_list DCB_UNORDERED_ARRAY_INDEX(clip_num).find(key);
+			if(  it != unused_unordered_list DCB_UNORDERED_ARRAY_INDEX(clip_num).end()  ) {
+				unordered_list DCB_UNORDERED_ARRAY_INDEX(clip_num)[key] = std::move( it->second );
+				unused_unordered_list DCB_UNORDERED_ARRAY_INDEX(clip_num).erase( it );
 			}
-			unordered_list[key].addDrawCommand( vx1, vy1, vx2, vy2,
-			                                    vz,
-			                                    tx1, ty1, tx2, ty2,
-			                                    ax1, ay1, ax2, ay2,
-			                                    alpha, color );
+			unordered_list DCB_UNORDERED_ARRAY_INDEX( clip_num )[key].addDrawCommand(
+			                                vx1, vy1, vx2, vy2,
+			                                vz,
+			                                tx1, ty1, tx2, ty2,
+			                                ax1, ay1, ax2, ay2,
+			                                alpha, color );
 		}
 		else {
+			MUTEX_LOCK( ordered_mutex );
+
 			if(  ordered_list_pos == -1 ||
 				ordered_list[ordered_list_pos].first != key  ) {
 				ordered_list_pos++;
@@ -2773,6 +2899,8 @@ struct DrawCommandBatch
 			                                tx1, ty1, tx2, ty2,
 			                                ax1, ay1, ax2, ay2,
 			                                alpha, color );
+
+			MUTEX_UNLOCK( ordered_mutex );
 		}
 	}
 	void addDrawCommand(DrawCommandKey const &key,
@@ -2789,30 +2917,34 @@ struct DrawCommandBatch
 	                    GLfloat ax2, GLfloat ay2,
 	                    GLfloat ax3, GLfloat ay3,
 	                    GLfloat ax4, GLfloat ay4,
-	                    GLcolorf alpha, GLcolorf color)
+	                    GLcolorf alpha, GLcolorf color
+	                    CLIP_NUM_DEF)
 	{
 		//non-binary alpha may be produced when:
 		//alpha.a is not zero or alpha.a is not 1
 		//alpha.rgb is non-zero
-		if(  ( alpha.r == 0 || alpha.r == 1 ) &&
+		if(  ( alpha.r == 0 || alpha.r == 1 )  &&
 		                ( alpha.g == 0 || alpha.g == 1 ) &&
 		                ( alpha.b == 0 || alpha.b == 1 ) &&
 		                ( alpha.a == 0 || alpha.a == 1 )  ) {
-			auto it = unused_unordered_list.find( key );
-			if(  it != unused_unordered_list.end()  ) {
-				unordered_list[key] = std::move( it->second );
-				unused_unordered_list.erase( it );
+			auto it = unused_unordered_list DCB_UNORDERED_ARRAY_INDEX(clip_num).find(key);
+			if(  it != unused_unordered_list DCB_UNORDERED_ARRAY_INDEX(clip_num).end()  ) {
+				unordered_list DCB_UNORDERED_ARRAY_INDEX(clip_num)[key] = std::move( it->second );
+				unused_unordered_list DCB_UNORDERED_ARRAY_INDEX(clip_num).erase( it );
 			}
-			unordered_list[key].addDrawCommand( vx1, vy1, vx2, vy2,
-			                                    vx3, vy3, vx4, vy4,
-			                                    vz,
-			                                    tx1, ty1, tx2, ty2,
-			                                    tx3, ty3, tx4, ty4,
-			                                    ax1, ay1, ax2, ay2,
-			                                    ax3, ay3, ax4, ay4,
-			                                    alpha, color );
+			unordered_list DCB_UNORDERED_ARRAY_INDEX( clip_num )[key].addDrawCommand(
+			                                vx1, vy1, vx2, vy2,
+			                                vx3, vy3, vx4, vy4,
+			                                vz,
+			                                tx1, ty1, tx2, ty2,
+			                                tx3, ty3, tx4, ty4,
+			                                ax1, ay1, ax2, ay2,
+			                                ax3, ay3, ax4, ay4,
+			                                alpha, color );
 		}
 		else {
+			MUTEX_LOCK( ordered_mutex );
+
 			if(  ordered_list_pos == -1 ||
 				ordered_list[ordered_list_pos].first != key  ) {
 				ordered_list_pos++;
@@ -2830,6 +2962,8 @@ struct DrawCommandBatch
 			                                ax1, ay1, ax2, ay2,
 			                                ax3, ay3, ax4, ay4,
 			                                alpha, color );
+
+			MUTEX_UNLOCK( ordered_mutex );
 		}
 	}
 };
@@ -2838,9 +2972,18 @@ struct DrawCommandBatches
 {
 #ifdef MULTI_THREAD
 	pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+	pthread_rwlock_t batches_rwlock = PTHREAD_RWLOCK_INITIALIZER;
 #endif
-	unsigned int batchesPos = 0;
+#undef POS_UPDATE_METHOD_CMPXCHG
+#define POS_UPDATE_METHOD_FETCHADD
+#undef POS_UPDATE_METHOD_LOCKED
+#ifdef POS_UPDATE_METHOD_LOCKED
+	unsigned int _batchesPos;
 	int zpos;
+#endif
+#if defined(POS_UPDATE_METHOD_CMPXCHG) || defined(POS_UPDATE_METHOD_FETCHADD)
+	std::atomic<unsigned int> pos;
+#endif
 	std::vector< DrawCommandBatch > batches;
 
 	//for having multithreaded batch accumulation, we would need
@@ -2853,14 +2996,99 @@ struct DrawCommandBatches
 	//there may be merit in running the actual addition in parallel,
 	//but we have to do an r/w lock for adding another batch.
 
+	DrawCommandBatches()
+#if defined(POS_UPDATE_METHOD_CMPXCHG) || defined(POS_UPDATE_METHOD_FETCHADD)
+		: pos( 0 )
+#endif
+	{
+	}
+	unsigned int batchesPos() {
+#ifdef POS_UPDATE_METHOD_CMPXCHG
+		unsigned int my_pos = pos;
+		return my_pos >> 16;
+#endif
+#ifdef POS_UPDATE_METHOD_FETCHADD
+		unsigned int my_pos = pos;
+		return my_pos / 65535;
+#endif
+#ifdef POS_UPDATE_METHOD_LOCKED
+		return _batchesPos;
+#endif
+	}
 	void clear()
 	{
 		for(  auto &b : batches  ) {
 			b.clear();
 		}
-		batchesPos = 0;
+#if defined(POS_UPDATE_METHOD_CMPXCHG) || defined(POS_UPDATE_METHOD_FETCHADD)
+		pos = 0;
+#endif
+#ifdef POS_UPDATE_METHOD_LOCKED
+		_batchesPos = 0;
 		zpos = -32767;
+#endif
 	}
+	void getNextBatchesPosAndZpos(unsigned int &my_batchesPos, int &my_zpos) {
+#ifdef POS_UPDATE_METHOD_CMPXCHG
+		while(  true  ) {
+			unsigned int my_pos = pos;
+			my_batchesPos = my_pos >> 16;
+			my_zpos = (int)( my_pos & 0xffff ) - 32767;
+			unsigned int new_batchesPos;
+			int new_zpos;
+			if(  my_zpos >= 32767  ) {
+				new_zpos = -32767;
+				new_batchesPos = my_batchesPos + 1;
+			}
+			else {
+				new_batchesPos = my_batchesPos;
+				new_zpos = my_zpos + 1;
+			}
+			unsigned int new_pos = ( new_batchesPos << 16 ) |
+			                       ( ( ( unsigned )( new_zpos + 32767 ) ) & 0xffff );
+			if(  pos.compare_exchange_weak( my_pos, new_pos, std::memory_order_seq_cst, std::memory_order_relaxed )  ) {
+				break;
+			}
+		}
+#endif
+#ifdef POS_UPDATE_METHOD_FETCHADD
+		unsigned int my_pos = pos.fetch_add( 1 );
+		my_batchesPos = my_pos / 65535;
+		my_zpos = ( my_pos % 65535 ) - 32767;
+#endif
+#ifdef POS_UPDATE_METHOD_LOCKED
+		MUTEX_LOCK( mutex );
+
+		my_batchesPos = _batchesPos;
+		my_zpos = zpos;
+		if(  my_zpos >= 32767  ) {
+			zpos = -32767;
+			_batchesPos = my_batchesPos + 1;
+		}
+		else {
+			zpos = my_zpos + 1;
+		}
+
+		MUTEX_UNLOCK( &mutex );
+#endif
+
+		//his does not depend on the above, the my_* are already
+		//decided and final. we only prepare batches to be able
+		//to deliver the given index.
+		if(  batches.size() <= my_batchesPos  ) {
+#ifdef MULTI_THREAD
+			pthread_rwlock_wrlock( &batches_rwlock );
+			//recheck since someone else may have changed size
+			if(  batches.size() <= my_batchesPos  ) {
+#endif
+				batches.resize( my_batchesPos + 1 );
+#ifdef MULTI_THREAD
+			}
+			pthread_rwlock_unlock( &batches_rwlock );
+#endif
+		}
+	}
+
 	void addDrawCommand(DrawCommandKey const &key,
 	                    scr_coord_val vx1, scr_coord_val vy1,
 	                    scr_coord_val vx2, scr_coord_val vy2,
@@ -2871,31 +3099,23 @@ struct DrawCommandBatches
 	                    GLcolorf alpha, GLcolorf color
 	                    CLIP_NUM_DEF)
 	{
+		unsigned int my_batchesPos;
+		int my_zpos;
+		getNextBatchesPosAndZpos( my_batchesPos, my_zpos );
 #ifdef MULTI_THREAD
-		(void)CLIP_NUM_VAR;
+		pthread_rwlock_rdlock( &batches_rwlock );
 #endif
-
-		MUTEX_LOCK( mutex );
-
-		if(  batches.size() <= batchesPos  ) {
-			batches.resize( batchesPos + 1 );
-		}
-		batches[batchesPos].addDrawCommand( key,
-		                                    vx1, vy1, vx2, vy2,
-		                                    zpos,
-		                                    tx1, ty1, tx2, ty2,
-		                                    ax1, ay1, ax2, ay2,
-		                                    alpha, color
-		                                  );
-		if(  zpos >= 32767  ) {
-			zpos = -32767;
-			batchesPos++;
-		}
-		else {
-			zpos++;
-		}
-
-		MUTEX_UNLOCK( mutex );
+		batches[my_batchesPos].addDrawCommand( key,
+		                                       vx1, vy1, vx2, vy2,
+		                                       my_zpos,
+		                                       tx1, ty1, tx2, ty2,
+		                                       ax1, ay1, ax2, ay2,
+		                                       alpha, color
+		                                       CLIP_NUM_PAR
+		                                     );
+#ifdef MULTI_THREAD
+		pthread_rwlock_unlock( &batches_rwlock );
+#endif
 	}
 	void addDrawCommand(DrawCommandKey const &key,
 	                    scr_coord_val vx1, scr_coord_val vy1,
@@ -2913,34 +3133,26 @@ struct DrawCommandBatches
 	                    GLcolorf alpha, GLcolorf color
 	                    CLIP_NUM_DEF)
 	{
+		unsigned int my_batchesPos;
+		int my_zpos;
+		getNextBatchesPosAndZpos( my_batchesPos, my_zpos );
 #ifdef MULTI_THREAD
-		(void)CLIP_NUM_VAR;
+		pthread_rwlock_rdlock( &batches_rwlock );
 #endif
-
-		MUTEX_LOCK( mutex );
-
-		if(  batches.size() <= batchesPos  ) {
-			batches.resize( batchesPos + 1 );
-		}
-		batches[batchesPos].addDrawCommand( key,
-		                                    vx1, vy1, vx2, vy2,
-		                                    vx3, vy3, vx4, vy4,
-		                                    zpos,
-		                                    tx1, ty1, tx2, ty2,
-		                                    tx3, ty3, tx4, ty4,
-		                                    ax1, ay1, ax2, ay2,
-		                                    ax3, ay3, ax4, ay4,
-		                                    alpha, color
-		                                  );
-		if(  zpos >= 32767  ) {
-			zpos = -32767;
-			batchesPos++;
-		}
-		else {
-			zpos++;
-		}
-
-		MUTEX_UNLOCK( mutex );
+		batches[my_batchesPos].addDrawCommand( key,
+		                                       vx1, vy1, vx2, vy2,
+		                                       vx3, vy3, vx4, vy4,
+		                                       my_zpos,
+		                                       tx1, ty1, tx2, ty2,
+		                                       tx3, ty3, tx4, ty4,
+		                                       ax1, ay1, ax2, ay2,
+		                                       ax3, ay3, ax4, ay4,
+		                                       alpha, color
+		                                       CLIP_NUM_PAR
+		                                     );
+#ifdef MULTI_THREAD
+		pthread_rwlock_unlock( &batches_rwlock );
+#endif
 	}
 };
 static DrawCommandBatches drawCommandBatches;
@@ -3007,33 +3219,35 @@ static void flushDrawCommands()
 	}
 	if(  have_new_tex  ) {
 		for(  auto &batch : drawCommandBatches.batches  ) {
-			std::vector< std::pair<simgraphgl::DrawCommandKey, DrawCommandList> > unordered_reinserts;
-			for(  auto it = batch.unordered_list.begin();
-			                it != batch.unordered_list.end();  ) {
-				if(  ( isValidTexname( it->first.alphatex ) &&
-				                gltexFromTexname( it->first.alphatex ) == 0 ) ||
-				                ( isValidTexname( it->first.tex ) &&
-				                  gltexFromTexname( it->first.tex ) == 0 ) ||
-				                ( isValidTexname( it->first.rgbmap_tex ) &&
-				                  gltexFromTexname( it->first.rgbmap_tex ) == 0 )  ) {
-					DrawCommandKey key = it->first;
-					DrawCommandList const &c = it->second;
+			for(  unsigned int uoid = 0; uoid < MAX_THREADS; uoid++  ) {
+				std::vector< std::pair<simgraphgl::DrawCommandKey, DrawCommandList> > unordered_reinserts;
+				for(  auto it = batch.unordered_list DCB_UNORDERED_ARRAY_INDEX( uoid ).begin();
+				                it != batch.unordered_list DCB_UNORDERED_ARRAY_INDEX( uoid ).end();  ) {
+					if(  ( isValidTexname( it->first.alphatex ) &&
+					                gltexFromTexname( it->first.alphatex ) == 0 ) ||
+					                ( isValidTexname( it->first.tex ) &&
+					                  gltexFromTexname( it->first.tex ) == 0 ) ||
+					                ( isValidTexname( it->first.rgbmap_tex ) &&
+					                  gltexFromTexname( it->first.rgbmap_tex ) == 0 )  ) {
+						DrawCommandKey key = it->first;
+						DrawCommandList const &c = it->second;
 
-					upgradeTexname( key.alphatex );
-					upgradeTexname( key.tex );
-					upgradeTexname( key.rgbmap_tex );
+						upgradeTexname( key.alphatex );
+						upgradeTexname( key.tex );
+						upgradeTexname( key.rgbmap_tex );
 
-					unordered_reinserts.emplace_back
-					( std::make_pair( key, c ) );
+						unordered_reinserts.emplace_back
+						( std::make_pair( key, c ) );
 
-					it = batch.unordered_list.erase( it );
+						it = batch.unordered_list DCB_UNORDERED_ARRAY_INDEX( uoid ).erase( it );
+					}
+					else {
+						it++;
+					}
 				}
-				else {
-					it++;
-				}
+				batch.unordered_list DCB_UNORDERED_ARRAY_INDEX( uoid ).insert( unordered_reinserts.begin(),
+				                unordered_reinserts.end() );
 			}
-			batch.unordered_list.insert( unordered_reinserts.begin(),
-			                             unordered_reinserts.end() );
 			for(  auto &el : batch.ordered_list  ) {
 				DrawCommandKey &key = el.first;
 
@@ -3097,36 +3311,42 @@ static void flushDrawCommands()
 	unsigned int ordered_used_lists = 0;
 
 	for(  unsigned int batchno = 0;
-	                batchno <= drawCommandBatches.batchesPos  &&
+	                batchno <= drawCommandBatches.batchesPos()  &&
 	                batchno < drawCommandBatches.batches.size();
 	                batchno++  ) {
 		auto &batch = drawCommandBatches.batches[batchno];
 		glDepthMask( GL_TRUE );
 		glClear( GL_DEPTH_BUFFER_BIT );
 		glEnable( GL_DEPTH_TEST );
-		for(  auto &el : batch.unordered_list  ) {
-			unsigned vno = 0;
-			std::size_t vcount = el.second.verticesPos;
-			CombinedVertex const *data = el.second.vertices.data();
-			while(  vno < vcount  ) {
-				unsigned int batch_size = gl_max_commands;
-				if(  batch_size > vcount - vno  ) {
-					batch_size = vcount - vno;
+#ifdef MULTI_THREAD
+		for(  unsigned int uoid = 0; uoid < MAX_THREADS; uoid++  ) {
+#endif
+			for(  auto &el : batch.unordered_list DCB_UNORDERED_ARRAY_INDEX( uoid )  ) {
+				unsigned vno = 0;
+				std::size_t vcount = el.second.verticesPos;
+				CombinedVertex const *data = el.second.vertices.data();
+				while(  vno < vcount  ) {
+					unsigned int batch_size = gl_max_commands;
+					if(  batch_size > vcount - vno  ) {
+						batch_size = vcount - vno;
+					}
+					flushDrawCommands( el.first, el.second,
+					                   data + vno * 4,
+					                   batch_size );
+					vno += batch_size;
 				}
-				flushDrawCommands( el.first, el.second,
-				                   data + vno * 4,
-				                   batch_size );
-				vno += batch_size;
+				if(  unordered_max_vertices < vcount  ) {
+					unordered_max_vertices = vcount;
+				}
+				unordered_vertices += vcount;
+				if(  vcount > 0  ) {
+					unordered_used_lists++;
+				}
+				unordered_lists++;
 			}
-			if(  unordered_max_vertices < vcount  ) {
-				unordered_max_vertices = vcount;
-			}
-			unordered_vertices += vcount;
-			if(  vcount > 0  ) {
-				unordered_used_lists++;
-			}
-			unordered_lists++;
+#ifdef MULTI_THREAD
 		}
+#endif
 		glDepthMask( GL_FALSE );
 		for(  int i = 0;  i <= batch.ordered_list_pos;  i++  ) {
 			auto &el = batch.ordered_list[i];
@@ -3326,11 +3546,11 @@ static TextureAtlas_Texname activate_player_color(sint8 player_nr, bool daynight
 	// caches the last settings
 	//specialcolormap_all_day is constant
 	//specialcolormap_day_night depends on light_level, night_shift
-
-	MUTEX_LOCK( rgbmap_mutex );
-
 	if(  !daynight  ) {
+		rgbmap_current_tex = rgbmap_all_day_tex;
 		if(  player_day != player_nr  ) {
+			MUTEX_LOCK( rgbmap_mutex );
+
 			int i;
 			player_day = player_nr;
 			for(  i = 0; i < 8; i++  ) {
@@ -3342,12 +3562,17 @@ static TextureAtlas_Texname activate_player_color(sint8 player_nr, bool daynight
 			              player_offsets[player_day][0] |
 			              ( player_offsets[player_day][1] << 8 )
 			            );
+			rgbmap_current_tex = rgbmap_all_day_tex;
+
+			MUTEX_UNLOCK( rgbmap_mutex );
 		}
-		rgbmap_current_tex = rgbmap_all_day_tex;
 	}
 	else {
+		rgbmap_current_tex = rgbmap_day_night_tex;
 		// changing color table
 		if(  player_night != player_nr  ) {
+			MUTEX_LOCK( rgbmap_mutex );
+
 			int i;
 			player_night = player_nr;
 			for(  i = 0; i < 8; i++  ) {
@@ -3361,12 +3586,11 @@ static TextureAtlas_Texname activate_player_color(sint8 player_nr, bool daynight
 			              player_offsets[player_night][0] |
 			              ( player_offsets[player_night][1] << 8 )
 			            );
+			rgbmap_current_tex = rgbmap_day_night_tex;
+
+			MUTEX_UNLOCK( rgbmap_mutex );
 		}
-		rgbmap_current_tex = rgbmap_day_night_tex;
 	}
-
-	MUTEX_UNLOCK( rgbmap_mutex );
-
 	return rgbmap_current_tex;
 }
 
@@ -6783,6 +7007,11 @@ void simgraphgl_CopyTexBufferToBuffer( GLuint dstBuffer, GLuint srcBuffer,
 	glRasterPos2f( -1, -1 );
 	glCopyPixels( 0, 0, width, height, GL_COLOR );
 #endif
+}
+
+void simgraphgl_DumpDebug() {
+//	charatlas.dumpDebug();
+//	rgbaatlas.dumpDebug();
 }
 
 /* context info

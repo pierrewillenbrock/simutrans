@@ -156,6 +156,8 @@ static int tex_max_size;
 void simgraphgl_CopyTexBufferToBuffer( GLuint dstBuffer, GLuint srcBuffer, GLuint srcTex,
 				       int width, int height, float x_scale, float y_scale );
 
+void simgraphgl_DumpDebug();
+
 /**
  * Checks for the extensions this backend can use
  */
@@ -1058,6 +1060,7 @@ static void internal_GetEvents()
 				case SDLK_UP:         code = SIM_KEYCODE_UP;                    break;
 				case SDLK_PAUSE:      code = SIM_KEYCODE_PAUSE;                 break;
 				case SDLK_SCROLLLOCK: code = SIM_KEYCODE_SCROLLLOCK;            break;
+				case SDLK_LGUI: code = 0; simgraphgl_DumpDebug(); break;
 				default: {
 					// Handle CTRL-keys. SDL_TEXTINPUT event handles regular input
 					if(  (sys_event.key_mod & SIM_KEYMOD_CTRL)  &&  SDLK_a <= sym  &&  sym <= SDLK_z  ) {
