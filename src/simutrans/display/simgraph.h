@@ -17,7 +17,7 @@
 #if COLOUR_DEPTH != 0
 
 #ifndef ZOOM_NEUTRAL
-#define MAX_ZOOM_FACTOR (9)
+#define MAX_ZOOM_FACTOR (10)
 #define ZOOM_NEUTRAL (3)
 extern const sint32 zoom_num[MAX_ZOOM_FACTOR + 1];
 extern const sint32 zoom_den[MAX_ZOOM_FACTOR + 1];

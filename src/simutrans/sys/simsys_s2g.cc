@@ -5,6 +5,7 @@
 
 #if !defined __APPLE__ && !defined __ANDROID__
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_syswm.h>
 #else
 #include <SDL.h>
 #endif
@@ -14,7 +15,9 @@
 #endif
 
 #include <stdio.h>
-#include <string.h>
+#include <GL/glew.h>
+#include <GL/gl.h>
+#include <GL/glx.h>
 
 #ifdef __CYGWIN__
 extern int __argc;
@@ -103,12 +106,12 @@ static Uint8 blank_cursor[] = {
 };
 
 static SDL_Window *window;
-static SDL_Renderer *renderer;
-static SDL_Texture *screen_tx;
-static SDL_Surface *screen;
+static SDL_GLContext glcontext;
+
+static int width = 16;
+static int height = 16;
 
 static int sync_blit = 0;
-static int use_dirty_tiles = 1;
 static sint16 fullscreen = WINDOWED;
 
 static SDL_Cursor *arrow;
@@ -125,8 +128,8 @@ static SDL_Cursor *blank;
 // Multiplier when converting from texture to screen coords, fixed point format
 // Example: If x_scale==2*SCALE_NEUTRAL_X && y_scale==2*SCALE_NEUTRAL_Y,
 // then things on screen are 2*2 = 4 times as big by area
-sint32 x_scale = SCALE_NEUTRAL_X;
-sint32 y_scale = SCALE_NEUTRAL_Y;
+static sint32 x_scale = SCALE_NEUTRAL_X;
+static sint32 y_scale = SCALE_NEUTRAL_Y;
 
 // When using -autodpi, attempt to scale things on screen to this DPI value
 #ifdef __ANDROID__
@@ -149,6 +152,48 @@ sint32 y_scale = SCALE_NEUTRAL_Y;
 #define TEX_TO_SCREEN_X(x) (((x) * x_scale) / SCALE_NEUTRAL_X)
 #define TEX_TO_SCREEN_Y(y) (((y) * y_scale) / SCALE_NEUTRAL_Y)
 
+static int tex_max_size;
+
+/**
+ * Checks for the extensions this backend can use
+ */
+static void check_for_extensions()
+{
+
+	// Initialize GLEW
+	GLenum err = glewInit();
+	if(  GLEW_OK != err  ) {
+		dbg->fatal( "check_for_extensions()", "glew failed to initialize" );
+		return;
+	}
+
+	//see simsys_opengl.cc for how to check things
+}
+
+/**
+ * Detects the biggest texture the system supports, and sets tex_max_size
+ */
+static void check_max_texture_size()
+{
+
+	GLint width,curr_width;
+
+	curr_width = 32;
+
+	do {
+		curr_width=curr_width<<1;
+
+		glTexImage2D(GL_PROXY_TEXTURE_2D, 0, GL_RGB, curr_width, curr_width, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, NULL);
+		glGetTexLevelParameteriv(GL_PROXY_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
+	}
+	while (width!=0 && width==curr_width);
+
+	curr_width=curr_width>>1;
+	tex_max_size=curr_width;
+
+	fprintf(stderr, "Renderer supports textures up to %dx%d.\n",curr_width,curr_width);
+	DBG_MESSAGE("check_max_texture_size(OpenGL)", "Renderer supports textures up to %dx%d",curr_width,curr_width);
+}
 
 bool has_soft_keyboard = false;
 
@@ -282,6 +327,37 @@ static int SDLCALL my_event_filter(void* /*userdata*/, SDL_Event* event)
 }
 
 
+/**
+ * Detects if we have hardware acceleration available or not
+ */
+static bool check_hardware_accelerated()
+{
+	int result;
+	const GLubyte* vendor = glGetString(GL_VENDOR);
+	const GLubyte* renderer = glGetString(GL_RENDERER);
+	const char * glxvendor = "Unknown";
+	{
+		SDL_SysWMinfo wminfo;
+		SDL_VERSION(&wminfo.version);
+		if(  SDL_GetWindowWMInfo(window, &wminfo)  ) {
+			glxvendor = glXGetClientString(wminfo.info.x11.display,
+						       GLX_VENDOR);
+		}
+	}
+
+	SDL_GL_GetAttribute(SDL_GL_ACCELERATED_VISUAL,&result);
+
+	if(  result==1  ) {
+		fprintf(stderr, "Hardware acceleration available, vendor: %s, renderer: %s, glx vendor: %s.\n",vendor,renderer,glxvendor);
+		DBG_MESSAGE("check_hardware_accelerated(OpenGL)", "Hardware acceleration available, vendor: %s",vendor);
+	}
+	else {
+		fprintf(stderr, "Hardware acceleration NOT available, vendor: %s, renderer: %s, glx vendor: %s.\n",vendor,renderer,glxvendor);
+		DBG_MESSAGE("check_hardware_accelerated(OpenGL)", "Hardware acceleration NOT available, vendor: %s",vendor);
+	}
+	return result==1;
+}
+
 /*
  * Hier sind die Basisfunktionen zur Initialisierung der
  * Schnittstelle untergebracht
@@ -323,7 +399,6 @@ bool dr_os_init(const int* parameter)
 	}
 
 	sync_blit = parameter[0];  // hijack SDL1 -async flag for SDL2 vsync
-	use_dirty_tiles = !parameter[1]; // hijack SDL1 -use_hw flag to turn off dirty tile updates (force fullscreen updates)
 
 	// prepare for next event
 	sys_event.type = SIM_NOEVENT;
@@ -350,85 +425,6 @@ resolution dr_query_screen_resolution()
 	return res;
 }
 
-
-bool internal_create_surfaces(int tex_width, int tex_height)
-{
-	// The pixel format needs to match the graphics code within simgraph16.cc.
-	// Note that alpha is handled by simgraph16, not by SDL.
-	const Uint32 pixel_format = SDL_PIXELFORMAT_RGB565;
-
-#ifdef MSG_LEVEL
-	// List all render drivers and their supported pixel formats.
-	const int num_rend = SDL_GetNumRenderDrivers();
-	std::string formatStrBuilder;
-	for(  int i = 0;  i < num_rend;  i++  ) {
-		SDL_RendererInfo ri;
-		SDL_GetRenderDriverInfo( i, &ri );
-		formatStrBuilder.clear();
-		for(  Uint32 j = 0;  j < ri.num_texture_formats;  j++  ) {
-			formatStrBuilder += ", ";
-			formatStrBuilder += SDL_GetPixelFormatName(ri.texture_formats[j]);
-		}
-		DBG_DEBUG( "internal_create_surfaces(SDL2)", "Renderer: %s, Max_w: %d, Max_h: %d, Flags: %d, Formats: %d%s",
-			ri.name, ri.max_texture_width, ri.max_texture_height, ri.flags, ri.num_texture_formats, formatStrBuilder.c_str() );
-	}
-#endif
-
-	Uint32 flags = SDL_RENDERER_ACCELERATED;
-	if(  sync_blit  ) {
-		flags |= SDL_RENDERER_PRESENTVSYNC;
-	}
-	renderer = SDL_CreateRenderer( window, -1, flags );
-	if(  renderer == NULL  ) {
-		dbg->warning( "internal_create_surfaces(SDL2)", "Couldn't create accelerated renderer: %s", SDL_GetError() );
-
-		flags &= ~SDL_RENDERER_ACCELERATED;
-		flags |= SDL_RENDERER_SOFTWARE;
-		renderer = SDL_CreateRenderer( window, -1, flags );
-		if(  renderer == NULL  ) {
-			dbg->error( "internal_create_surfaces(SDL2)", "No suitable SDL2 renderer found!" );
-			return false;
-		}
-		dbg->warning( "internal_create_surfaces(SDL2)", "Using fallback software renderer instead of accelerated: Performance may be low!");
-	}
-
-	SDL_RendererInfo ri;
-	SDL_GetRendererInfo( renderer, &ri );
-	DBG_DEBUG( "internal_create_surfaces(SDL2)", "Using: Renderer: %s, Max_w: %d, Max_h: %d, Flags: %d, Formats: %d, %s",
-		ri.name, ri.max_texture_width, ri.max_texture_height, ri.flags, ri.num_texture_formats, SDL_GetPixelFormatName(pixel_format) );
-
-	// Non-integer scaling -> enable bilinear filtering (must be done before texture creation)
-	const bool integer_scaling = (x_scale & (SCALE_NEUTRAL_X - 1)) == 0 && (y_scale & (SCALE_NEUTRAL_Y - 1)) == 0;
-	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, integer_scaling ? "0" : "1" ); // 0=none, 1=bilinear, 2=anisotropic (DirectX only)
-
-	screen_tx = SDL_CreateTexture( renderer, pixel_format, SDL_TEXTUREACCESS_STREAMING, tex_width, tex_height );
-	if(  screen_tx == NULL  ) {
-		dbg->error( "internal_create_surfaces(SDL2)", "Couldn't create texture: %s", SDL_GetError() );
-		return false;
-	}
-
-	// Color component bitmasks for the RGB565 pixel format used by simgraph16.cc
-	int bpp;
-	Uint32 rmask, gmask, bmask, amask;
-	if(  !SDL_PixelFormatEnumToMasks( pixel_format, &bpp, &rmask, &gmask, &bmask, &amask )  ) {
-		dbg->error( "internal_create_surfaces(SDL2)", "Pixel format error. Couldn't generate masks: %s", SDL_GetError() );
-		return false;
-	}
-	else if(  bpp != COLOUR_DEPTH  ||  amask != 0  ) {
-		dbg->error( "internal_create_surfaces(SDL2)", "Pixel format error. Bpp got %d, needed %d. Amask got %d, needed 0.", bpp, COLOUR_DEPTH, amask );
-		return false;
-	}
-
-	screen = SDL_CreateRGBSurface( 0, tex_width, tex_height, bpp, rmask, gmask, bmask, amask );
-	if(  screen == NULL  ) {
-		dbg->error( "internal_create_surfaces(SDL2)", "Couldn't get the window surface: %s", SDL_GetError() );
-		return false;
-	}
-
-	return true;
-}
-
-
 // open the window
 int dr_os_open(const scr_size window_size, sint16 fs)
 {
@@ -444,6 +440,8 @@ int dr_os_open(const scr_size window_size, sint16 fs)
 	// some cards need those alignments
 	// especially 64bit want a border of 8bytes
 	const int tex_pitch = (tex_w + 15) & 0x7FF0;
+	width = tex_pitch;
+	height = tex_h;
 
 	// SDL2 only works with borderless fullscreen (SDL_WINDOW_FULLSCREEN_DESKTOP)
 	Uint32 flags = fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : SDL_WINDOW_RESIZABLE;
@@ -452,6 +450,15 @@ int dr_os_open(const scr_size window_size, sint16 fs)
 	// needed for landscape apparently
 	flags |= SDL_WINDOW_RESIZABLE;
 #endif
+	flags |= SDL_WINDOW_OPENGL;
+
+	SDL_GL_SetAttribute( SDL_GL_RED_SIZE, 8 );
+	SDL_GL_SetAttribute( SDL_GL_GREEN_SIZE, 8 );
+	SDL_GL_SetAttribute( SDL_GL_BLUE_SIZE, 8 );
+	SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, 16 );
+	SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
+	SDL_GL_SetAttribute( SDL_GL_STENCIL_SIZE, 1 );
+	SDL_GL_SetAttribute( SDL_GL_ACCELERATED_VISUAL, 1 );
 
 	window = SDL_CreateWindow( SIM_TITLE, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, window_size.w, window_size.h, flags );
 	if(  window == NULL  ) {
@@ -459,10 +466,8 @@ int dr_os_open(const scr_size window_size, sint16 fs)
 		return 0;
 	}
 
-	if(  !internal_create_surfaces( tex_pitch, tex_h )  ) {
-		return 0;
-	}
-	DBG_MESSAGE("dr_os_open(SDL2)", "SDL realized screen size width=%d, height=%d (internal w=%d, h=%d)", window_size.w, window_size.h, screen->w, screen->h );
+	glcontext = SDL_GL_CreateContext(window);
+	DBG_MESSAGE("dr_os_open(SDL2G)", "SDL realized screen size width=%d, height=%d (internal w=%d, h=%d)", width, height, tex_w, tex_h );
 
 	SDL_ShowCursor(0);
 	arrow = SDL_GetCursor();
@@ -474,13 +479,24 @@ int dr_os_open(const scr_size window_size, sint16 fs)
 	SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0"); // no mouse emulation for touch
 #endif
 
-	assert(tex_pitch <= screen->pitch / (int)sizeof(PIXVAL));
-	assert(tex_h <= screen->h);
-	assert(tex_w <= tex_pitch);
+	glEnable(GL_TEXTURE_2D);
 
-	display_set_actual_width( tex_w );
-	display_set_height( tex_h );
-	return tex_pitch;
+	check_for_extensions();
+
+	if(  !env_t::hide_keyboard  ) {
+		// enable keyboard input at all times unless requested otherwise
+	    SDL_StartTextInput();
+	}
+	check_max_texture_size();
+	if(  !check_hardware_accelerated()  ){
+		DBG_MESSAGE("dr_os_open(OpenGL)", "No hardware renderer available, exiting...");
+		fprintf(stderr, "No hardware renderer available, exiting...");
+		return 0;
+	}
+
+	display_set_actual_width( window_size.w );
+	display_set_height( window_size.h );
+	return window_size.w;
 }
 
 
@@ -489,9 +505,32 @@ void dr_os_close()
 {
 	SDL_FreeCursor( blank );
 	SDL_FreeCursor( hourglass );
-	SDL_DestroyRenderer( renderer );
+	SDL_GL_DeleteContext( glcontext );
 	SDL_DestroyWindow( window );
 	SDL_StopTextInput();
+}
+
+static void setupGL()
+{
+	glViewport(0,0,width,height);
+	//map x[0,width] to x[-1,1]: X(x) = x/width*2-1
+	//map y[0,height] to y[1,-1]: Y(x) = -x/height*2+1
+	double mat[16] = {
+	  2.0/width, 0,      0, -1,
+	  0,     -2.0/height, 0, 1,
+	  0,     0,      1, 0,
+	  0,     0,      0, 1};
+	glMatrixMode(GL_PROJECTION);
+	glLoadTransposeMatrixd(mat);
+
+	//this is needed (at least on mesa/i965) to get the first frame into
+	//the back buffer
+	glDrawBuffer(GL_FRONT);
+	glDrawBuffer(GL_BACK);
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glFlush();
+	glFinish();
 }
 
 
@@ -499,48 +538,25 @@ void dr_os_close()
 int dr_textur_resize(unsigned short** const textur, int tex_w, int const tex_h)
 {
 	// enforce multiple of 16 pixels, or there are likely mismatches
-	const int tex_pitch = max((tex_w + 15) & 0x7FF0, 16);
+//	w = (w + 15 ) & 0x7FF0;
 
-	SDL_UnlockTexture( screen_tx );
-	if(  tex_pitch != screen->w  ||  tex_h != screen->h  ) {
-		// Recreate the SDL surfaces at the new resolution.
-		// First free surface and then renderer.
-		SDL_FreeSurface( screen );
-		screen = NULL;
-		// This destroys texture as well.
-		SDL_DestroyRenderer( renderer );
-		renderer = NULL;
-		screen_tx = NULL;
-
-		internal_create_surfaces( tex_pitch, tex_h );
-		if(  screen  ) {
-			DBG_MESSAGE("dr_textur_resize(SDL2)", "SDL realized screen size width=%d, height=%d (internal w=%d, h=%d)", tex_w, tex_h, screen->w, screen->h );
-		}
-		else {
-			dbg->error("dr_textur_resize(SDL2)", "screen is NULL. Good luck!");
-		}
-		fflush( NULL );
+	// w, h are the width in pixel, we calculate now the scree size
+	width = TEX_TO_SCREEN_X(tex_w);
+	height = TEX_TO_SCREEN_Y(tex_h);
+	display_set_actual_width( width );
+	display_set_height( height );
+	if(  textur  ) {
+		*textur = dr_textur_init();
 	}
-
-	*textur = dr_textur_init();
-
-	assert(tex_pitch <= screen->pitch / (int)sizeof(PIXVAL));
-	assert(tex_h <= screen->h);
-	assert(tex_w <= tex_pitch);
-
-	display_set_actual_width( tex_w );
-	return tex_pitch;
+	setupGL();
+	return width;
 }
 
 
 unsigned short *dr_textur_init()
 {
-	// SDL_LockTexture modifies pixels, so copy it first
-	void *pixels = screen->pixels;
-	int pitch = screen->pitch;
-
-	SDL_LockTexture( screen_tx, NULL, &pixels, &pitch );
-	return (unsigned short*)screen->pixels;
+	setupGL();
+	return NULL;
 }
 
 
@@ -567,27 +583,22 @@ void dr_prepare_flush()
 void dr_flush()
 {
 	display_flush_buffer();
-	if(  !use_dirty_tiles  ) {
-		SDL_UpdateTexture( screen_tx, NULL, screen->pixels, screen->pitch );
-	}
 
-	SDL_Rect rSrc  = { 0, 0, display_get_width(), display_get_height()  };
-	SDL_RenderCopy( renderer, screen_tx, &rSrc, NULL );
-
-	SDL_RenderPresent( renderer );
+	glDisable(GL_TEXTURE_2D);
+	glDisable(GL_BLEND);
+	glReadBuffer(GL_BACK);
+	glDrawBuffer(GL_FRONT);
+	glRasterPos2i(0,height);
+	glCopyPixels(0,0,width,height,GL_COLOR);
+	glDrawBuffer(GL_BACK);
+	glFlush();
+	glFinish();
 }
 
 
-void dr_textur(int xp, int yp, int w, int h)
+void dr_textur(int /*xp*/, int /*yp*/, int /*w*/, int /*h*/)
 {
-	if(  use_dirty_tiles  ) {
-		SDL_Rect r;
-		r.x = xp;
-		r.y = yp;
-		r.w = xp + w > screen->w ? screen->w - xp : w;
-		r.h = yp + h > screen->h ? screen->h - yp : h;
-		SDL_UpdateTexture( screen_tx, &r, (uint8 *)screen->pixels + yp * screen->pitch + xp * sizeof(PIXVAL), screen->pitch );
-	}
+  //we don't do partial updates
 }
 static bool in_finger_handling = false;
 
@@ -783,7 +794,7 @@ static void internal_GetEvents()
 
 		case SDL_FINGERMOTION:
 			// move whatever
-			if(  screen  &&  previous_multifinger_touch==0  &&  FirstFingerId==event.tfinger.fingerId) {
+			if(   previous_multifinger_touch==0  &&  FirstFingerId==event.tfinger.fingerId) {
 				if (dLastDist == 0.0) {
 					// not yet a finger down event before => we send one
 					dLastDist = 1e-99;
@@ -809,7 +820,7 @@ static void internal_GetEvents()
 			break;
 
 		case SDL_FINGERUP:
-			if (screen  &&  in_finger_handling) {
+			if (in_finger_handling) {
 				if (FirstFingerId==event.tfinger.fingerId  ||  SDL_GetNumTouchFingers(event.tfinger.touchId)==0) {
 					if(!previous_multifinger_touch) {
 						if (dLastDist == 0.0) {
@@ -878,12 +889,12 @@ static void internal_GetEvents()
 
 				previous_multifinger_touch = 2;
 			}
-			else if (event.mgesture.numFingers == 3  &&  screen) {
+			else if (event.mgesture.numFingers == 3) {
 				// any three finger touch is scrolling the map
 
 				if (previous_multifinger_touch != 3) {
 					// just started scrolling
-					set_click_xy(SCREEN_TO_TEX_X(event.mgesture.x* screen->w), SCREEN_TO_TEX_Y(event.mgesture.y* screen->h));
+					set_click_xy(SCREEN_TO_TEX_X(event.mgesture.x* width), SCREEN_TO_TEX_Y(event.mgesture.y* height));
 				}
 
 				do {
@@ -892,8 +903,8 @@ static void internal_GetEvents()
 				sys_event.code = SIM_MOUSE_MOVED;
 				sys_event.mb = MOUSE_RIGHTBUTTON;
 				sys_event.key_mod = ModifierKeys();
-				sys_event.mx = SCREEN_TO_TEX_X(event.mgesture.x * screen->w);
-				sys_event.my = SCREEN_TO_TEX_Y(event.mgesture.y * screen->h);
+				sys_event.mx = SCREEN_TO_TEX_X(event.mgesture.x * width);
+				sys_event.my = SCREEN_TO_TEX_Y(event.mgesture.y * height);
 				previous_multifinger_touch = 3;
 			}
 			break;
@@ -1103,7 +1114,10 @@ void dr_stop_textinput()
 
 void dr_notify_input_pos(scr_coord pos)
 {
-	SDL_Rect rect = { TEX_TO_SCREEN_X(pos.x), TEX_TO_SCREEN_Y(pos.y + LINESPACE), 1, 1};
+	SDL_Rect rect = { int( TEX_TO_SCREEN_X( pos.x ) ),
+	                  int( TEX_TO_SCREEN_Y( pos.y + LINESPACE ) ),
+	                  1, 1
+	                };
 	SDL_SetTextInputRect( &rect );
 }
 
