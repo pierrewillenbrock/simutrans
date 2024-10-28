@@ -80,7 +80,7 @@ typedef void (*draw_alpha_proc)(const image_id n, const image_id alpha_n, const 
 typedef image_id stretch_map_t[3][3];
 
 #if COLOUR_DEPTH != 0
-#  define MAX_ZOOM_FACTOR (9)
+#  define MAX_ZOOM_FACTOR (10)
 #  define ZOOM_NEUTRAL    (3)
 #else
 #  define MAX_ZOOM_FACTOR (0)
