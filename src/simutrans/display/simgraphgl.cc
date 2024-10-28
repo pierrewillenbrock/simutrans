@@ -336,6 +336,7 @@ struct TextureAtlas_Texname {
 	{
 		return !operator==( o );
 	}
+	bool sane() const;
 };
 static bool isValidTexname(TextureAtlas_Texname const &name)
 {
@@ -359,7 +360,7 @@ static TextureAtlas_Texname invalidTexname() {
 #endif
 
 template<typename Key>
-class TextureAtlas
+class TiledTextureAtlas
 {
 private:
 #ifdef MULTI_THREAD
@@ -505,7 +506,7 @@ private:
 	};
 	struct UploadInfo
 	{
-		TextureAtlas_Texname tex;
+		unsigned char page;
 		unsigned int tex_x;
 		unsigned int tex_y;
 		scr_coord_val w;
@@ -519,7 +520,6 @@ private:
 
 	std::unordered_map<Key, TileInfo> tiletex;
 	std::vector<TilePageInfo> tilepage;
-	std::vector<UploadInfo> uploads;
 	GLint tex_internalformat;
 	GLenum tex_format;
 	GLenum tex_type;
@@ -527,7 +527,10 @@ private:
 	GLsizei tex_height;
 	uint8_t atlasid;
 #ifdef MULTI_THREAD
+public:
 	bool need_gen_tex = false;
+private:
+	std::vector<UploadInfo> uploads;
 #endif
 
 	void genTex(TextureAtlas_Texname &texname)
@@ -548,13 +551,12 @@ private:
 	}
 
 public:
-	TextureAtlas(GLint tex_internalformat,
-	             GLenum tex_format,
-	             GLsizei tex_width,
-	             GLsizei tex_height,
-	             GLenum tex_type,
-	             uint8_t atlasid
-	            )
+	TiledTextureAtlas(GLint tex_internalformat,
+	                  GLenum tex_format,
+	                  GLsizei tex_width,
+	                  GLsizei tex_height,
+	                  GLenum tex_type,
+	                  uint8_t atlasid)
 		: tex_internalformat( tex_internalformat )
 		, tex_format( tex_format )
 		, tex_type( tex_type )
@@ -756,9 +758,10 @@ public:
 	void uploadUploads()
 	{
 		assert( simgraph_main_thread == pthread_self() );
+		MUTEX_LOCK( mutex );
 		for(  auto &el : uploads  ) {
-			assert( gltexFromTexname( el.tex ) );
-			glBindTexture( GL_TEXTURE_2D, gltexFromTexname( el.tex ) );
+			assert( gltexFromTexname( tilepage[el.page].texture ) != 0 );
+			glBindTexture( GL_TEXTURE_2D, gltexFromTexname( tilepage[el.page].texture ) );
 
 			glPixelStorei( GL_UNPACK_ROW_LENGTH, el.pitch );
 			glPixelStorei( GL_UNPACK_ALIGNMENT, el.align );
@@ -771,22 +774,29 @@ public:
 			                 el.data.data() );
 		}
 		uploads.clear();
+		MUTEX_UNLOCK( mutex );
 	}
 
 	bool realizeTexPages() {
 		if(  !need_gen_tex  ) {
-			uploadUploads();
 			return false;
 		}
 		for(  auto &page : tilepage  ) {
 			if(  gltexFromTexname( page.texture ) == 0  ) {
 				genTex( page.texture );
+				assert( gltexFromTexname( page.texture ) != 0 );
+				for(  auto &ft : page.freetiles  ) {
+					ft.texture = page.texture;
+				}
+			}
+		}
+		for(  auto &el : tiletex  ) {
+			if(  gltexFromTexname( el.second.texture ) == 0  ) {
+				gltexFromTexname( el.second.texture ) = gltexFromTexname( tilepage[el.second.texture.page].texture );
 			}
 		}
 
 		need_gen_tex = false;
-
-		uploadUploads();
 
 		return true;
 	}
@@ -808,6 +818,7 @@ public:
 	                       void const *data, size_t size)
 	{
 #ifdef MULTI_THREAD
+		assert( tex.atlas == atlasid );
 		if(  simgraph_main_thread == pthread_self() && false  ) {
 #endif
 			assert( gltexFromTexname( tex ) );
@@ -826,7 +837,7 @@ public:
 		}
 		else {
 			UploadInfo i;
-			i.tex = tex;
+			i.page = tex.page;
 			i.tex_x = tex_x;
 			i.tex_y = tex_y;
 			i.w = w;
@@ -837,6 +848,9 @@ public:
 			i.type = type;
 			i.data.resize( size );
 			memcpy( i.data.data(), data, size );
+			MUTEX_LOCK( mutex );
+			uploads.emplace_back( i );
+			MUTEX_UNLOCK( mutex );
 		}
 #endif
 	}
@@ -849,6 +863,7 @@ public:
 	                       std::vector<char> &&data)
 	{
 #ifdef MULTI_THREAD
+		assert( tex.atlas == atlasid );
 		if(  simgraph_main_thread == pthread_self() && false  ) {
 #endif
 			assert( gltexFromTexname( tex ) );
@@ -867,7 +882,7 @@ public:
 		}
 		else {
 			UploadInfo i;
-			i.tex = tex;
+			i.page = tex.page;
 			i.tex_x = tex_x;
 			i.tex_y = tex_y;
 			i.w = w;
@@ -877,12 +892,286 @@ public:
 			i.format = format;
 			i.type = type;
 			i.data = std::move( data );
+			MUTEX_LOCK( mutex );
+			uploads.emplace_back( i );
+			MUTEX_UNLOCK( mutex );
 		}
 #endif
 	}
 
 };
 
+template<typename Key>
+class UntiledTextureAtlas
+{
+private:
+#ifdef MULTI_THREAD
+	pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+#endif
+	struct UploadInfo
+	{
+		unsigned char page;
+		scr_coord_val w;
+		scr_coord_val h;
+		scr_coord_val pitch;
+		uint8_t align;
+		GLenum internalformat;
+		GLenum format;
+		GLenum type;
+		std::vector<char> data;
+	};
+
+	std::unordered_map<Key, unsigned char> tiletex;
+	std::vector<TextureAtlas_Texname> tilepage;
+	std::vector<GLuint> unused_gltex;
+	uint8_t atlasid;
+#ifdef MULTI_THREAD
+public:
+	bool need_gen_tex = false;
+private:
+	std::vector<UploadInfo> uploads;
+#endif
+
+	void genTex(TextureAtlas_Texname &texname)
+	{
+		assert( simgraph_main_thread == pthread_self() );
+		if(  unused_gltex.size() > 0  ) {
+			gltexFromTexname( texname ) = unused_gltex.back();
+			unused_gltex.pop_back();
+		}
+		else {
+			glGenTextures( 1, &gltexFromTexname( texname ) );
+		}
+		glBindTexture( GL_TEXTURE_2D, gltexFromTexname( texname ) );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
+		                 GL_CLAMP_TO_EDGE );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
+		                 GL_CLAMP_TO_EDGE );
+	}
+
+public:
+	UntiledTextureAtlas(uint8_t atlasid)
+		: atlasid( atlasid )
+	{
+	}
+	TextureAtlas_Texname getTexture(Key k)
+	{
+		MUTEX_LOCK( mutex );
+
+		auto it = tiletex.find( k );
+		if(  it != tiletex.end()  ) {
+			MUTEX_UNLOCK( mutex );
+
+			return tilepage[it->second];
+		}
+
+		MUTEX_UNLOCK( mutex );
+
+		return invalidTexname();
+	}
+	void destroyTexture(Key k)
+	{
+		MUTEX_LOCK( mutex );
+
+		auto it = tiletex.find( k );
+		if(  it != tiletex.end()  ) {
+			TextureAtlas_Texname tex = it->second.texture;
+			unused_gltex.push_back( gltexFromTexname( tex ) );
+			tiletex.erase( it );
+		}
+
+		MUTEX_UNLOCK( mutex );
+	}
+	TextureAtlas_Texname createTexture(Key k)
+	{
+		MUTEX_LOCK( mutex );
+
+		auto it = tiletex.find( k );
+		if(  it != tiletex.end()  ) {
+			TextureAtlas_Texname texname = tilepage[it->second];
+
+			MUTEX_UNLOCK( mutex );
+
+			return texname;
+		}
+
+		TextureAtlas_Texname texname;
+#ifdef MULTI_THREAD
+		texname.valid = 1;
+		texname.page = tilepage.size();
+		texname.atlas = atlasid;
+		if(  simgraph_main_thread == pthread_self() && false  ) {
+			genTex( texname );
+		}
+		else {
+			gltexFromTexname( texname ) = 0;
+			need_gen_tex = true;
+		}
+#else
+		genTex( texname );
+#endif
+
+		tiletex[k] = tilepage.size();
+
+		tilepage.emplace_back( texname );
+
+		MUTEX_UNLOCK( mutex );
+
+		return texname;
+	}
+	void clear()
+	{
+		MUTEX_LOCK( mutex );
+
+		assert( simgraph_main_thread == pthread_self() );
+		for(  auto & page : tilepage  ) {
+			glDeleteTextures( 1, &gltexFromTexname( page ) );
+		}
+		tiletex.clear();
+		tilepage.clear();
+
+		MUTEX_UNLOCK( mutex );
+	}
+
+#ifdef MULTI_THREAD
+	void uploadUploads()
+	{
+		assert( simgraph_main_thread == pthread_self() );
+		MUTEX_LOCK( mutex );
+		for(  auto &el : uploads  ) {
+			assert( gltexFromTexname( tilepage[el.page] ) != 0 );
+			glBindTexture( GL_TEXTURE_2D, gltexFromTexname( tilepage[el.page] ) );
+
+			glPixelStorei( GL_UNPACK_ROW_LENGTH, el.pitch );
+			glPixelStorei( GL_UNPACK_ALIGNMENT, el.align );
+			glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
+			glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
+
+			glTexImage2D( GL_TEXTURE_2D, 0,
+			              el.internalformat,
+			              el.w, el.h, 0,
+			              el.format, el.type,
+			              el.data.data() );
+		}
+		uploads.clear();
+		MUTEX_UNLOCK( mutex );
+	}
+
+	bool realizeTexPages() {
+		if(  !need_gen_tex  ) {
+			return false;
+		}
+		for(  auto &page : tilepage  ) {
+			if(  gltexFromTexname( page ) == 0  ) {
+				genTex( page );
+				assert( gltexFromTexname( page ) != 0 );
+			}
+		}
+
+		need_gen_tex = false;
+
+		return true;
+	}
+
+	void updateTexname(TextureAtlas_Texname &tex)
+	{
+		if(  tex.atlas != atlasid  ) {
+			return;
+		}
+		gltexFromTexname( tex ) = gltexFromTexname( tilepage[tex.page] );
+	}
+#endif
+
+	void uploadTextureData(TextureAtlas_Texname const &tex,
+	                       scr_coord_val w, scr_coord_val h,
+	                       scr_coord_val pitch, uint8_t align,
+	                       GLenum internalformat,
+	                       GLenum format, GLenum type,
+	                       void const *data, size_t size)
+	{
+#ifdef MULTI_THREAD
+		assert( tex.atlas == atlasid );
+		if(  simgraph_main_thread == pthread_self() && false  ) {
+#endif
+			assert( gltexFromTexname( tex ) );
+			glBindTexture( GL_TEXTURE_2D, gltexFromTexname( tex ) );
+
+			glPixelStorei( GL_UNPACK_ROW_LENGTH, pitch );
+			glPixelStorei( GL_UNPACK_ALIGNMENT, align );
+			glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
+			glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
+
+			glTexImage2D( GL_TEXTURE_2D, 0, internalformat,
+			              w, h, 0,
+			              format, type,
+			              data );
+#ifdef MULTI_THREAD
+		} else {
+			UploadInfo i;
+			i.page = tex.page;
+			i.w = w;
+			i.h = h;
+			i.pitch = pitch;
+			i.align = align;
+			i.internalformat = internalformat;
+			i.format = format;
+			i.type = type;
+			i.data.resize( size );
+			memcpy( i.data.data(), data, size );
+			MUTEX_LOCK( mutex );
+			uploads.emplace_back( i );
+			MUTEX_UNLOCK( mutex );
+		}
+#endif
+	}
+
+	void uploadTextureData(TextureAtlas_Texname const &tex,
+	                       scr_coord_val w, scr_coord_val h,
+	                       scr_coord_val pitch, uint8_t align,
+	                       GLenum internalformat,
+	                       GLenum format, GLenum type,
+	                       std::vector<char> &&data)
+	{
+#ifdef MULTI_THREAD
+		assert( tex.atlas == atlasid );
+		if(  simgraph_main_thread == pthread_self() && false  ) {
+#endif
+			assert( gltexFromTexname( tex ) );
+			glBindTexture( GL_TEXTURE_2D, gltexFromTexname( tex ) );
+
+			glPixelStorei( GL_UNPACK_ROW_LENGTH, pitch );
+			glPixelStorei( GL_UNPACK_ALIGNMENT, align );
+			glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
+			glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
+
+			glTexImage2D( GL_TEXTURE_2D, 0, internalformat,
+			              w, h, 0,
+			              format, type,
+			              data.data() );
+#ifdef MULTI_THREAD
+		}
+		else {
+			UploadInfo i;
+			i.page = tex.page;
+			i.w = w;
+			i.h = h;
+			i.pitch = pitch;
+			i.align = align;
+			i.internalformat = internalformat;
+			i.format = format;
+			i.type = type;
+			i.data = std::move( data );
+			MUTEX_LOCK( mutex );
+			uploads.emplace_back( i );
+			MUTEX_UNLOCK( mutex );
+		}
+#endif
+	}
+
+
+};
 
 struct PIX32
 {
@@ -893,7 +1182,6 @@ struct PIX32
 };
 struct ArrayInfo
 {
-	TextureAtlas_Texname tex;
 	uint64_t hash;
 	int change_ctr;
 	int use_ctr;
@@ -916,7 +1204,7 @@ static GLcolorf makeColor_rgb(PIXVAL colval)
 struct DrawCommandKey {
 	constant_clipping_info_t cr;
 	TextureAtlas_Texname tex;
-	GLuint rgbmap_tex;
+	TextureAtlas_Texname rgbmap_tex;
 	TextureAtlas_Texname alphatex;
 	unsigned int uses_tex: 1;
 	unsigned int uses_rgbmap_tex: 1;
@@ -1055,23 +1343,19 @@ inline PIXVAL rgb_shr2(PIXVAL c) { return (c >> 2) & TWO_OUT; }
  *
  * see also descriptor/writer/image_writer.cc: pixrgb_to_pixval() for the generator
  */
+#ifdef MULTI_THREAD
+static pthread_mutex_t rgbmap_mutex = PTHREAD_MUTEX_INITIALIZER;
+#endif
+
 static PIXVAL rgbmap_day_night[RGBMAPSIZE];
-static GLuint rgbmap_day_night_tex;
+static TextureAtlas_Texname rgbmap_day_night_tex;
 
 
 /*
  * same as rgbmap_day_night, but always daytime colors
  */
 static PIXVAL rgbmap_all_day[RGBMAPSIZE];
-static GLuint rgbmap_all_day_tex;
-
-/*
- * used by pixel copy functions, is one of rgbmap_day_night
- * rgbmap_all_day
- */
-static PIXVAL *rgbmap_current = 0;
-static GLuint rgbmap_current_tex;
-
+static TextureAtlas_Texname rgbmap_all_day_tex;
 
 /*
  * mapping table for special-colors (AI player colors)
@@ -1134,13 +1418,15 @@ static scr_coord_val disp_height = 480;
  */
 static std::vector<imd> images;
 
-static std::unordered_map<uint64_t, GLuint> rgbmap_cache;
-static std::unordered_map<void const *,ArrayInfo> arrayInfo;
 #define CHARATLASID 1
 #define RGBAATLASID 2
-#define UNTILEDATLASID 3
-static TextureAtlas<uint32_t> charatlas(GL_ALPHA, GL_ALPHA, 1024, 1024, GL_UNSIGNED_BYTE, CHARATLASID);
-static TextureAtlas<uintptr_t> rgbaatlas(GL_RGBA, GL_RGBA, 4096, 4096, GL_UNSIGNED_BYTE, RGBAATLASID);
+#define RGBMAPATLASID 4
+#define ARRAYATLASID 5
+static TiledTextureAtlas<uint32_t> charatlas(GL_ALPHA, GL_ALPHA, 1024, 1024, GL_UNSIGNED_BYTE, CHARATLASID);
+static TiledTextureAtlas<uintptr_t> rgbaatlas(GL_RGBA, GL_RGBA, 4096, 4096, GL_UNSIGNED_BYTE, RGBAATLASID);
+static UntiledTextureAtlas<uint64_t> rgbmap_cache(RGBMAPATLASID);
+static std::unordered_map<void const *,ArrayInfo> arrayInfo;
+static UntiledTextureAtlas<void const *> arrayatlas(ARRAYATLASID);
 
 static uint8 player_night=0xFF;
 static uint8 player_day=0xFF;
@@ -1370,6 +1656,29 @@ static GLuint copy_a_position_Location;
 
 extern GLfloat gl_MVP_mat[];
 
+#ifdef MULTI_THREAD
+bool TextureAtlas_Texname::sane() const
+{
+	if(  !valid  ) {
+		return true;
+	}
+	if(  gltex != 0  ) {
+		return true;
+	}
+	switch( atlas ) {
+	case CHARATLASID:
+		return charatlas.need_gen_tex;
+	case RGBAATLASID:
+		return rgbaatlas.need_gen_tex;
+	case RGBMAPATLASID:
+		return rgbmap_cache.need_gen_tex;
+	case ARRAYATLASID:
+		return arrayatlas.need_gen_tex;
+	default:
+		return false;
+	}
+}
+#endif
 
 static inline rgb888_t pixval_to_rgb888(PIXVAL colour)
 {
@@ -2071,15 +2380,20 @@ static void runDrawCommand(DrawCommand const &cmd, GLint vertex_first, GLint ver
 
 	if(  cmd.key.uses_tex  ) {
 		glActiveTextureARB( GL_TEXTURE0_ARB );
+		assert( !isValidTexname( cmd.key.tex ) ||
+		        gltexFromTexname( cmd.key.tex ) != 0 );
 		glBindTexture( GL_TEXTURE_2D, gltexFromTexname( cmd.key.tex ) );
 	}
 	if(  cmd.key.uses_rgbmap_tex  ) {
 		glActiveTextureARB( GL_TEXTURE1_ARB );
-		glBindTexture( GL_TEXTURE_2D, cmd.key.rgbmap_tex );
+		assert( !isValidTexname( cmd.key.rgbmap_tex ) ||
+		        gltexFromTexname( cmd.key.rgbmap_tex ) != 0 );
+		glBindTexture( GL_TEXTURE_2D, gltexFromTexname( cmd.key.rgbmap_tex ) );
 	}
 	if(  cmd.key.uses_alphatex  ) {
 		glActiveTextureARB( GL_TEXTURE2_ARB );
-		assert( gltexFromTexname( cmd.key.alphatex ) );
+		assert( !isValidTexname( cmd.key.alphatex ) ||
+		        gltexFromTexname( cmd.key.alphatex ) != 0 );
 		glBindTexture( GL_TEXTURE_2D, gltexFromTexname( cmd.key.alphatex ) );
 	}
 
@@ -2143,14 +2457,24 @@ template<> struct hash< DrawCommandKey >
 		std::size_t h = 0;
 #ifdef MULTI_THREAD
 		h += k.alphatex.page;
+		h = h * 8 + (h >> 20);
+		h += k.alphatex.atlas;
 #else
 		h += gltexFromTexname( k.alphatex );
 #endif
 		h = h * 8 + (h >> 20);
-		h += k.rgbmap_tex;
+#ifdef MULTI_THREAD
+		h += k.rgbmap_tex.page;
+		h = h * 8 + (h >> 20);
+		h += k.rgbmap_tex.atlas;
+#else
+		h += gltexFromTexname( k.rgbmap_tex );
+#endif
 		h = h * 8 + (h >> 20);
 #ifdef MULTI_THREAD
 		h += k.tex.page;
+		h = h * 8 + (h >> 20);
+		h += k.tex.atlas;
 #else
 		h += gltexFromTexname( k.tex );
 #endif
@@ -2638,13 +2962,50 @@ static void flushDrawCommands(DrawCommandKey const &key,
 	runDrawCommand( cmd, 0, cmd_count * 6 - 2 );
 }
 
+#ifdef MULTI_THREAD
+static void upgradeTexname(TextureAtlas_Texname &tex) {
+	if(  !isValidTexname(tex) || gltexFromTexname( tex ) != 0  ) {
+		return;
+	}
+	switch( tex.atlas )
+	{
+	case CHARATLASID:
+		charatlas.updateTexname( tex );
+		break;
+	case RGBAATLASID:
+		rgbaatlas.updateTexname( tex );
+		break;
+	case RGBMAPATLASID:
+		rgbmap_cache.updateTexname( tex );
+		break;
+	case ARRAYATLASID:
+		arrayatlas.updateTexname( tex );
+		break;
+	default:
+		assert( false );
+	}
+	assert( gltexFromTexname( tex ) != 0 );
+}
+#endif
+
 static void flushDrawCommands()
 {
 #ifdef MULTI_THREAD
-
 	MUTEX_LOCK( drawCommandBatches.mutex );
-
-	if(  rgbaatlas.realizeTexPages() || charatlas.realizeTexPages()  ) {
+	bool have_new_tex = false;
+	if(  charatlas.realizeTexPages()  ) {
+		have_new_tex = true;
+	}
+	if(  rgbaatlas.realizeTexPages()  ) {
+		have_new_tex = true;
+	}
+	if(  arrayatlas.realizeTexPages()  ) {
+		have_new_tex = true;
+	}
+	if(  rgbmap_cache.realizeTexPages()  ) {
+		have_new_tex = true;
+	}
+	if(  have_new_tex  ) {
 		for(  auto &batch : drawCommandBatches.batches  ) {
 			std::vector< std::pair<simgraphgl::DrawCommandKey, DrawCommandList> > unordered_reinserts;
 			for(  auto it = batch.unordered_list.begin();
@@ -2652,43 +3013,18 @@ static void flushDrawCommands()
 				if(  ( isValidTexname( it->first.alphatex ) &&
 				                gltexFromTexname( it->first.alphatex ) == 0 ) ||
 				                ( isValidTexname( it->first.tex ) &&
-				                  gltexFromTexname( it->first.tex ) == 0 )  ) {
+				                  gltexFromTexname( it->first.tex ) == 0 ) ||
+				                ( isValidTexname( it->first.rgbmap_tex ) &&
+				                  gltexFromTexname( it->first.rgbmap_tex ) == 0 )  ) {
 					DrawCommandKey key = it->first;
-					DrawCommandList c = it->second;
+					DrawCommandList const &c = it->second;
 
-					if(  isValidTexname( key.alphatex ) &&
-					                gltexFromTexname( key.alphatex ) == 0  ) {
-						switch( key.alphatex.atlas )
-						{
-						case CHARATLASID:
-							charatlas.updateTexname( key.alphatex );
-							break;
-						case RGBAATLASID:
-							rgbaatlas.updateTexname( key.alphatex );
-							break;
-						default:
-							assert( false );
-						}
-					}
+					upgradeTexname( key.alphatex );
+					upgradeTexname( key.tex );
+					upgradeTexname( key.rgbmap_tex );
 
-					if(  isValidTexname( key.tex ) &&
-					                gltexFromTexname( key.tex ) == 0  ) {
-						switch( key.tex.atlas )
-						{
-						case CHARATLASID:
-							charatlas.updateTexname( key.tex );
-							break;
-						case RGBAATLASID:
-							rgbaatlas.updateTexname( key.tex );
-							break;
-						default:
-							assert( false );
-						}
-					}
-
-					unordered_reinserts.emplace_back( std::make_pair(
-					                key, c
-					                               ) );
+					unordered_reinserts.emplace_back
+					( std::make_pair( key, c ) );
 
 					it = batch.unordered_list.erase( it );
 				}
@@ -2704,40 +3040,28 @@ static void flushDrawCommands()
 				if(  ( isValidTexname( key.alphatex ) &&
 				                gltexFromTexname( key.alphatex ) == 0 ) ||
 				                ( isValidTexname( key.tex ) &&
-				                  gltexFromTexname( key.tex ) == 0 )  ) {
-					if(  isValidTexname( key.alphatex ) &&
-					                gltexFromTexname( key.alphatex ) == 0  ) {
-						switch( key.alphatex.atlas )
-						{
-						case CHARATLASID:
-							charatlas.updateTexname( key.alphatex );
-							break;
-						case RGBAATLASID:
-							rgbaatlas.updateTexname( key.alphatex );
-							break;
-						default:
-							assert( false );
-						}
-					}
-
-					if(  isValidTexname( key.tex ) &&
-					                gltexFromTexname( key.tex ) == 0  ) {
-						switch( key.tex.atlas )
-						{
-						case CHARATLASID:
-							charatlas.updateTexname( key.tex );
-							break;
-						case RGBAATLASID:
-							rgbaatlas.updateTexname( key.tex );
-							break;
-						default:
-							assert( false );
-						}
-					}
+				                  gltexFromTexname( key.tex ) == 0 ) ||
+				                ( isValidTexname( key.rgbmap_tex ) &&
+				                  gltexFromTexname( key.rgbmap_tex ) == 0 ) ) {
+					upgradeTexname( key.alphatex );
+					upgradeTexname( key.tex );
+					upgradeTexname( key.rgbmap_tex );
 				}
 			}
 		}
+
+		for(  auto &i : images  ) {
+			upgradeTexname( i.base_tex );
+			upgradeTexname( i.index_tex );
+		}
+
+		upgradeTexname( rgbmap_day_night_tex );
+		upgradeTexname( rgbmap_all_day_tex );
 	}
+	charatlas.uploadUploads();
+	rgbaatlas.uploadUploads();
+	arrayatlas.uploadUploads();
+	rgbmap_cache.uploadUploads();
 #endif
 
 	//setup uniforms that stay static for the duration of the flush
@@ -2872,6 +3196,10 @@ static void queueDrawCommand(DrawCommandKey const &key,
                              GLcolorf color
                              CLIP_NUM_DEF )
 {
+#ifdef MULTI_THREAD
+	assert( key.tex.sane() );
+	assert( key.alphatex.sane() );
+#endif
 	drawCommandBatches.addDrawCommand( key,
 	                                   vx1, vy1, vx2, vy2,
 	                                   tx1, ty1, tx2, ty2,
@@ -2909,6 +3237,10 @@ static void queueDrawCommand(DrawCommandKey const &key,
                              GLcolorf color
                              CLIP_NUM_DEF )
 {
+#ifdef MULTI_THREAD
+	assert( key.tex.sane() );
+	assert( key.alphatex.sane() );
+#endif
 	drawCommandBatches.addDrawCommand( key,
 	                                   vx1, vy1, vx2, vy2, vx3, vy3, vx4, vy4,
 	                                   tx1, ty1, tx2, ty2, tx3, ty3, tx4, ty4,
@@ -2917,37 +3249,24 @@ static void queueDrawCommand(DrawCommandKey const &key,
 	                                   CLIP_NUM_PAR );
 }
 
-static void updateRGBMap(GLuint &tex, PIXVAL *rgbmap, uint64_t code)
+static void updateRGBMap(TextureAtlas_Texname &tex, PIXVAL *rgbmap, uint64_t code)
 {
-	if(  rgbmap_cache[code] != 0  ) {
-		tex = rgbmap_cache[code];
+	tex = rgbmap_cache.getTexture( code );
+	if(  isValidTexname( tex )  ) {
 		return;
 	}
-	assert( simgraph_main_thread == pthread_self() );
-	glGenTextures( 1, &tex );
+	tex = rgbmap_cache.createTexture( code );
 
 	scr_coord_val w = 256;
 	scr_coord_val h = 256;
 
-	glBindTexture( GL_TEXTURE_2D, tex );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
-
-	//now upload the array
-	glPixelStorei( GL_UNPACK_ROW_LENGTH, w );
-	glPixelStorei( GL_UNPACK_ALIGNMENT, 4 );
-	glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
-	glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
-
-	std::vector<PIX32> tmp;
-	tmp.resize( w * h );
+	std::vector<char> tmp;
+	tmp.resize( w * h * sizeof(PIX32) );
 	memset( tmp.data(), 0, w * h * sizeof(PIX32) );
 
 	/* the reference for these conversions must be
 	 * descriptor/writer/image_writer.cc: pixrgb_to_pixval() */
-	PIX32 *dst = tmp.data();
+	PIX32 *dst = (PIX32 *)tmp.data();
 	PIXVAL *src = rgbmap;
 	/* the rgbmap is converted straight to opaque colors */
 	for(  unsigned i = 0; i < RGBMAPSIZE; i++  ) {
@@ -2961,7 +3280,7 @@ static void updateRGBMap(GLuint &tex, PIXVAL *rgbmap, uint64_t code)
 	/* todo: transparent color handling should be moved to the callers.(still?) */
 	/* transparent special colors */
 	src = rgbmap + 0x8000;
-	dst = tmp.data() + 0x8020;
+	dst = ( (PIX32 *)tmp.data() ) + 0x8020;
 	for(  unsigned i = 0; i < SPECIAL; i++  ) {
 		PIXVAL col = *src++;
 		for(  unsigned a = 0; a < 31; a++  ) {
@@ -2973,7 +3292,7 @@ static void updateRGBMap(GLuint &tex, PIXVAL *rgbmap, uint64_t code)
 		}
 	}
 	//these probably are not supported in simgraph16.cc, but image_writer.cc: pixrgb_to_pixval() generates them.
-	dst = tmp.data() + 0x8020 + 31 * 31;
+	dst = ( (PIX32 *)tmp.data() ) + 0x8020 + 31 * 31;
 	/* regular transparent colors. mapping by replicating bits. */
 	for(  unsigned i = 0; i < 0x400; i++  ) {
 		//convert from RGB 343 to RGB 555 to index into rgbmap
@@ -2991,18 +3310,25 @@ static void updateRGBMap(GLuint &tex, PIXVAL *rgbmap, uint64_t code)
 		}
 	}
 
-	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0,
-	              GL_RGBA, GL_UNSIGNED_BYTE,
-	              tmp.data() );
-
-	rgbmap_cache[code] = tex;
+	rgbmap_cache.uploadTextureData( tex,
+	                                w, h,
+	                                w, 4, GL_RGBA,
+	                                GL_RGBA, GL_UNSIGNED_BYTE,
+	                                std::move( tmp ) );
 }
 
-static void activate_player_color(sint8 player_nr, bool daynight)
+static TextureAtlas_Texname activate_player_color(sint8 player_nr, bool daynight  CLIP_NUM_DEF)
 {
+#ifdef MULTI_THREAD
+	(void)clip_num;
+#endif
+	TextureAtlas_Texname rgbmap_current_tex;
 	// caches the last settings
 	//specialcolormap_all_day is constant
 	//specialcolormap_day_night depends on light_level, night_shift
+
+	MUTEX_LOCK( rgbmap_mutex );
+
 	if(  !daynight  ) {
 		if(  player_day != player_nr  ) {
 			int i;
@@ -3017,7 +3343,6 @@ static void activate_player_color(sint8 player_nr, bool daynight)
 			              ( player_offsets[player_day][1] << 8 )
 			            );
 		}
-		rgbmap_current = rgbmap_all_day;
 		rgbmap_current_tex = rgbmap_all_day_tex;
 	}
 	else {
@@ -3037,9 +3362,12 @@ static void activate_player_color(sint8 player_nr, bool daynight)
 			              ( player_offsets[player_night][1] << 8 )
 			            );
 		}
-		rgbmap_current = rgbmap_day_night;
 		rgbmap_current_tex = rgbmap_day_night_tex;
 	}
+
+	MUTEX_UNLOCK( rgbmap_mutex );
+
+	return rgbmap_current_tex;
 }
 
 
@@ -3163,6 +3491,7 @@ static void calc_base_pal_from_night_shift(const int night)
 	const int night2 = min( night, 4 );
 	const int day = 4 - night2;
 	unsigned int i;
+	assert( simgraph_main_thread == pthread_self() );
 
 	// constant multiplier 0,66 - dark night  255 will drop to 49, 55 to 10
 	//                     0,7  - dark, but all is visible     61        13
@@ -3263,7 +3592,12 @@ void display_day_night_shift(int night)
 {
 	if(  night != night_shift  ) {
 		night_shift = night;
-		calc_base_pal_from_night_shift( night );
+		MUTEX_LOCK( rgbmap_mutex );
+
+		calc_base_pal_from_night_shift(night);
+
+		MUTEX_UNLOCK( rgbmap_mutex );
+
 		mark_screen_dirty();
 	}
 }
@@ -3278,6 +3612,8 @@ void display_set_player_color_scheme(const int player, const uint8 col1, const u
 		player_offsets[player][1] = col2;
 		if(  player == player_day || player == player_night  ) {
 			// and recalculate map (and save it)
+			MUTEX_LOCK( rgbmap_mutex );
+
 			calc_base_pal_from_night_shift( 0 );
 			memcpy( rgbmap_all_day, rgbmap_day_night, RGBMAPSIZE * sizeof(PIXVAL) );
 			if(  night_shift != 0  ) {
@@ -3290,6 +3626,8 @@ void display_set_player_color_scheme(const int player, const uint8 col1, const u
 			              player_offsets[player][0] |
 			              ( player_offsets[player][1] << 8 )
 			            );
+
+			MUTEX_UNLOCK( rgbmap_mutex );
 		}
 		mark_screen_dirty();
 	}
@@ -3434,6 +3772,7 @@ static void createBaseImgTex(unsigned int image_idx)
 
 void register_image(image_t *image_in)
 {
+	assert( simgraph_main_thread == pthread_self() );
 	struct imd *image;
 
 	/* valid image? */
@@ -3551,16 +3890,17 @@ static TextureAtlas_Texname getArrayTex(const PIXVAL *arr,
 		return invalidTexname();
 	}
 	size_t byte_size = w * h * sizeof(PIXVAL);
+	TextureAtlas_Texname atlastexname = arrayatlas.getTexture( (void const *)arr );
 	auto it = arrayInfo.find( (void const *)arr );
 	if(  it == arrayInfo.end()  ) {
+		assert( !isValidTexname( atlastexname ) );
 		it = arrayInfo.insert( std::make_pair
 		                       ( (void const *)arr, ArrayInfo() ) ).first;
-		it->second.tex = invalidTexname();
 		it->second.hash = tex_hash( arr, byte_size );
 		it->second.use_ctr = 1;
 		it->second.change_ctr = 1;
 	}
-	else if(  !isValidTexname( it->second.tex )  ) {
+	else if(  !isValidTexname( atlastexname )  ) {
 		TextureAtlas_Texname texname = rgbaatlas.getTexture( (uintptr_t)arr,
 		                               tcx, tcy, tcw, tch );
 		if(  isValidTexname(texname)  ) {
@@ -3582,24 +3922,12 @@ static TextureAtlas_Texname getArrayTex(const PIXVAL *arr,
 			else {
 				rgbaatlas.destroyTexture( (uintptr_t)arr );
 
-				assert( simgraph_main_thread == pthread_self() );
-#ifdef MULTI_THREAD
-				texname.valid = 1;
-				texname.page = ~0;
-				texname.atlas = UNTILEDATLASID;
-#endif
-				glGenTextures( 1, &gltexFromTexname( texname ) );
-				glBindTexture( GL_TEXTURE_2D, gltexFromTexname( texname ) );
-				glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-				glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
-				glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
-				glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
-				it->second.tex = texname;
+				atlastexname = arrayatlas.createTexture( (void const *)arr );
 			}
 		}
 	}
 
-	if(  !isValidTexname( it->second.tex )  ) {
+	if(  !isValidTexname( atlastexname )  ) {
 		unsigned int tex_x, tex_y;
 		TextureAtlas_Texname texname = rgbaatlas.createTexture(
 		                (uintptr_t)arr,
@@ -3617,43 +3945,21 @@ static TextureAtlas_Texname getArrayTex(const PIXVAL *arr,
 		else {
 			rgbaatlas.destroyTexture( (uintptr_t)arr );
 
-			TextureAtlas_Texname texname;
-			assert( simgraph_main_thread == pthread_self() );
-			glGenTextures( 1, &gltexFromTexname( texname ) );
-#ifdef MULTI_THREAD
-			texname.valid = 1;
-			texname.page = ~0;
-			texname.atlas = UNTILEDATLASID;
-#endif
-			glBindTexture( GL_TEXTURE_2D, gltexFromTexname( texname ) );
-			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
-			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
-			glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
-			it->second.tex = texname;
+			atlastexname = arrayatlas.createTexture( (void const *)arr );
 		}
 	}
-	assert( simgraph_main_thread == pthread_self() );
-	TextureAtlas_Texname texname = it->second.tex;
-	assert( gltexFromTexname( texname ) );
-	glBindTexture( GL_TEXTURE_2D, gltexFromTexname( texname ) );
 
-	//now upload the array
-	glPixelStorei( GL_UNPACK_ROW_LENGTH, w );
-	glPixelStorei( GL_UNPACK_ALIGNMENT, 2 );
-	glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
-	glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
-
-	//this already uses raw RGB 565 as defined by get_system_color
-	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0,
-	              GL_RGB, GL_UNSIGNED_SHORT_5_6_5,
-	              arr );
+	arrayatlas.uploadTextureData( atlastexname,
+	                              w, h,
+	                              w, 2, GL_RGBA, GL_RGB, GL_UNSIGNED_SHORT_5_6_5,
+	                              arr, byte_size
+	                            );
 
 	tcx = 0;
 	tcy = 0;
 	tcw = 1;
 	tch = 1;
-	return texname;
+	return atlastexname;
 }
 
 static TextureAtlas_Texname getGlyphTex(uint32_t c, const font_t *fnt,
@@ -3707,7 +4013,6 @@ static TextureAtlas_Texname getGlyphTex(uint32_t c, const font_t *fnt,
 
 static void display_img_pc(const image_id n,
                            scr_coord_val xp, scr_coord_val yp, float zoom,
-                           GLuint rgbmap_tex,
                            sint8 player_nr, bool daynight
                            CLIP_NUM_DEF)
 {
@@ -3740,7 +4045,8 @@ static void display_img_pc(const image_id n,
 		GLfloat tex_yscale = tex_h / rh;
 
 		// colors for 2nd company color
-		activate_player_color( player_nr, daynight );
+		TextureAtlas_Texname rgbmap_tex =
+		activate_player_color( player_nr, daynight CLIP_NUM_PAR );
 
 		DrawCommandKey cmdkey;
 		cmdkey.cr = CR;
@@ -3814,10 +4120,8 @@ void display_img_aux(const image_id n, scr_coord_val xp, scr_coord_val yp, const
 
 		// now, since zooming may have change this image
 		float zoom = get_img_zoom( n );
-
 		display_img_pc( n,
 		                xp, yp, zoom,
-		                rgbmap_day_night_tex,
 		                use_player, true
 		                CLIP_NUM_PAR );
 	}
@@ -4005,7 +4309,6 @@ void display_color_img(const image_id n, scr_coord_val xp, scr_coord_val yp, sin
 			// color replacement needs the original data => sp points to non-cached data
 			display_img_pc( n,
 			                xp, yp, 1.0f,
-			                rgbmap_current_tex,
 			                player_nr >= 0 ? player_nr : 0, daynight
 			                CLIP_NUM_PAR );
 		}
@@ -4026,7 +4329,6 @@ void display_base_img(const image_id n, scr_coord_val xp, scr_coord_val yp, cons
 		// color replacement needs the original data => sp points to non-cached data
 		display_img_pc( n,
 		                xp, yp, 1.0f,
-		                rgbmap_current_tex,
 		                player_nr >= 0 ? player_nr : 0, daynight
 		                CLIP_NUM_PAR );
 	} // number ok
@@ -4087,7 +4389,7 @@ void display_blend_wh_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, s
 		DrawCommandKey cmdkey;
 		cmdkey.cr.poly_active = 0;
 		cmdkey.tex = invalidTexname();
-		cmdkey.rgbmap_tex = 0;
+		cmdkey.rgbmap_tex = invalidTexname();
 		cmdkey.alphatex = invalidTexname();
 		cmdkey.uses_tex = 1;
 		cmdkey.uses_rgbmap_tex = 0;
@@ -4116,7 +4418,8 @@ void display_blend_wh_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, s
 static void display_img_blend_wc(const image_id n,
                                  scr_coord_val xp, scr_coord_val yp,
                                  scr_coord_val w, scr_coord_val h,
-                                 GLuint rgbmap_tex, float alpha  CLIP_NUM_DEF)
+                                 TextureAtlas_Texname rgbmap_tex,
+                                 float alpha  CLIP_NUM_DEF)
 {
 	TextureAtlas_Texname tex = images[n].index_tex;
 	GLfloat x1 = images[n].index_x1;
@@ -4177,7 +4480,7 @@ static void display_img_blend_wc_colour(const image_id n,
 		DrawCommandKey cmdkey;
 		cmdkey.cr.poly_active = 0;
 		cmdkey.tex = tex;
-		cmdkey.rgbmap_tex = 0;
+		cmdkey.rgbmap_tex = invalidTexname();
 		cmdkey.alphatex = invalidTexname();
 		cmdkey.uses_tex = 1;
 		cmdkey.uses_rgbmap_tex = 0;
@@ -4207,7 +4510,8 @@ static void display_img_blend_wc_colour(const image_id n,
 static void display_img_alpha_wc(const image_id n, const image_id alpha_n,
                                  scr_coord_val xp, scr_coord_val yp,
                                  scr_coord_val w, scr_coord_val h,
-                                 GLuint rgbmap_tex, const uint8 alpha_flags,
+                                 TextureAtlas_Texname rgbmap_tex,
+                                 const uint8 alpha_flags,
                                  PIXVAL  CLIP_NUM_DEF)
 {
 	//more exact: r/g/b channel from alphatex is selected by alpha_flags
@@ -4299,11 +4603,17 @@ void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_va
 			                             CLIP_NUM_PAR );
 		}
 		else {
+			MUTEX_LOCK( rgbmap_mutex );
+
+			TextureAtlas_Texname rgbmap_tex = rgbmap_day_night_tex;
+
+			MUTEX_UNLOCK( rgbmap_mutex );
+
 			display_img_blend_wc( n,
 			                      xp, yp,
 			                      ceil( images[n].base_w * zoom ),
 			                      ceil( images[n].base_h * zoom ),
-			                      rgbmap_day_night_tex, alpha
+			                      rgbmap_tex, alpha
 			                      CLIP_NUM_PAR );
 		}
 	}
@@ -4334,12 +4644,19 @@ void display_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const 
 			createBaseImgTex( alpha_n );
 		}
 
+		MUTEX_LOCK( rgbmap_mutex );
+
+		TextureAtlas_Texname rgbmap_tex = rgbmap_day_night_tex;
+
+		MUTEX_UNLOCK( rgbmap_mutex );
+
 		display_img_alpha_wc( n, alpha_n,
 		                      xp, yp,
 		                      ceil( images[n].base_w * zoom ),
 		                      ceil( images[n].base_h * zoom ),
-		                      rgbmap_day_night_tex, alpha_flags,
-		                      color  CLIP_NUM_PAR );
+		                      rgbmap_tex,
+		                      alpha_flags, color
+		                      CLIP_NUM_PAR );
 	}
 }
 
@@ -4375,18 +4692,19 @@ void display_base_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp
 			}
 			if(  !( color_index & OUTLINE_FLAG )  ) {
 				// colors for 2nd company color
+				TextureAtlas_Texname rgbmap_tex;
 				if(  player_nr >= 0  ) {
-					activate_player_color( player_nr, daynight );
+					rgbmap_tex = activate_player_color( player_nr, daynight CLIP_NUM_PAR );
 				}
 				else {
 					// no player
-					activate_player_color( 0, daynight );
+					rgbmap_tex = activate_player_color( 0, daynight CLIP_NUM_PAR );
 				}
 				display_img_blend_wc( n,
 				                      x, y,
 				                      images[n].base_w,
 				                      images[n].base_h,
-				                      rgbmap_current_tex, alpha
+				                      rgbmap_tex, alpha
 				                      CLIP_NUM_PAR );
 			}
 			else {
@@ -4425,12 +4743,13 @@ void display_base_img_alpha(const image_id n, const image_id alpha_n, const unsi
 			const PIXVAL color = color_index & 0xFFFF;
 
 			// colors for 2nd company color
+			TextureAtlas_Texname rgbmap_tex;
 			if(  player_nr >= 0  ) {
-				activate_player_color( player_nr, daynight );
+				rgbmap_tex = activate_player_color( player_nr, daynight CLIP_NUM_PAR );
 			}
 			else {
 				// no player
-				activate_player_color( 0, daynight );
+				rgbmap_tex = activate_player_color( 0, daynight CLIP_NUM_PAR );
 			}
 			if(  !isValidTexname( images[n].index_tex )  ) {
 				createIndexImgTex( n );
@@ -4442,8 +4761,9 @@ void display_base_img_alpha(const image_id n, const image_id alpha_n, const unsi
 			display_img_alpha_wc( n, alpha_n,
 			                      x, y,
 			                      images[n].base_w, images[n].base_h,
-			                      rgbmap_current_tex, alpha_flags,
-			                      color  CLIP_NUM_PAR );
+			                      rgbmap_tex,
+			                      alpha_flags, color
+			                      CLIP_NUM_PAR );
 		}
 	} // number ok
 }
@@ -4482,7 +4802,7 @@ static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_va
 		DrawCommandKey cmdkey;
 		cmdkey.cr.poly_active = 0;
 		cmdkey.tex = invalidTexname();
-		cmdkey.rgbmap_tex = 0;
+		cmdkey.rgbmap_tex = invalidTexname();
 		cmdkey.alphatex = invalidTexname();
 		cmdkey.uses_tex = 1;
 		cmdkey.uses_rgbmap_tex = 0;
@@ -4536,7 +4856,7 @@ static void display_vl_internal(const scr_coord_val xp, scr_coord_val yp, scr_co
 		DrawCommandKey cmdkey;
 		cmdkey.cr.poly_active = 0;
 		cmdkey.tex = invalidTexname();
-		cmdkey.rgbmap_tex = 0;
+		cmdkey.rgbmap_tex = invalidTexname();
 		cmdkey.alphatex = invalidTexname();
 		cmdkey.uses_tex = 1;
 		cmdkey.uses_rgbmap_tex = 0;
@@ -4589,7 +4909,7 @@ void display_array_wh(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_c
 		DrawCommandKey cmdkey;
 		cmdkey.cr.poly_active = 0;
 		cmdkey.tex = texname;
-		cmdkey.rgbmap_tex = 0;
+		cmdkey.rgbmap_tex = invalidTexname();
 		cmdkey.alphatex = invalidTexname();
 		cmdkey.uses_tex = 1;
 		cmdkey.uses_rgbmap_tex = 0;
@@ -4914,7 +5234,7 @@ scr_coord_val display_text_proportional_len_clip_rgb(scr_coord_val x, scr_coord_
 				DrawCommandKey cmdkey;
 				cmdkey.cr.poly_active = 0;
 				cmdkey.tex = texname;
-				cmdkey.rgbmap_tex = 0;
+				cmdkey.rgbmap_tex = invalidTexname();
 				cmdkey.alphatex = invalidTexname();
 				cmdkey.uses_tex = 1;
 				cmdkey.uses_rgbmap_tex = 0;
@@ -5266,7 +5586,7 @@ void display_direct_line_rgb(const scr_coord_val x, const scr_coord_val y, const
 	DrawCommandKey cmdkey;
 	cmdkey.cr.poly_active = 0;
 	cmdkey.tex = invalidTexname();
-	cmdkey.rgbmap_tex = 0;
+	cmdkey.rgbmap_tex = invalidTexname();
 	cmdkey.alphatex = invalidTexname();
 	cmdkey.uses_tex = 1;
 	cmdkey.uses_rgbmap_tex = 0;
@@ -5802,7 +6122,7 @@ static void display_quad_rgb(scr_coord_val x0, scr_coord_val y0,
 	DrawCommandKey cmdkey;
 	cmdkey.cr.poly_active = 0;
 	cmdkey.tex = invalidTexname();
-	cmdkey.rgbmap_tex = 0;
+	cmdkey.rgbmap_tex = invalidTexname();
 	cmdkey.alphatex = invalidTexname();
 	cmdkey.uses_tex = 1;
 	cmdkey.uses_rgbmap_tex = 0;
@@ -6285,6 +6605,7 @@ bool simgraph_init(scr_size window_size, sint16 full_screen)
 	display_day_night_shift( 0 );
 	memcpy( specialcolormap_all_day, specialcolormap_day_night, 256 * sizeof(PIXVAL) );
 	memcpy( rgbmap_all_day, rgbmap_day_night, RGBMAPSIZE * sizeof(PIXVAL) );
+	assert( simgraph_main_thread == pthread_self() );
 	updateRGBMap( rgbmap_all_day_tex, rgbmap_all_day, 0 );
 
 	glGenBuffers( 1, &gl_indices_buffer_name );
@@ -6342,6 +6663,8 @@ void simgraph_exit()
 	assert( simgraph_main_thread == pthread_self() );
 	rgbaatlas.clear();
 	charatlas.clear();
+	arrayatlas.clear();
+	rgbmap_cache.clear();
 
 	display_free_all_images_above( 0 );
 	images.clear();
