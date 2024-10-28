@@ -18,11 +18,11 @@
  /*
   * Zoom factor (must be done before including simgraph)
   */
-#define MAX_ZOOM_FACTOR (10)
+#define MAX_ZOOM_FACTOR (12)
 #define ZOOM_NEUTRAL (3)
 uint32 zoom_factor = ZOOM_NEUTRAL;
-extern const sint32 zoom_num[MAX_ZOOM_FACTOR + 1] = { 2, 3, 4, 1, 3, 5, 1, 3, 1, 3, 1 };
-extern const sint32 zoom_den[MAX_ZOOM_FACTOR + 1] = { 1, 2, 3, 1, 4, 8, 2, 8, 4, 16, 8 };
+extern const sint32 zoom_num[MAX_ZOOM_FACTOR + 1] = { 2, 3, 4, 1, 3, 5, 1, 3, 1, 3, 1, 3, 1 };
+extern const sint32 zoom_den[MAX_ZOOM_FACTOR + 1] = { 1, 2, 3, 1, 4, 8, 2, 8, 4, 16, 8, 32, 16 };
 
 #include "../macros.h"
 #include "font.h"
