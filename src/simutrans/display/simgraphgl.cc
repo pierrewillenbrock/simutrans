@@ -835,14 +835,17 @@ signed short current_tile_raster_width = 0;
 // s_texRGBMap: if gl_Color.a == 0.0
 static char const combined_fragmentShaderText[] =
 	"uniform sampler2D s_texColor,s_texAlpha,s_texRGBMap;\n"
+	"varying vec2 v_alpha_coord;\n"
+	"varying vec2 v_color_coord;\n"
+	"varying vec4 v_color;\n"
 	"varying vec4 v_alphaMask;\n"
 	"void main () {\n"
-	"   vec4 alpha = texture2D(s_texAlpha,gl_TexCoord[1].st);\n"
-	"   vec4 index = texture2D(s_texColor,gl_TexCoord[0].st);\n"
+	"   vec4 alpha = texture2D(s_texAlpha,v_alpha_coord);\n"
+	"   vec4 index = texture2D(s_texColor,v_color_coord);\n"
 	"   vec3 indexedrgb = texture2D(s_texRGBMap,index.st).rgb;\n"
 	"   vec3 rgb = indexedrgb;\n"
-	"   rgb = mix(rgb,gl_Color.rgb,gl_Color.a);\n" //handle gl_Color.a = 0 and 1
-	"   rgb = mix(index.rgb,rgb,abs(2.0*gl_Color.a-1.0));\n" //handle gl_Color.a = 0.5
+	"   rgb = mix(rgb,v_color.rgb,v_color.a);\n" //handle gl_Color.a = 0 and 1
+	"   rgb = mix(index.rgb,rgb,abs(2.0*v_color.a-1.0));\n" //handle gl_Color.a = 0.5
 	"   gl_FragColor.rgb = rgb;\n"
 	"   gl_FragColor.a = clamp(alpha.r * v_alphaMask.r +\n"
 	"                          alpha.g * v_alphaMask.g +\n"
@@ -852,13 +855,21 @@ static char const combined_fragmentShaderText[] =
 
 //vertex shader
 static char const vertexShaderText[] =
+	"attribute vec2 a_position;\n"
+	"attribute vec2 a_alpha_coord;\n"
+	"varying vec2 v_alpha_coord;\n"
+	"attribute vec2 a_color_coord;\n"
+	"varying vec2 v_color_coord;\n"
+	"attribute vec4 a_color;\n"
+	"varying vec4 v_color;\n"
 	"attribute vec4 a_alphaMask;\n"
 	"varying vec4 v_alphaMask;\n"
+	"uniform mat4 u_MVP;\n"
 	"void main () {\n"
-	"   gl_Position = ftransform();\n"
-	"   gl_TexCoord[0] = gl_TextureMatrix[0] * gl_MultiTexCoord0;\n"
-	"   gl_TexCoord[1] = gl_TextureMatrix[0] * gl_MultiTexCoord1;\n"
-	"   gl_FrontColor = gl_Color;\n"
+	"   gl_Position = u_MVP * vec4(a_position,0,1);\n"
+	"   v_alpha_coord = a_alpha_coord;\n"
+	"   v_color_coord = a_color_coord;\n"
+	"   v_color = a_color;\n"
 	"   v_alphaMask = a_alphaMask;\n"
 	"}\n";
 
@@ -866,7 +877,15 @@ static GLuint combined_program;
 static GLuint combined_s_texColor_Location;
 static GLuint combined_s_texRGBMap_Location;
 static GLuint combined_s_texAlpha_Location;
+static GLuint combined_u_MVP_Location;
+static GLuint combined_a_position_Location;
+static GLuint combined_a_alpha_coord_Location;
+static GLuint combined_a_color_coord_Location;
+static GLuint combined_a_color_Location;
 static GLuint combined_a_alphaMask_Location;
+
+extern GLfloat gl_MVP_mat[];
+
 
 static inline rgb888_t pixval_to_rgb888(PIXVAL colour)
 {
@@ -1308,6 +1327,10 @@ static void build_stencil_for(std::vector<GLvec2s> &vertices,
 static void build_stencil(int min_x, int min_y, int max_x, int max_y,
                           clipping_info_t const &cr)
 {
+	//using most of the "default" shader here, so the model/view/projection
+	//matrices must be setup.
+	glMatrixMode( GL_PROJECTION );
+	glLoadMatrixf( gl_MVP_mat );
 	glColorMask( 0, 0, 0, 0 );
 	glBindTexture( GL_TEXTURE_2D, 0 );
 	glEnable( GL_STENCIL_TEST );
@@ -1349,6 +1372,8 @@ static void build_stencil(int min_x, int min_y, int max_x, int max_y,
 
 	glDisable( GL_STENCIL_TEST );
 	glColorMask( 1, 1, 1, 1 );
+	glMatrixMode( GL_PROJECTION );
+	glLoadIdentity();
 }
 
 /*
@@ -1481,6 +1506,7 @@ static void setupCombinedShader()
 	glUniform1i( combined_s_texColor_Location, 0 );
 	glUniform1i( combined_s_texRGBMap_Location, 1 );
 	glUniform1i( combined_s_texAlpha_Location, 2 );
+	glUniformMatrix4fv( combined_u_MVP_Location, 1, GL_FALSE, &gl_MVP_mat[0] );
 
 	//the rest should be vertex attributes.
 
@@ -1490,29 +1516,24 @@ static void setupCombinedShader()
 	glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, gl_indices_buffer_name );
 	glBindBuffer( GL_ARRAY_BUFFER, gl_vertices_buffer_name );
 
-	glEnableClientState( GL_VERTEX_ARRAY );
-	glVertexPointer( 2, GL_SHORT, sizeof(CombinedVertex), (void *)offsetof( CombinedVertex, vertex ) );
-	glClientActiveTexture( GL_TEXTURE0 );
-	glEnableClientState( GL_TEXTURE_COORD_ARRAY );
-	glTexCoordPointer( 2, GL_FLOAT, sizeof(CombinedVertex), (void *)offsetof( CombinedVertex, texcoord ) );
-	glClientActiveTexture( GL_TEXTURE1 );
-	glEnableClientState( GL_TEXTURE_COORD_ARRAY );
-	glTexCoordPointer( 2, GL_FLOAT, sizeof(CombinedVertex), (void *)offsetof( CombinedVertex, alphacoord ) );
-	glEnableClientState( GL_COLOR_ARRAY );
-	glColorPointer( 4, GL_FLOAT, sizeof(CombinedVertex), (void *)offsetof( CombinedVertex, color ) );
-
+	glEnableVertexAttribArray( combined_a_position_Location );
+	glVertexAttribPointer( combined_a_position_Location, 2, GL_SHORT, GL_FALSE, sizeof(CombinedVertex), (void *)offsetof( CombinedVertex, vertex ) );
+	glEnableVertexAttribArray( combined_a_alpha_coord_Location );
+	glVertexAttribPointer( combined_a_alpha_coord_Location, 2, GL_FLOAT, GL_FALSE, sizeof(CombinedVertex), (void *)offsetof( CombinedVertex, alphacoord ) );
+	glEnableVertexAttribArray( combined_a_color_coord_Location );
+	glVertexAttribPointer( combined_a_color_coord_Location, 2, GL_FLOAT, GL_FALSE, sizeof(CombinedVertex), (void *)offsetof( CombinedVertex, texcoord ) );
+	glEnableVertexAttribArray( combined_a_color_Location );
+	glVertexAttribPointer( combined_a_color_Location, 4, GL_FLOAT, GL_FALSE, sizeof(CombinedVertex), (void *)offsetof( CombinedVertex, color ) );
 	glEnableVertexAttribArray( combined_a_alphaMask_Location );
 	glVertexAttribPointer( combined_a_alphaMask_Location, 4, GL_FLOAT, GL_FALSE, sizeof(CombinedVertex), (void *)offsetof( CombinedVertex, alpha ) );
 }
 
 static void disableShaders()
 {
-	glDisableClientState( GL_VERTEX_ARRAY );
-	glClientActiveTexture( GL_TEXTURE1 );
-	glDisableClientState( GL_TEXTURE_COORD_ARRAY );
-	glClientActiveTexture( GL_TEXTURE0 );
-	glDisableClientState( GL_TEXTURE_COORD_ARRAY );
-	glDisableClientState( GL_COLOR_ARRAY );
+	glDisableVertexAttribArray( combined_a_position_Location );
+	glDisableVertexAttribArray( combined_a_alpha_coord_Location );
+	glDisableVertexAttribArray( combined_a_color_coord_Location );
+	glDisableVertexAttribArray( combined_a_color_Location );
 	glDisableVertexAttribArray( combined_a_alphaMask_Location );
 
 	glUseProgram( 0 );
@@ -1660,9 +1681,13 @@ static void flushDrawCommands()
 	auto e = b;
 	unsigned int bno = 0;
 	unsigned int eno = bno;
-	while(  b != drawCommands.end() && bno < drawCommandsPos  ) {
-		for(  unsigned int i = 0; e != drawCommands.end() && i < gl_max_commands && eno < drawCommandsPos; i++, e++, eno++  ) {
+	while(  bno < drawCommandsPos  ) {
+		unsigned int batch_size = gl_max_commands;
+		if(  batch_size > drawCommandsPos-eno  ) {
+			batch_size = drawCommandsPos-eno;
 		}
+		e += batch_size;
+		eno += batch_size;
 		flushDrawCommands( b, e,
 		                   drawVertices.data() + bno * 4, ( eno - bno ) * 4 );
 		b = e;
@@ -3332,12 +3357,14 @@ void display_scroll_band(scr_coord_val start_y, scr_coord_val x_offset, scr_coor
 	glDisable( GL_BLEND );
 
 	if(  x_offset > 0  ) {
-		glRasterPos2i( 0,        start_y + h );
+		glRasterPos2f( -1,
+		               1.f - 2.0f / disp_height * ( start_y + h ) );
 		glCopyPixels( x_offset, disp_height - start_y - h,
 		              disp_width - x_offset, h, GL_COLOR );
 	}
 	else {
-		glRasterPos2i( x_offset, start_y + h );
+		glRasterPos2f( -1 + 2.0 / disp_width * x_offset,
+		               1.f - 2.0f / disp_height * ( start_y + h ) );
 		glCopyPixels( 0,        disp_height - start_y - h,
 		              disp_width + x_offset, h, GL_COLOR );
 	}
@@ -4483,6 +4510,11 @@ bool simgraph_init(scr_size window_size, sint16 full_screen)
 	combined_s_texColor_Location = glGetUniformLocation( combined_program, "s_texColor" );
 	combined_s_texRGBMap_Location = glGetUniformLocation( combined_program, "s_texRGBMap" );
 	combined_s_texAlpha_Location = glGetUniformLocation( combined_program, "s_texAlpha" );
+	combined_u_MVP_Location = glGetUniformLocation( combined_program, "u_MVP" );
+	combined_a_position_Location = glGetAttribLocation( combined_program, "a_position" );
+	combined_a_alpha_coord_Location = glGetAttribLocation( combined_program, "a_alpha_coord" );
+	combined_a_color_coord_Location = glGetAttribLocation( combined_program, "a_color_coord" );
+	combined_a_color_Location = glGetAttribLocation( combined_program, "a_color" );
 	combined_a_alphaMask_Location = glGetAttribLocation( combined_program, "a_alphaMask" );
 
 	// init, load, and check fonts
