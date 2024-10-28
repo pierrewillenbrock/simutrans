@@ -29,16 +29,18 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
+#include <vector>
+
+#include <GL/glew.h>
+#include <GL/gl.h>
+
 
 
 #ifdef MULTI_THREAD
 #include "../utils/simthread.h"
-#if defined _MSC_VER
-#include <intrin.h>
-#endif
 
 // currently just redrawing/rezooming
-static pthread_mutex_t rezoom_img_mutex[MAX_THREADS];
 static pthread_mutex_t recode_img_mutex;
 #endif
 
@@ -50,36 +52,16 @@ static pthread_mutex_t recode_img_mutex;
 #endif
 
 
-// undefine for debugging the update routines
-//#define DEBUG_FLUSH_BUFFER
-
 
 #ifdef USE_SOFTPOINTER
-static int softpointer = -1;
+#error SOFTPOINTER not supported
 #endif
 static int standard_pointer = -1;
 
+static void build_stencil_for(int _x0, int _y0, int _x1, int _y1,
+                              int min_x, int min_y, int max_x, int max_y);
 
-#ifdef USE_SOFTPOINTER
-/*
- * Icon bar needs to redrawn on mouse hover
- */
-int old_my = -1;
-#endif
-
-
-/*
- * struct to hold the information about visible area
- * at screen line y
- * associated to some clipline
- */
-struct xrange {
-	sint64 sx, sy;
-	scr_coord_val y;
-	bool non_convex_active;
-};
-
-
+namespace simgraphgl {
 class clip_line_t {
 private:
 	// line from (x0,y0) to (x1 y1)
@@ -87,126 +69,58 @@ private:
 	// pixels on the ray are not drawn
 	// (not_convex) if y0>=y1 then clip along the path (x0,-inf)->(x0,y0)->(x1,y1)
 	// (not_convex) if y0<y1  then clip along the path (x0,y0)->(x1,y1)->(x1,+inf)
-	int x0, y0;
-	int dx, dy;
-	sint64 sdy, sdx;
-	sint64 inc;
+	scr_coord_val x0, y0;
+	scr_coord_val x1, y1;
 	bool non_convex;
 
 public:
-	void clip_from_to(int x0_, int y0_, int x1, int y1, bool non_convex_) {
+	void clip_from_to(scr_coord_val x0_, scr_coord_val y0_, scr_coord_val x1_, scr_coord_val y1_, bool non_convex_)
+	{
 		x0 = x0_;
-		dx = x1 - x0;
+		x1 = x1_;
 		y0 = y0_;
-		dy = y1 - y0;
+		y1 = y1_;
 		non_convex = non_convex_;
-		int steps = ( abs( dx ) > abs( dy ) ? abs( dx ) : abs( dy ) );
-		if(  steps == 0  ) {
-			return;
-		}
-		sdx = ( (sint64)dx << 16 ) / steps;
-		sdy = ( (sint64)dy << 16 ) / steps;
-		// to stay right from the line
-		// left border: xmin <= x
-		// right border: x < xmax
-		if(  dy > 0  ) {
-			if(  dy > dx  ) {
-				inc = 1 << 16;
-			}
-			else {
-				inc = ( (sint64)dx << 16 ) / dy - ( 1 << 16 );
-			}
-		}
-		else if(  dy < 0  ) {
-			if(  dy < dx  ) {
-				inc = 0; // (+1)-1 << 16;
-			}
-			else {
-				inc = 0;
-			}
-		}
 	}
 
-	// clip if
-	// ( x-x0) . (  y1-y0 )
-	// ( y-y0) . (-(x1-x0)) < 0
-	// -- initialize the clipping
-	//    has to be called before image will be drawn
-	//    return interval for x coordinate
-	inline void get_x_range(scr_coord_val y, xrange &r, bool use_non_convex) const {
-		// do everything for the previous row
-		y--;
-		r.y = y;
-		r.non_convex_active = false;
-		if(  non_convex && use_non_convex && y < y0 && y < (y0 + dy)  ) {
-			r.non_convex_active = true;
-			y = min( y0, y0 + dy ) - 1;
-		}
-		if(  dy != 0  ) {
-			// init Bresenham algorithm
-			const sint64 t = ( ( (sint64)y - y0 ) << 16 ) / sdy;
-			// sx >> 16 = x
-			// sy >> 16 = y
-			r.sx = t * sdx + inc + ( (sint64)x0 << 16 );
-			r.sy = t * sdy + ( (sint64)y0 << 16 );
-		}
-	}
-
-	// -- step one line down, return interval for x coordinate
-	inline void inc_y(xrange &r, int &xmin, int &xmax) const {
-		r.y++;
-		// switch between clip vertical and along ray
-		if(  r.non_convex_active  ) {
-			if(  r.y == min( y0, y0 + dy )  ) {
-				r.non_convex_active = false;
-			}
-			else {
-				if(  dy < 0  ) {
-					const int r_xmax = x0 + dx;
-					if(  xmax > r_xmax  ) {
-						xmax = r_xmax;
-					}
-				}
-				else {
-					const int r_xmin = x0 + 1;
-					if(  xmin < r_xmin  ) {
-						xmin = r_xmin;
-					}
-				}
-				return;
-			}
-		}
-		// go along the ray, Bresenham
-		if(  dy != 0  ) {
-			if(  dy > 0  ) {
-				do {
-					r.sx += sdx;
-					r.sy += sdy;
-				} while(  ( r.sy >> 16 ) < r.y  );
-				const int r_xmin = r.sx >> 16;
-				if(  xmin < r_xmin  ) {
-					xmin = r_xmin;
+	void build_stencil(scr_coord_val min_x, scr_coord_val min_y, scr_coord_val max_x, scr_coord_val max_y) const
+	{
+		if(  non_convex  ) {
+			if(  y1 < y0  ) {
+				build_stencil_for(
+				                   x0, y0,
+				                   x1, y1,
+				                   min_x, y1,
+				                   max_x, max_y);
+				if(  min_y < y1  ) {
+					build_stencil_for(
+					                   x1,y1,
+					                   x1, min_y,
+					                   min_x, min_y,
+					                   max_x, y1);
 				}
 			}
 			else {
-				do {
-					r.sx -= sdx;
-					r.sy -= sdy;
-				} while(  ( r.sy >> 16 ) < r.y  );
-				const int r_xmax = r.sx >> 16;
-				if(  xmax > r_xmax  ) {
-					xmax = r_xmax;
+				if(  min_y < y0  ) {
+					build_stencil_for(
+					                   x0, min_y,
+					                   x0, y0,
+					                   min_x, min_y,
+					                   max_x, y0);
 				}
+				build_stencil_for(
+				                   x0, y0,
+				                   x1, y1,
+				                   min_x, y0,
+				                   max_x, max_y);
 			}
 		}
-		// horizontal clip
 		else {
-			const bool clip = dx * ( r.y - y0 ) > 0;
-			if(  clip  ) {
-				// invisible row
-				xmin = +1;
-				xmax = -1;
-			}
+			build_stencil_for(
+			                   x0, y0,
+			                   x1, y1,
+			                   min_x, min_y,
+			                   max_x, max_y);
 		}
 	}
 };
@@ -224,8 +138,29 @@ MSVC_ALIGN(64) struct clipping_info_t {
 	uint8 active_ribi;
 	uint8 clip_ribi[MAX_POLY_CLIPS];
 	clip_line_t poly_clips[MAX_POLY_CLIPS];
-	xrange xranges[MAX_POLY_CLIPS];
 } GCC_ALIGN(64); // aligned to separate cachelines
+
+//todo: use char pages and cache used glyphs there
+struct CharInfo {
+	GLuint texture;
+	GLfloat x, y, w, h;
+};
+struct CharPageInfo {
+	GLuint texture;
+	GLuint width, height;
+	GLuint curx, cury, lineheight;
+};
+
+struct PIX32
+{
+	uint8_t R;
+	uint8_t G;
+	uint8_t B;
+	uint8_t A;
+};
+}
+
+using namespace simgraphgl;
 
 #ifdef MULTI_THREAD
 clipping_info_t clips[MAX_THREADS];
@@ -242,6 +177,9 @@ static font_t default_font;
 // needed for resizing gui
 static int default_font_numberwidth = 0;
 
+
+#define LIGHT_COUNT (15)
+#define MAX_PLAYER_COUNT (16)
 
 #define RGBMAPSIZE (0x8000+LIGHT_COUNT+MAX_PLAYER_COUNT+1024 /* 343 transparent */)
 
@@ -277,11 +215,16 @@ inline PIXVAL rgb_shr2(PIXVAL c) { return (c >> 2) & TWO_OUT; }
  * mapping tables for RGB 555 to actual output format
  * plus the special (player, day&night) colors appended
  *
- * 0x0000 - 0x7FFF: RGB colors
+ * 0x0000 - 0x7FFF: RGB 555 colors
  * 0x8000 - 0x800F: Player colors
  * 0x8010 - 0x001F: Day&Night special colors
  * The following transparent colors are not in the colortable
- * 0x8020 - 0xFFE1: 3 4 3 RGB transparent colors in 31 transparency levels
+ * 0x8020 - 0x83E0: special colors in 31 transparency levels
+ * 0x83E1 - 0xFFE1: 3 4 3 RGB transparent colors in 31 transparency levels
+ * transparency levels are in 1/32nds to 31/32nds
+ * the 31 transparency levels for each color occupy consecutive indexes
+ *
+ * see also descriptor/writer/image_writer.cc: pixrgb_to_pixval() for the generator
  */
 static PIXVAL rgbmap_day_night[RGBMAPSIZE];
 
@@ -322,18 +265,15 @@ static uint8 player_offsets[MAX_PLAYER_COUNT][2];
  * Image map descriptor structure
  */
 struct imd {
-	sint16 x; // current (zoomed) min x offset
-	sint16 y; // current (zoomed) min y offset
-	sint16 w; // current (zoomed) width
-	sint16 h; // current (zoomed) height
-
 	uint8 recode_flags;
 	uint16 player_flags; // bit # is player number, ==1 cache image needs recoding
+	uint16 plain_tex_flags;
 
 	PIXVAL* data[MAX_PLAYER_COUNT]; // recoded screen space - zoomed and recolored (player + daynight)
 
-	STORED_PIXVAL* zoom_data; // zoomed original data, stored space
-	uint32 len;    // current zoom image data size (or base if not zoomed) (used for allocation purposes only)
+	STORED_PIXVAL* player_data; // current data coded for player1 (since many building belong to him), stored space
+
+	uint32 len; // base image data size (used for allocation purposes only)
 
 	sint16 base_x; // min x offset
 	sint16 base_y; // min y offset
@@ -341,6 +281,13 @@ struct imd {
 	sint16 base_h; // height
 
 	STORED_PIXVAL* base_data; // original image data, stored space
+
+	GLuint base_tex;
+	GLuint plain_tex[MAX_PLAYER_COUNT];
+
+	sint32 zoom_num;
+	sint32 zoom_den;
+	float zoom;
 };
 
 // Flags for recoding
@@ -358,13 +305,6 @@ static scr_coord_val disp_height        = 480; // window height
 
 
 /*
- * Static buffers for rezoom_img()
- */
-static uint8 *rezoom_baseimage[MAX_THREADS];
-static PIXVAL *rezoom_baseimage2[MAX_THREADS];
-static size_t rezoom_size[MAX_THREADS];
-
-/*
  * Image table
  */
 static struct imd* images = NULL;
@@ -380,27 +320,10 @@ static image_id anz_images = 0;
  */
 static image_id alloc_images = 0;
 
+static std::map<uint64_t,GLuint> arrayCache;
 
-/*
- * Output framebuffer
- */
-static PIXVAL* textur = NULL;
-
-
-/*
- * dirty tile management structures
- */
-#define DIRTY_TILE_SIZE 16
-#define DIRTY_TILE_SHIFT 4
-
-static uint32 *tile_dirty = NULL;
-static uint32 *tile_dirty_old = NULL;
-
-static int tiles_per_line = 0;
-static int tile_buffer_per_line = 0; // number of tiles that fit the allocated buffer per line - maintain alignment - x=0 is always first bit in a word for each row
-static int tile_lines = 0;
-static int tile_buffer_length = 0;
-
+static uint8 player_night=0xFF;
+static uint8 player_day=0xFF;
 
 static int light_level = 0;
 static int night_shift = -1;
@@ -587,8 +510,8 @@ simgraph_t g_simgraphgl = {
 	/*.draw_blend                =*/ NULL,
 	/*.draw_alpha                =*/ NULL,
 
-	/*.zoom_num =*/ { 2, 3, 4, 1, 3, 5, 1, 3, 1, 1 },
-	/*.zoom_den =*/ { 1, 2, 3, 1, 4, 8, 2, 8, 4, 8 },
+	/*.zoom_num =*/ { 2, 3, 4, 1, 3, 5, 1, 3, 1, 3, 1 },
+	/*.zoom_den =*/ { 1, 2, 3, 1, 4, 8, 2, 8, 4, 16, 8 },
 
 	/*.palette_lookup              =*/ simgraphgl_palette_lookup,
 	/*.palette_indexof             =*/ simgraphgl_palette_indexof,
@@ -681,6 +604,30 @@ simgraph_t g_simgraphgl = {
 
 static uint32 zoom_factor = ZOOM_NEUTRAL;
 
+
+// Pierre : glsl shaders for img_alpha
+static char const img_alpha_fragmentShaderText[] =
+	"uniform sampler2D texColor,texAlpha;\n"
+	"uniform vec4 alphaMask;\n"
+	"void main () {\n"
+	"   vec4 alpha = texture2D(texAlpha,gl_TexCoord[0].st);\n"
+	"   gl_FragColor = texture2D(texColor,gl_TexCoord[0].st);\n"
+	"   gl_FragColor.a = clamp((alpha.r * alphaMask.r) +\n"
+	"                          (alpha.g * alphaMask.g) +\n"
+	"                          (alpha.b * alphaMask.b), 0.0, 1.0);\n"
+	"}\n";
+
+static char const vertexShaderText[] =
+	"void main () {\n"
+	"   gl_Position = ftransform();\n"
+	"   gl_TexCoord[0] = gl_TextureMatrix[0] * gl_MultiTexCoord0;\n"
+	"   gl_FrontColor = gl_Color;\n"
+	"}\n";
+
+static GLuint img_alpha_program;
+static GLuint img_alpha_alphaMask_Location;
+static GLuint img_alpha_texColor_Location;
+static GLuint img_alpha_texAlpha_Location;
 
 static inline rgb888_t pixval_to_rgb888(PIXVAL colour)
 {
@@ -813,8 +760,13 @@ static void simgraphgl_set_screen_height(scr_coord_val const h)
  * If @p w is negative, it stays negative.
  * @returns difference between old and new value of @p x.
  */
-inline int clip_intv(scr_coord_val &x, scr_coord_val &w, const scr_coord_val left, const scr_coord_val right)
+static inline int clip_intv(scr_coord_val &x, scr_coord_val &w, const scr_coord_val left, const scr_coord_val right)
 {
+	//exit early if it cannot fit
+	if(  x + w < left || x > right  ) {
+		w = -1;
+		return 0;
+	}
 	scr_coord_val xx = min( x + w, right );
 	scr_coord_val xoff = left - x;
 	if(  xoff > 0  ) { // equivalent to x < left
@@ -828,14 +780,14 @@ inline int clip_intv(scr_coord_val &x, scr_coord_val &w, const scr_coord_val lef
 }
 
 /// wrapper for clip_intv
-static int clip_wh(scr_coord_val *x, scr_coord_val *w, const scr_coord_val left, const scr_coord_val right)
+static inline int clip_wh(scr_coord_val *x, scr_coord_val *w, const scr_coord_val left, const scr_coord_val right)
 {
 	return clip_intv( *x, *w, left, right );
 }
 
 
 /// wrapper for clip_intv, @returns whether @p w is positive
-static bool clip_lr(scr_coord_val *x, scr_coord_val *w, const scr_coord_val left, const scr_coord_val right)
+static inline bool clip_lr(scr_coord_val *x, scr_coord_val *w, const scr_coord_val left, const scr_coord_val right)
 {
 	clip_intv( *x, *w, left, right );
 	return *w > 0;
@@ -881,31 +833,232 @@ static void simgraphgl_set_clip_rect(scr_coord_val x, scr_coord_val y, scr_coord
 
 static void simgraphgl_push_clip_rect(scr_coord_val x, scr_coord_val y, scr_coord_val w, scr_coord_val h  CLIP_NUM_DEF)
 {
-	assert( !CR.swap_active );
-	// save active clipping rectangle
-	CR.clip_rect_swap = CR.clip_rect;
-	// active rectangle provided by parameters
+	clip_dimension &rect = CR.clip_rect;
+	clip_dimension &swap = CR.clip_rect_swap;
+	bool &active = CR.swap_active;
+	assert( !active );
+	swap = rect;
 	simgraphgl_set_clip_rect( x, y, w, h  CLIP_NUM_PAR, false );
-	CR.swap_active = true;
+	active = true;
 }
 
 static void simgraphgl_swap_clip_rect(CLIP_NUM_DEF0)
 {
-	if(  CR.swap_active  ) {
-		// swap clipping rectangles
-		clip_dimension save = CR.clip_rect;
-		CR.clip_rect = CR.clip_rect_swap;
-		CR.clip_rect_swap = save;
+	clip_dimension &rect = CR.clip_rect;
+	clip_dimension &swap = CR.clip_rect_swap;
+	bool &active = CR.swap_active;
+	if(  active  ) {
+		clip_dimension save = rect;
+		rect = swap;
+		swap = save;
 	}
 }
 
 static void simgraphgl_pop_clip_rect(CLIP_NUM_DEF0)
 {
-	if(  CR.swap_active  ) {
-		// swap original clipping rectangle back
-		CR.clip_rect   = CR.clip_rect_swap;
-		CR.swap_active = false;
+	clip_dimension &rect = CR.clip_rect;
+	clip_dimension &swap = CR.clip_rect_swap;
+	bool &active = CR.swap_active;
+	if(  active  ) {
+		rect = swap;
+		active = false;
 	}
+}
+
+
+static void build_stencil_for(int _x0, int _y0, int _x1, int _y1,
+                              int min_x, int min_y, int max_x, int max_y)
+{
+	float x0 = _x0;
+	float y0 = _y0;
+	float x1 = _x1;
+	float y1 = _y1;
+	int dir0 = 0;//0 => west, 1 => nord, …
+	int dir1 = 0;//0 => ost, 1 => süd, …
+	float const extra = 0;
+	//find intersections with the bounding box (min_x,min_y),(max_x,max_y)
+	if(  _x0 != _x1 && _y0 != _y1  ) {
+		if(  x0 < x1  ) {
+			float xt0, yt0, xt1, yt1;
+			xt0 = min_x;
+			yt0 = (float)( min_x - x0 ) / ( x1 - x0 ) * ( y1 - y0 ) + y0;
+			xt1 = max_x;
+			yt1 = (float)( max_x - x0 ) / ( x1 - x0 ) * ( y1 - y0 ) + y0;
+			x0 = xt0;
+			y0 = yt0 - extra;
+			x1 = xt1;
+			y1 = yt1 + extra;
+			dir0 = 3;
+			dir1 = 1;
+		}
+		else {
+			float xt0, yt0, xt1, yt1;
+			xt0 = max_x;
+			yt0 = (float)( max_x - x0 ) / ( x1 - x0 ) * ( y1 - y0 ) + y0;
+			xt1 = min_x;
+			yt1 = (float)( min_x - x0 ) / ( x1 - x0 ) * ( y1 - y0 ) + y0;
+			x0 = xt0;
+			y0 = yt0 + extra;
+			x1 = xt1;
+			y1 = yt1 - extra;
+			dir0 = 1;
+			dir1 = 3;
+		}
+		if(  y0 < min_y && y1 < min_y  ) {
+			y0 = min_y;
+			y1 = min_y;
+		}
+		else if(  y0 > max_y && y1 > max_y  ) {
+			y0 = max_y;
+			y1 = max_y;
+		}
+		else if(  y0 < y1  ) {
+			float xt0, yt0, xt1, yt1;
+			xt0 = (float)( min_y - y0 ) / ( y1 - y0 ) * ( x1 - x0 ) + x0;
+			yt0 = min_y;
+			xt1 = (float)( max_y - y0 ) / ( y1 - y0 ) * ( x1 - x0 ) + x0;
+			yt1 = max_y;
+			if(  yt0 > y0 || ( yt0 == y0 && dir0 == 1 )  ) {
+				x0 = xt0 + extra;
+				y0 = yt0;
+				dir0 = 0;
+			}
+			if(  yt1 < y1 || ( yt1 == y1 && dir0 == 3 )  ) {
+				x1 = xt1 - extra;
+				y1 = yt1;
+				dir1 = 2;
+			}
+		}
+		else {
+			float xt0, yt0, xt1, yt1;
+			xt0 = (float)( max_y - y0 ) / ( y1 - y0 ) * ( x1 - x0 ) + x0;
+			yt0 = max_y;
+			xt1 = (float)( min_y - y0 ) / ( y1 - y0 ) * ( x1 - x0 ) + x0;
+			yt1 = min_y;
+			if(  yt0 < y0 || ( yt0 == y0 && dir0 == 3 )  ) {
+				x0 = xt0 - extra;
+				y0 = yt0;
+				dir0 = 2;
+			}
+			if(  yt1 > y1 || ( yt1 == y1 && dir0 == 1 )  ) {
+				x1 = xt1 + extra;
+				y1 = yt1;
+				dir1 = 0;
+			}
+		}
+		if(  x0 < min_x && x1 < min_x  ) {
+			x0 = min_x;
+			x1 = min_x;
+		}
+		if(  x0 > max_x && x1 > max_x  ) {
+			x0 = max_x;
+			x1 = max_x;
+		}
+		/*
+		xt = t * ( x1 - x0 ) + x0
+		yt = t * ( y1 - y0 ) + y0
+		*/
+	}
+	else if(  _x0 != _x1  ) {
+		if(  _x0 < _x1  ) {
+			x0 = min_x;
+			x1 = max_x;
+			dir0 = 3;
+			dir1 = 1;
+		}
+		else {
+			x0 = max_x;
+			x1 = min_x;
+			dir0 = 1;
+			dir1 = 3;
+		}
+		if(  y0 < min_y && y1 < min_y  ) {
+			y0 = min_y;
+			y1 = min_y;
+		}
+		if(  y0 > max_y && y1 > max_y  ) {
+			y0 = max_y;
+			y1 = max_y;
+		}
+	}
+	else if(  _y0 != _y1  ) {
+		if(  _y0 < _y1  ) {
+			y0 = min_y;
+			y1 = max_y;
+			dir0 = 0;
+			dir1 = 2;
+		}
+		else {
+			y0 = max_y;
+			y1 = min_y;
+			dir0 = 2;
+			dir1 = 0;
+		}
+		if(  x0 < min_x && x1 < min_x  ) {
+			x0 = min_x;
+			x1 = min_x;
+		}
+		if(  x0 > max_x && x1 > max_x  ) {
+			x0 = max_x;
+			x1 = max_x;
+		}
+	}
+	else {
+		return;
+	}
+	if(  dir0 == dir1  ) {
+		return;
+	}
+
+	//okay. each point is on one of the boundaries.
+	//put out the original edge
+	glBegin( GL_POLYGON );
+	glVertex2f( x0, y0 );
+	glVertex2f( x1, y1 );
+	//then follow the edges clockwise. maximum count is 5.
+	while(  dir0 != dir1  )
+	{
+		switch(dir1)
+		{
+		case 0:
+			dir1++;
+			glVertex2i( max_x, min_y );
+			break;
+		case 1:
+			dir1++;
+			glVertex2i( max_x, max_y );
+			break;
+		case 2:
+			dir1++;
+			glVertex2i( min_x, max_y );
+			break;
+		case 3:
+			dir1 = 0;
+			glVertex2i( min_x, min_y );
+			break;
+		}
+	}
+	glEnd();
+}
+
+static void build_stencil(int min_x, int min_y, int max_x, int max_y, clipping_info_t const &cr)
+{
+	glColorMask( 0, 0, 0, 0 );
+	glBindTexture( GL_TEXTURE_2D, 0 );
+	glEnable( GL_STENCIL_TEST );
+	glStencilFunc( GL_ALWAYS, 0, 1 );
+	glStencilOp( GL_KEEP, GL_KEEP, GL_REPLACE );
+
+	glClear( GL_STENCIL_BUFFER_BIT );
+
+	glStencilFunc( GL_ALWAYS, 1, 1 );
+	for(  uint8 i = 0; i < cr.number_of_clips; i++  ) {
+		if(  cr.clip_ribi[i] & cr.active_ribi  ) {
+			cr.poly_clips[i].build_stencil( min_x, min_y, max_x, max_y );
+		}
+	}
+	glDisable( GL_STENCIL_TEST );
+	glColorMask( 1, 1, 1, 1 );
 }
 
 /*
@@ -942,108 +1095,9 @@ static void simgraphgl_activate_ribi_clip(int ribi  CLIP_NUM_DEF)
 	CR.active_ribi = ribi;
 }
 
-/*
- * Initialize clipping region for image starting at screen line y
- */
-static inline void init_ranges(int y  CLIP_NUM_DEF)
-{
-	for(  uint8 i = 0; i < CR.number_of_clips; i++  ) {
-		if(  ( CR.clip_ribi[i] & CR.active_ribi )  ) {
-			CR.poly_clips[i].get_x_range( y, CR.xranges[i], CR.active_ribi & 16 );
-		}
-	}
-}
-
-
-/*
- * Returns left/right border of visible area
- * Computes l/r border for the next line (ie y+1)
- * takes also clipping rectangle into account
- */
-inline void get_xrange_and_step_y(int &xmin, int &xmax  CLIP_NUM_DEF)
-{
-	xmin = CR.clip_rect.x;
-	xmax = CR.clip_rect.xx;
-	for(  uint8 i = 0; i < CR.number_of_clips; i++  ) {
-		if(  ( CR.clip_ribi[i] & CR.active_ribi )  ) {
-			CR.poly_clips[i].inc_y( CR.xranges[i], xmin, xmax );
-		}
-	}
-}
 
 
 // ------------------------------ dirty tile stuff --------------------------------
-
-
-/**
- * Set bits in one word of the dirty tile bitmap.
- *
- * A word covers 32 tiles of one row, i.e. 512 pixels, but a display thread only
- * owns a vertical band of the screen, so several threads mark tiles in the same
- * word and the read-modify-write must be indivisible. Nothing beyond that is
- * needed: the barrier that ends the threaded display already orders these
- * against the reader in simgraph16_flush_framebuffer().
- */
-static inline void mark_dirty_word(uint32 *word, uint32 bits)
-{
-#ifdef MULTI_THREAD
-#	if defined _MSC_VER
-	// there is no unsigned counterpart; long is 32 bit on every Windows target
-	static_assert( sizeof(long) == sizeof(uint32), "_InterlockedOr would not cover the whole word" );
-	_InterlockedOr( (volatile long *)word, (long)bits );
-#	else
-	__atomic_fetch_or( word, bits, __ATOMIC_RELAXED );
-#	endif
-#else
-	*word |= bits;
-#endif
-}
-
-
-/*
- * Simutrans keeps a list of dirty areas, i.e. places that received new graphics
- * and must be copied to the screen after an update
- */
-static inline void mark_tile_dirty(const int x, const int y)
-{
-	const int bit = x + y * tile_buffer_per_line;
-#if 0
-	assert( bit / 8 < tile_buffer_length );
-#endif
-	tile_dirty[bit >> 5] |= 1 << ( bit & 31 );
-}
-
-
-/**
- * Mark tile as dirty, with _NO_ clipping
- */
-static void mark_rect_dirty_nc(scr_coord_val x1, scr_coord_val y1, scr_coord_val x2, scr_coord_val y2)
-{
-	// floor to tile size
-	x1 >>= DIRTY_TILE_SHIFT;
-	y1 >>= DIRTY_TILE_SHIFT;
-	x2 >>= DIRTY_TILE_SHIFT;
-	y2 >>= DIRTY_TILE_SHIFT;
-
-#if 0
-	assert( x1 >= 0 );
-	assert( x1 < tiles_per_line );
-	assert( y1 >= 0 );
-	assert( y1 < tile_lines );
-	assert( x2 >= 0 );
-	assert( x2 < tiles_per_line );
-	assert( y2 >= 0 );
-	assert( y2 < tile_lines );
-#endif
-
-	for(  ;  y1 <= y2;  y1++  ) {
-		int bit = y1 * tile_buffer_per_line + x1;
-		const int end = bit + x2 - x1;
-		do {
-			mark_dirty_word( &tile_dirty[bit >> 5], 1 << (bit & 31) );
-		} while(  ++bit <= end  );
-	}
-}
 
 
 /**
@@ -1051,43 +1105,20 @@ static void mark_rect_dirty_nc(scr_coord_val x1, scr_coord_val y1, scr_coord_val
  */
 static void simgraphgl_mark_rect_dirty_wc(scr_coord_val x1, scr_coord_val y1, scr_coord_val x2, scr_coord_val y2)
 {
-	// inside display?
-	if(  x2 >= 0 && y2 >= 0 && x1 < disp_width && y1 < disp_height  ) {
-		if(  x1 < 0  ) {
-			x1 = 0;
-		}
-		if(  y1 < 0  ) {
-			y1 = 0;
-		}
-		if(  x2 >= disp_width  ) {
-			x2 = disp_width - 1;
-		}
-		if(  y2 >= disp_height  ) {
-			y2 = disp_height - 1;
-		}
-		mark_rect_dirty_nc( x1, y1, x2, y2 );
-	}
+	(void)x1;
+	(void)y1;
+	(void)x2;
+	(void)y2;
 }
 
 
 static void simgraphgl_mark_rect_dirty_clip(scr_coord_val x1, scr_coord_val y1, scr_coord_val x2, scr_coord_val y2  CLIP_NUM_DEF)
 {
-	// inside clip_rect?
-	if(  x2 >= CR.clip_rect.x && y2 >= CR.clip_rect.y && x1 < CR.clip_rect.xx && y1 < CR.clip_rect.yy  ) {
-		if(  x1 < CR.clip_rect.x  ) {
-			x1 = CR.clip_rect.x;
-		}
-		if(  y1 < CR.clip_rect.y  ) {
-			y1 = CR.clip_rect.y;
-		}
-		if(  x2 >= CR.clip_rect.xx  ) {
-			x2 = CR.clip_rect.xx - 1;
-		}
-		if(  y2 >= CR.clip_rect.yy  ) {
-			y2 = CR.clip_rect.yy - 1;
-		}
-		mark_rect_dirty_nc( x1, y1, x2, y2 );
-	}
+	(void)x1;
+	(void)y1;
+	(void)x2;
+	(void)y2;
+	(void)CR;
 }
 
 
@@ -1097,7 +1128,6 @@ static void simgraphgl_mark_rect_dirty_clip(scr_coord_val x1, scr_coord_val y1, 
  */
 static void simgraphgl_mark_screen_dirty()
 {
-	memset( tile_dirty, 0xFFFFFFFF, sizeof(uint32) * tile_buffer_length );
 }
 
 
@@ -1106,13 +1136,10 @@ static void simgraphgl_mark_screen_dirty()
  */
 static void simgraphgl_mark_img_dirty(image_id image, scr_coord_val xp, scr_coord_val yp)
 {
-	if(  image < anz_images  ) {
-		simgraphgl_mark_rect_dirty_wc( xp + images[image].x,
-		                               yp + images[image].y,
-		                               xp + images[image].x + images[image].w - 1,
-		                               yp + images[image].y + images[image].h - 1
-		);
-	}
+	(void)image;
+	(void)xp;
+	(void)yp;
+	//TODO can we use this to determine if we need to reupload to texture?
 }
 
 
@@ -1169,8 +1196,6 @@ static int simgraphgl_zoom_factor_down()
 }
 
 
-static uint8 player_night=0xFF;
-static uint8 player_day=0xFF;
 static void activate_player_color(sint8 player_nr, bool daynight)
 {
 	// caches the last settings
@@ -1272,15 +1297,16 @@ static void recode_img(const image_id n, const sint8 player_nr)
 		return;
 	}
 #endif
-	PIXVAL *src = images[n].zoom_data != NULL ? images[n].zoom_data : images[n].base_data;
+	PIXVAL *src = images[n].base_data;
 
 	if(  images[n].data[player_nr] == NULL  ) {
 		images[n].data[player_nr] = MALLOCN( PIXVAL, images[n].len );
 	}
-	// contains now the player color ...
+	// now do normal recode
 	activate_player_color( player_nr, true );
-	recode_img_src_target( images[n].h, src, images[n].data[player_nr] );
+	recode_img_src_target( images[n].base_h, src, images[n].data[player_nr] );
 	images[n].player_flags &= ~( 1 << player_nr );
+	images[n].plain_tex_flags |= ( 1 << player_nr );
 #ifdef MULTI_THREAD
 	pthread_mutex_unlock( &recode_img_mutex );
 #endif
@@ -1288,58 +1314,19 @@ static void recode_img(const image_id n, const sint8 player_nr)
 
 
 // for zoom out
-#define SumSubpixel(p) \
-	if(*(p)<255  &&  valid<255) { \
-	if(*(p)==1) { valid = 255; r = g = b = 0; } else { valid ++; } /* mark special colors */\
-		r += (p)[1]; \
-		g += (p)[2]; \
-		b += (p)[3]; \
+#define SumSubpixel(p)                               \
+	if(  *(p)<255 && valid<255  ) {              \
+		if(  *(p) == 1  ) {                  \
+			valid = 255;                 \
+			r = g = b = 0;               \
+		}                                    \
+		else {                               \
+			valid++;                     \
+		} /* mark special colors */          \
+		r += (p)[1];                         \
+		g += (p)[2];                         \
+		b += (p)[3];                         \
 	}
-
-
-// recode 4*bytes into PIXVAL
-PIXVAL inline compress_pixel(uint8* p)
-{
-	return ( ( ( p[0] == 1 ? 0x8000 : 0 ) | p[1] ) + ( ( ( uint16 )p[2] ) << 5 ) + ( ( ( uint16 )p[3] ) << 10 ) );
-}
-
-// recode 4*bytes into PIXVAL, respect transparency
-PIXVAL inline compress_pixel_transparent(uint8 *p)
-{
-	return p[0] == 255 ? 0x73FE : compress_pixel( p );
-}
-
-// zoom-in pixel taking color of above/below and transparency of diagonal neighbor into account
-PIXVAL inline zoomin_pixel(uint8 *p, uint8* pab, uint8 *prl, uint8* pdia)
-{
-	if(  p[0] == 255  ) {
-		if(  ( pab[0] | prl[0] | pdia[0] ) == 255  ) {
-			return 0x73FE; // pixel and one neighbor transparent -> return transparent
-		}
-		// pixel transparent but all three neighbors not -> interpolate
-		uint8 valid = 0;
-		uint8 r = 0, g = 0, b = 0;
-		SumSubpixel( pab );
-		SumSubpixel( prl );
-		if(  valid == 0  ) {
-			return 0x73FE;
-		}
-		else if(  valid == 255  ) {
-			return ( 0x8000 | r ) + ( ( ( uint16 )g ) << 5 ) + ( ( ( uint16 )b ) << 10 );
-		}
-		else {
-			return ( r / valid ) + ( ( ( uint16 )( g / valid ) ) << 5 ) + ( ( ( uint16 )( b / valid ) ) << 10 );
-		}
-	}
-	else {
-		if(  ( pab[0] & prl[0] & pdia[0] ) != 255  ) {
-			// pixel and one neighbor not transparent
-			return compress_pixel( p );
-		}
-		return 0x73FE;
-	}
-}
-
 
 /**
  * Convert base image data to actual image size
@@ -1349,483 +1336,64 @@ PIXVAL inline zoomin_pixel(uint8 *p, uint8* pab, uint8 *prl, uint8* pdia)
 static void rezoom_img(const image_id n)
 {
 	// may this image be zoomed
-	if(  n < anz_images && images[n].base_h > 0  ) {
-#ifdef MULTI_THREAD
-		pthread_mutex_lock( &rezoom_img_mutex[n % env_t::num_threads] );
-		if(  ( images[n].recode_flags & FLAG_REZOOM ) == 0  ) {
-			// other routine did already the re-zooming ...
-			pthread_mutex_unlock( &rezoom_img_mutex[n % env_t::num_threads] );
+	if(  n >= anz_images || images[n].base_h == 0  ) {
+		return;
+	}
+	if(  images[n].recode_flags & FLAG_ZOOMABLE  ) {
+		if(  images[n].zoom_den == g_simgraphgl.zoom_den[zoom_factor] &&
+		                images[n].zoom_num == g_simgraphgl.zoom_num[zoom_factor]  ) {
 			return;
 		}
-#endif
-		// we may need night conversion afterwards
-		images[n].player_flags = 0xFFFF; // recode all player colors
+		images[n].zoom_den = g_simgraphgl.zoom_den[zoom_factor];
+		images[n].zoom_num = g_simgraphgl.zoom_num[zoom_factor];
 
-		//  we recalculate the len (since it may be larger than before)
-		// thus we have to free the old caches
-		if(  images[n].zoom_data != NULL  ) {
-			free( images[n].zoom_data );
-			images[n].zoom_data = NULL;
-		}
-		for(  uint8 i = 0; i < MAX_PLAYER_COUNT; i++  ) {
-			if(  images[n].data[i] != NULL  ) {
-				free( images[n].data[i] );
-				images[n].data[i] = NULL;
+		float q = images[n].zoom_num * 1.f / images[n].zoom_den;
+		if(  images[n].zoom_num >= images[n].zoom_den  ) {
+			//check the denominator is power of two
+			if(  ( images[n].zoom_den & ( images[n].zoom_den - 1 ) ) == 0  ) {
+				images[n].zoom = q;
 			}
-		}
-
-		// just restore original size?
-		if(  zoom_factor == ZOOM_NEUTRAL || ( images[n].recode_flags & FLAG_ZOOMABLE ) == 0  ) {
-			// this we can do be a simple copy ...
-			images[n].x = images[n].base_x;
-			images[n].w = images[n].base_w;
-			images[n].y = images[n].base_y;
-			images[n].h = images[n].base_h;
-			// recalculate length
-			sint16 h = images[n].base_h;
-			PIXVAL *sp = images[n].base_data;
-
-			while(  h-- > 0  ) {
-				do {
-					// clear run + colored run + next clear run
-					sp++;
-					sp += ( *sp ) & ( ~TRANSPARENT_RUN ); // MSVC crashes on (*sp)&(~TRANSPARENT_RUN) + 1 !!!
-					sp ++;
-				} while(  *sp  );
-				sp++;
-			}
-			images[n].len = (uint32)(size_t)( sp - images[n].base_data );
-			images[n].recode_flags &= ~FLAG_REZOOM;
-#ifdef MULTI_THREAD
-			pthread_mutex_unlock( &rezoom_img_mutex[n % env_t::num_threads] );
-#endif
-			return;
-		}
-
-		// now we want to downsize the image
-		// just divide the sizes
-		images[n].x = ( images[n].base_x * g_simgraphgl.zoom_num[zoom_factor] ) / g_simgraphgl.zoom_den[zoom_factor];
-		images[n].y = ( images[n].base_y * g_simgraphgl.zoom_num[zoom_factor] ) / g_simgraphgl.zoom_den[zoom_factor];
-		images[n].w = ( images[n].base_w * g_simgraphgl.zoom_num[zoom_factor] ) / g_simgraphgl.zoom_den[zoom_factor];
-		images[n].h = ( images[n].base_h * g_simgraphgl.zoom_num[zoom_factor] ) / g_simgraphgl.zoom_den[zoom_factor];
-
-		if(  images[n].h > 0 && images[n].w > 0  ) {
-			// just recalculate the image in the new size
-			PIXVAL *src = images[n].base_data;
-			PIXVAL *dest = NULL;
-			// embed the baseimage in an image with margin ~ remainder
-			const sint16 x_rem = ( images[n].base_x * g_simgraphgl.zoom_num[zoom_factor] ) % g_simgraphgl.zoom_den[zoom_factor];
-			const sint16 y_rem = ( images[n].base_y * g_simgraphgl.zoom_num[zoom_factor] ) % g_simgraphgl.zoom_den[zoom_factor];
-			const sint16 xl_margin = max( x_rem, 0 );
-			const sint16 xr_margin = max( -x_rem, 0 );
-			const sint16 yl_margin = max( y_rem, 0 );
-			const sint16 yr_margin = max( -y_rem, 0 );
-			// baseimage top-left  corner is at (xl_margin, yl_margin)
-			// ...       low-right corner is at (xr_margin, yr_margin)
-
-			sint32 orgzoomwidth = ( ( images[n].base_w + g_simgraphgl.zoom_den[zoom_factor] - 1 ) / g_simgraphgl.zoom_den[zoom_factor] ) * g_simgraphgl.zoom_den[zoom_factor];
-			sint32 newzoomwidth = ( orgzoomwidth * g_simgraphgl.zoom_num[zoom_factor] ) / g_simgraphgl.zoom_den[zoom_factor];
-			sint32 orgzoomheight = ( ( images[n].base_h + g_simgraphgl.zoom_den[zoom_factor] - 1 ) / g_simgraphgl.zoom_den[zoom_factor] ) * g_simgraphgl.zoom_den[zoom_factor];
-			sint32 newzoomheight = ( orgzoomheight * g_simgraphgl.zoom_num[zoom_factor] ) / g_simgraphgl.zoom_den[zoom_factor];
-
-			// we will unpack, re-sample, pack it
-
-			// thus the unpack buffer must at least fit the window => find out maximum size
-			// Note: This value is certainly way bigger than the average size we'll get,
-			// but it's the worst scenario possible, a succession of solid - transparent - solid - transparent
-			// pattern.
-			// This would encode EACH LINE as:
-			// 0x0000 (0 transparent) 0x0001 PIXWORD 0x0001 (every 2 pixels, 3 words) 0x0000 (EOL)
-			// The extra +1 is to make sure we cover divisions with module != 0
-			// We end with an over sized buffer for the normal usage, but since it's re-used for all re-zooms,
-			// it's not performance critical and we are safe from all possible inputs.
-
-			size_t new_size = ( ( ( newzoomwidth * 3 ) / 2 ) + 1 + 2 ) * newzoomheight * sizeof(PIXVAL);
-			size_t unpack_size = ( xl_margin + orgzoomwidth + xr_margin ) * ( yl_margin + orgzoomheight + yr_margin ) * 4;
-			if(  unpack_size > new_size  ) {
-				new_size = unpack_size;
-			}
-			new_size = ( ( new_size * 128 ) + 127 ) / 128; // enlarge slightly to try and keep buffers on their own cacheline for multithreaded access. A portable aligned_alloc would be better.
-			if(  rezoom_size[n % env_t::num_threads] < new_size  ) {
-				free( rezoom_baseimage2[n % env_t::num_threads] );
-				free( rezoom_baseimage[n % env_t::num_threads] );
-				rezoom_size[n % env_t::num_threads] = new_size;
-				rezoom_baseimage[n % env_t::num_threads]  = MALLOCN( uint8, new_size );
-				rezoom_baseimage2[n % env_t::num_threads] = reinterpret_cast<PIXVAL *>( MALLOCN( uint8, new_size ) );
-			}
-			memset( rezoom_baseimage[n % env_t::num_threads], 255, new_size ); // fill with invalid data to mark transparent regions
-
-			// index of top-left corner
-			uint32 baseoff = 4 * ( yl_margin * ( xl_margin + orgzoomwidth + xr_margin ) + xl_margin );
-			sint32 basewidth = xl_margin + orgzoomwidth + xr_margin;
-
-			// now: unpack the image
-			for(  sint32 y = 0; y < images[n].base_h; ++y  ) {
-				uint16 runlen;
-				uint8 *p = rezoom_baseimage[n % env_t::num_threads] + baseoff + y * ( basewidth * 4 );
-
-				// decode line
-				runlen = *src++;
-				do {
-					// clear run
-					p += ( runlen & ~TRANSPARENT_RUN ) * 4;
-					// color pixel
-					runlen = ( *src++ ) & ~TRANSPARENT_RUN;
-					while(  runlen--  ) {
-						// get rgb components
-						PIXVAL s = *src++;
-						*p++ = ( s >> 15 );
-						*p++ = ( s & 31 );
-						s >>= 5;
-						*p++ = ( s & 31 );
-						s >>= 5;
-						*p++ = ( s & 31 );
-					}
-					runlen = *src++;
-				} while(  runlen != 0  );
-			}
-
-			// now we have the image, we do a repack then
-			dest = rezoom_baseimage2[n % env_t::num_threads];
-			switch(  g_simgraphgl.zoom_den[zoom_factor]  ) {
-				case 1: {
-					assert( g_simgraphgl.zoom_num[zoom_factor] == 2 );
-
-					// first half row - just copy values, do not fiddle with neighbor colors
-					uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff;
-					for(  sint16 x = 0; x < orgzoomwidth; x++  ) {
-						PIXVAL c1 = compress_pixel_transparent( p1 + ( x * 4 ) );
-						// now set the pixel ...
-						dest[x * 2] = c1;
-						dest[x * 2 + 1] = c1;
-					}
-					// skip one line
-					dest += newzoomwidth;
-
-					for(  sint16 y = 0; y < orgzoomheight - 1; y++  ) {
-						uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + y * ( basewidth * 4 );
-						// copy leftmost pixels
-						dest[0] = compress_pixel_transparent( p1 );
-						dest[newzoomwidth] = compress_pixel_transparent( p1 + basewidth * 4 );
-						for(  sint16 x = 0; x < orgzoomwidth - 1; x++  ) {
-							uint8 *px1 = p1 + ( x * 4 );
-							// pixel at 2,2 in 2x2 superpixel
-							dest[x * 2 + 1] = zoomin_pixel( px1, px1 + 4, px1 + basewidth * 4, px1 + basewidth * 4 + 4 );
-
-							// 2x2 superpixel is transparent but original pixel was not
-							// preserve one pixel
-							if(  dest[x * 2 + 1] == 0x73FE && px1[0] != 255 && dest[x * 2] == 0x73FE && dest[x * 2 - newzoomwidth] == 0x73FE && dest[x * 2 - newzoomwidth - 1] == 0x73FE  ) {
-								// preserve one pixel
-								dest[x * 2 + 1] = compress_pixel( px1 );
-							}
-
-							// pixel at 2,1 in next 2x2 superpixel
-							dest[x * 2 + 2] = zoomin_pixel( px1 + 4, px1, px1 + basewidth * 4 + 4, px1 + basewidth * 4 );
-
-							// pixel at 1,2 in next row 2x2 superpixel
-							dest[x * 2 + newzoomwidth + 1] = zoomin_pixel( px1 + basewidth * 4, px1 + basewidth * 4 + 4, px1, px1 + 4 );
-
-							// pixel at 1,1 in next row next 2x2 superpixel
-							dest[x * 2 + newzoomwidth + 2] = zoomin_pixel( px1 + basewidth * 4 + 4, px1 + basewidth * 4, px1 + 4, px1 );
-						}
-						// copy rightmost pixels
-						dest[2 * orgzoomwidth - 1] = compress_pixel_transparent( p1 + 4 * ( orgzoomwidth - 1 ) );
-						dest[2 * orgzoomwidth + newzoomwidth - 1] = compress_pixel_transparent( p1 + 4 * ( orgzoomwidth - 1 ) + basewidth * 4 );
-						// skip two lines
-						dest += 2 * newzoomwidth;
-					}
-					// last half row - just copy values, do not fiddle with neighbor colors
-					p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( orgzoomheight - 1 ) * ( basewidth * 4 );
-					for(  sint16 x = 0; x < orgzoomwidth; x++  ) {
-						PIXVAL c1 = compress_pixel_transparent( p1 + ( x * 4 ) );
-						// now set the pixel ...
-						dest[x * 2]   = c1;
-						dest[x * 2 + 1] = c1;
-					}
-					break;
-				}
-				case 2:
-					for(  sint16 y = 0; y < newzoomheight; y++  ) {
-						uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * g_simgraphgl.zoom_den[zoom_factor] + 0 - y_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * ( basewidth * 4 );
-						uint8 *p2 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * g_simgraphgl.zoom_den[zoom_factor] + 1 - y_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * ( basewidth * 4 );
-						for(  sint16 x = 0; x < newzoomwidth; x++  ) {
-							uint8 valid = 0;
-							uint8 r = 0, g = 0, b = 0;
-							sint16 xreal1 = ( ( x * g_simgraphgl.zoom_den[zoom_factor] + 0 - x_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * 4;
-							sint16 xreal2 = ( ( x * g_simgraphgl.zoom_den[zoom_factor] + 1 - x_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * 4;
-							SumSubpixel( p1 + xreal1 );
-							SumSubpixel( p1 + xreal2 );
-							SumSubpixel( p2 + xreal1 );
-							SumSubpixel( p2 + xreal2 );
-							if(  valid == 0  ) {
-								*dest++ = 0x73FE;
-							}
-							else if(  valid == 255  ) {
-								*dest++ = ( 0x8000 | r ) + ( ( ( uint16 )g ) << 5 ) + ( ( ( uint16 )b ) << 10 );
-							}
-							else {
-								*dest++ = ( r / valid ) + ( ( ( uint16 )( g / valid ) ) << 5 ) + ( ( ( uint16 )( b / valid ) ) << 10 );
-							}
-						}
-					}
-					break;
-				case 3:
-					for(  sint16 y = 0; y < newzoomheight; y++  ) {
-						uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * g_simgraphgl.zoom_den[zoom_factor] + 0 - y_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * ( basewidth * 4 );
-						uint8 *p2 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * g_simgraphgl.zoom_den[zoom_factor] + 1 - y_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * ( basewidth * 4 );
-						uint8 *p3 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * g_simgraphgl.zoom_den[zoom_factor] + 2 - y_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * ( basewidth * 4 );
-						for(  sint16 x = 0; x < newzoomwidth; x++  ) {
-							uint8 valid = 0;
-							uint16 r = 0, g = 0, b = 0;
-							sint16 xreal1 = ( ( x * g_simgraphgl.zoom_den[zoom_factor] + 0 - x_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * 4;
-							sint16 xreal2 = ( ( x * g_simgraphgl.zoom_den[zoom_factor] + 1 - x_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * 4;
-							sint16 xreal3 = ( ( x * g_simgraphgl.zoom_den[zoom_factor] + 2 - x_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * 4;
-							SumSubpixel( p1 + xreal1 );
-							SumSubpixel( p1 + xreal2 );
-							SumSubpixel( p1 + xreal3 );
-							SumSubpixel( p2 + xreal1 );
-							SumSubpixel( p2 + xreal2 );
-							SumSubpixel( p2 + xreal3 );
-							SumSubpixel( p3 + xreal1 );
-							SumSubpixel( p3 + xreal2 );
-							SumSubpixel( p3 + xreal3 );
-							if(  valid == 0  ) {
-								*dest++ = 0x73FE;
-							}
-							else if(  valid == 255  ) {
-								*dest++ = ( 0x8000 | r ) + ( ( ( uint16 )g ) << 5 ) + ( ( ( uint16 )b ) << 10 );
-							}
-							else {
-								*dest++ = ( r / valid ) | ( ( ( uint16 )( g / valid ) ) << 5 ) | ( ( ( uint16 )( b / valid ) ) << 10 );
-							}
-						}
-					}
-					break;
-				case 4:
-					for(  sint16 y = 0; y < newzoomheight; y++  ) {
-						uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * g_simgraphgl.zoom_den[zoom_factor] + 0 - y_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * ( basewidth * 4 );
-						uint8 *p2 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * g_simgraphgl.zoom_den[zoom_factor] + 1 - y_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * ( basewidth * 4 );
-						uint8 *p3 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * g_simgraphgl.zoom_den[zoom_factor] + 2 - y_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * ( basewidth * 4 );
-						uint8 *p4 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * g_simgraphgl.zoom_den[zoom_factor] + 3 - y_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * ( basewidth * 4 );
-						for(  sint16 x = 0; x < newzoomwidth; x++  ) {
-							uint8 valid = 0;
-							uint16 r = 0, g = 0, b = 0;
-							sint16 xreal1 = ( ( x * g_simgraphgl.zoom_den[zoom_factor] + 0 - x_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * 4;
-							sint16 xreal2 = ( ( x * g_simgraphgl.zoom_den[zoom_factor] + 1 - x_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * 4;
-							sint16 xreal3 = ( ( x * g_simgraphgl.zoom_den[zoom_factor] + 2 - x_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * 4;
-							sint16 xreal4 = ( ( x * g_simgraphgl.zoom_den[zoom_factor] + 3 - x_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * 4;
-							SumSubpixel( p1 + xreal1 );
-							SumSubpixel( p1 + xreal2 );
-							SumSubpixel( p1 + xreal3 );
-							SumSubpixel( p1 + xreal4 );
-							SumSubpixel( p2 + xreal1 );
-							SumSubpixel( p2 + xreal2 );
-							SumSubpixel( p2 + xreal3 );
-							SumSubpixel( p2 + xreal4 );
-							SumSubpixel( p3 + xreal1 );
-							SumSubpixel( p3 + xreal2 );
-							SumSubpixel( p3 + xreal3 );
-							SumSubpixel( p3 + xreal4 );
-							SumSubpixel( p4 + xreal1 );
-							SumSubpixel( p4 + xreal2 );
-							SumSubpixel( p4 + xreal3 );
-							SumSubpixel( p4 + xreal4 );
-							if(  valid == 0  ) {
-								*dest++ = 0x73FE;
-							}
-							else if(  valid == 255  ) {
-								*dest++ = ( 0x8000 | r ) + ( ( ( uint16 )g ) << 5 ) + ( ( ( uint16 )b ) << 10 );
-							}
-							else {
-								*dest++ = ( r / valid ) | ( ( ( uint16 )( g / valid ) ) << 5 ) | ( ( ( uint16 )( b / valid ) ) << 10 );
-							}
-						}
-					}
-					break;
-				case 8:
-					for(  sint16 y = 0; y < newzoomheight; y++  ) {
-						uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * g_simgraphgl.zoom_den[zoom_factor] + 0 - y_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * ( basewidth * 4 );
-						uint8 *p2 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * g_simgraphgl.zoom_den[zoom_factor] + 1 - y_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * ( basewidth * 4 );
-						uint8 *p3 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * g_simgraphgl.zoom_den[zoom_factor] + 2 - y_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * ( basewidth * 4 );
-						uint8 *p4 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * g_simgraphgl.zoom_den[zoom_factor] + 3 - y_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * ( basewidth * 4 );
-						uint8 *p5 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * g_simgraphgl.zoom_den[zoom_factor] + 4 - y_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * ( basewidth * 4 );
-						uint8 *p6 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * g_simgraphgl.zoom_den[zoom_factor] + 5 - y_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * ( basewidth * 4 );
-						uint8 *p7 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * g_simgraphgl.zoom_den[zoom_factor] + 6 - y_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * ( basewidth * 4 );
-						uint8 *p8 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ( ( y * g_simgraphgl.zoom_den[zoom_factor] + 7 - y_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * ( basewidth * 4 );
-						for(  sint16 x = 0; x < newzoomwidth; x++  ) {
-							uint8 valid = 0;
-							uint16 r = 0, g = 0, b = 0;
-							sint16 xreal1 = ( ( x * g_simgraphgl.zoom_den[zoom_factor] + 0 - x_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * 4;
-							sint16 xreal2 = ( ( x * g_simgraphgl.zoom_den[zoom_factor] + 1 - x_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * 4;
-							sint16 xreal3 = ( ( x * g_simgraphgl.zoom_den[zoom_factor] + 2 - x_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * 4;
-							sint16 xreal4 = ( ( x * g_simgraphgl.zoom_den[zoom_factor] + 3 - x_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * 4;
-							sint16 xreal5 = ( ( x * g_simgraphgl.zoom_den[zoom_factor] + 4 - x_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * 4;
-							sint16 xreal6 = ( ( x * g_simgraphgl.zoom_den[zoom_factor] + 5 - x_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * 4;
-							sint16 xreal7 = ( ( x * g_simgraphgl.zoom_den[zoom_factor] + 6 - x_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * 4;
-							sint16 xreal8 = ( ( x * g_simgraphgl.zoom_den[zoom_factor] + 7 - x_rem ) / g_simgraphgl.zoom_num[zoom_factor] ) * 4;
-							SumSubpixel( p1 + xreal1 );
-							SumSubpixel( p1 + xreal2 );
-							SumSubpixel( p1 + xreal3 );
-							SumSubpixel( p1 + xreal4 );
-							SumSubpixel( p1 + xreal5 );
-							SumSubpixel( p1 + xreal6 );
-							SumSubpixel( p1 + xreal7 );
-							SumSubpixel( p1 + xreal8 );
-							SumSubpixel( p2 + xreal1 );
-							SumSubpixel( p2 + xreal2 );
-							SumSubpixel( p2 + xreal3 );
-							SumSubpixel( p2 + xreal4 );
-							SumSubpixel( p2 + xreal5 );
-							SumSubpixel( p2 + xreal6 );
-							SumSubpixel( p2 + xreal7 );
-							SumSubpixel( p2 + xreal8 );
-							SumSubpixel( p3 + xreal1 );
-							SumSubpixel( p3 + xreal2 );
-							SumSubpixel( p3 + xreal3 );
-							SumSubpixel( p3 + xreal4 );
-							SumSubpixel( p3 + xreal5 );
-							SumSubpixel( p3 + xreal6 );
-							SumSubpixel( p3 + xreal7 );
-							SumSubpixel( p3 + xreal8 );
-							SumSubpixel( p4 + xreal1 );
-							SumSubpixel( p4 + xreal2 );
-							SumSubpixel( p4 + xreal3 );
-							SumSubpixel( p4 + xreal4 );
-							SumSubpixel( p4 + xreal5 );
-							SumSubpixel( p4 + xreal6 );
-							SumSubpixel( p4 + xreal7 );
-							SumSubpixel( p4 + xreal8 );
-							SumSubpixel( p5 + xreal1 );
-							SumSubpixel( p5 + xreal2 );
-							SumSubpixel( p5 + xreal3 );
-							SumSubpixel( p5 + xreal4 );
-							SumSubpixel( p5 + xreal5 );
-							SumSubpixel( p5 + xreal6 );
-							SumSubpixel( p5 + xreal7 );
-							SumSubpixel( p5 + xreal8 );
-							SumSubpixel( p6 + xreal1 );
-							SumSubpixel( p6 + xreal2 );
-							SumSubpixel( p6 + xreal3 );
-							SumSubpixel( p6 + xreal4 );
-							SumSubpixel( p6 + xreal5 );
-							SumSubpixel( p6 + xreal6 );
-							SumSubpixel( p6 + xreal7 );
-							SumSubpixel( p6 + xreal8 );
-							SumSubpixel( p7 + xreal1 );
-							SumSubpixel( p7 + xreal2 );
-							SumSubpixel( p7 + xreal3 );
-							SumSubpixel( p7 + xreal4 );
-							SumSubpixel( p7 + xreal5 );
-							SumSubpixel( p7 + xreal6 );
-							SumSubpixel( p7 + xreal7 );
-							SumSubpixel( p7 + xreal8 );
-							SumSubpixel( p8 + xreal1 );
-							SumSubpixel( p8 + xreal2 );
-							SumSubpixel( p8 + xreal3 );
-							SumSubpixel( p8 + xreal4 );
-							SumSubpixel( p8 + xreal5 );
-							SumSubpixel( p8 + xreal6 );
-							SumSubpixel( p8 + xreal7 );
-							SumSubpixel( p8 + xreal8 );
-							if(  valid == 0  ) {
-								*dest++ = 0x73FE;
-							}
-							else if(  valid == 255  ) {
-								*dest++ = ( 0x8000 | r ) + ( ( ( uint16 )g ) << 5 ) + ( ( ( uint16 )b ) << 10 );
-							}
-							else {
-								*dest++ = ( r / valid ) | ( ( ( uint16 )( g / valid ) ) << 5 ) | ( ( ( uint16 )( b / valid ) ) << 10 );
-							}
-						}
-					}
-					break;
-				default:
-					assert( 0 );
-				}
-
-			// now encode the image again
-			dest = reinterpret_cast<PIXVAL *>( rezoom_baseimage[n % env_t::num_threads] );
-			for(  sint16 y = 0; y < newzoomheight; y++  ) {
-				PIXVAL *line = ( ( PIXVAL * )rezoom_baseimage2[n % env_t::num_threads] ) + ( y * newzoomwidth );
-				PIXVAL count;
-				sint16 x = 0;
-				uint16 clear_colored_run_pair_count = 0;
-
-				do {
-					// check length of transparent pixels
-					for(  count = 0; x < newzoomwidth && line[x] == 0x73FE; count++, x++  ) {
-					}
-					// first runlength: transparent pixels
-					*dest++ = count;
-					uint16 has_alpha = 0;
-					// copy for non-transparent
-					count = 0;
-					while(  x < newzoomwidth && line[x] != 0x73FE  ) {
-						PIXVAL pixval = line[x++];
-						if(  pixval >= 0x8020 && !has_alpha  ) {
-							if(  count  ) {
-								*dest++ = count;
-								dest += count;
-								count = 0;
-								*dest++ = TRANSPARENT_RUN;
-							}
-							has_alpha = TRANSPARENT_RUN;
-						}
-						else if(  pixval < 0x8020 && has_alpha  ) {
-							if(  count  ) {
-								*dest++ = count + TRANSPARENT_RUN;
-								dest += count;
-								count = 0;
-								*dest++ = TRANSPARENT_RUN;
-							}
-							has_alpha = 0;
-						}
-						count++;
-						dest[count] = pixval;
-					}
-
-					/*
-					 * If it is not the first clear-colored-run pair and its colored run is empty
-					 * --> it is superfluous and can be removed by rolling back the pointer
-					 */
-					if(  clear_colored_run_pair_count > 0 && count == 0  ) {
-						dest--;
-						// this only happens at the end of a line, so no need to increment clear_colored_run_pair_count
-					}
-					else {
-						*dest++ = count + has_alpha; // number of colored pixels
-						dest += count; // skip them
-						clear_colored_run_pair_count++;
-					}
-				} while(  x < newzoomwidth  );
-				*dest++ = 0; // mark line end
-			}
-
-			// something left?
-			images[n].w = newzoomwidth;
-			images[n].h = newzoomheight;
-			if(  newzoomheight > 0  ) {
-				const size_t zoom_len = (size_t)( ( (uint8 *)dest ) - ( (uint8 *)rezoom_baseimage[n % env_t::num_threads] ) );
-				images[n].len = (uint32)( zoom_len / sizeof(PIXVAL) );
-				images[n].zoom_data = MALLOCN( PIXVAL, images[n].len );
-				assert( images[n].zoom_data );
-				memcpy( images[n].zoom_data, rezoom_baseimage[n % env_t::num_threads], zoom_len );
+			else {
+				images[n].zoom = q * ( 33.f / 32.f );
 			}
 		}
 		else {
-//			if (images[n].w <= 0) {
-//				// h=0 will be ignored, with w=0 there was an error!
-//				printf("WARNING: image%d w=0!\n", n);
-//			}
-			images[n].h = 0;
+			/*
+				 *
+				 *  0.75    1.0416666666667   0.78125     0.03125
+				 *  0.625   1.0375            0.6484375   0.0234375
+				 *  0.5     1.0625            0.53125     0.03125
+				 *  0.375   1.0625            0.3984375   0.0234375
+				 *  0.25    1.125             0.28125     0.03125
+				 *  0.125   1.125             0.140625    0.015625
+				 *
+				 */
+			if(  images[n].zoom_num * 4 >= images[n].zoom_den  ) {
+				images[n].zoom = q + 1.f / 64.f;
+			}
+			else {
+				images[n].zoom = q * ( 17.f / 16.f );
+			}
 		}
-		images[n].recode_flags &= ~FLAG_REZOOM;
-#ifdef MULTI_THREAD
-		pthread_mutex_unlock( &rezoom_img_mutex[n % env_t::num_threads] );
-#endif
 	}
+	else {
+		images[n].zoom_den = 1;
+		images[n].zoom_num = 1;
+		images[n].zoom = 1.0f;
+	}
+
+	images[n].recode_flags &= ~FLAG_REZOOM;
 }
 
+static float get_img_zoom(image_id n) {
+	if(  n == IMG_EMPTY  ) {
+		return 1.0;
+	}
+	if(  n >= anz_images  ) {
+		return 1.0;
+	}
+	return images[n].zoom;
+}
 
 
 // get next smallest size when scaling to percent
@@ -1850,7 +1418,9 @@ static scr_size simgraphgl_get_best_matching_size(const image_id n, sint16 zoom_
 // force a certain size on a image (for rescaling tool images)
 static void simgraphgl_fit_img_to_width(const image_id n, sint16 new_w)
 {
-	if(  n < anz_images && images[n].base_h > 0 && images[n].w != new_w  ) {
+	float zoom = get_img_zoom( n );
+	if(  n < anz_images && images[n].base_h > 0 &&
+	                ceil( images[n].base_w * zoom ) != new_w  ) {
 		int old_zoom_factor = zoom_factor;
 		for(  int i = 0; i <= MAX_ZOOM_FACTOR; i++  ) {
 			int zoom_w = ( images[n].base_w * g_simgraphgl.zoom_num[i] ) / g_simgraphgl.zoom_den[i];
@@ -2029,11 +1599,6 @@ static image_id simgraphgl_register_image(const image_t *image_in)
 	image = &images[anz_images];
 	anz_images++;
 
-	image->x = image_in->x;
-	image->w = image_in->w;
-	image->y = image_in->y;
-	image->h = image_in->h;
-
 	image->recode_flags = FLAG_REZOOM;
 	if(  image_in->zoomable  ) {
 		image->recode_flags |= FLAG_ZOOMABLE;
@@ -2059,17 +1624,21 @@ static image_id simgraphgl_register_image(const image_t *image_in)
 				PIXVAL s = *src++;
 				if(  s >= 0x8000 && s < 0x8010  ) {
 					image->recode_flags |= FLAG_HAS_PLAYER_COLOR;
+					goto has_it;
 				}
 			}
 			runlen = *src++;
 		} while(  runlen != 0  );   // end of row: runlen == 0
 	}
+	has_it:
 
 	for(  uint8 i = 0; i < MAX_PLAYER_COUNT; i++  ) {
 		image->data[i] = NULL;
+		image->plain_tex[i] = 0;
 	}
 
-	image->zoom_data = NULL;
+	image->plain_tex_flags = 0;
+
 	image->len = image_in->len;
 
 	image->base_x = image_in->x;
@@ -2079,6 +1648,12 @@ static image_id simgraphgl_register_image(const image_t *image_in)
 
 	// since we do not recode them, we can work with the original data
 	image->base_data = image_in->data;
+
+	image->base_tex = 0;
+
+	image->zoom_num = 1;
+	image->zoom_den = 1;
+	image->zoom = 1.0f;
 
 	return id;
 }
@@ -2090,13 +1665,13 @@ static void simgraphgl_free_all_images_above(image_id above)
 {
 	while(  above < anz_images  ) {
 		anz_images--;
-		if(  images[anz_images].zoom_data != NULL  ) {
-			free( images[anz_images].zoom_data );
-		}
 		for(  uint8 i = 0; i < MAX_PLAYER_COUNT; i++  ) {
 			if(  images[anz_images].data[i] != NULL  ) {
 				free( images[anz_images].data[i] );
 			}
+		}
+		if(  images[anz_images].base_tex  ) {
+			glDeleteTextures( 1, &( images[anz_images].base_tex ) );
 		}
 	}
 }
@@ -2106,11 +1681,12 @@ static void simgraphgl_free_all_images_above(image_id above)
 static scr_rect simgraphgl_get_image_offset(image_id image)
 {
 	if(  image < anz_images  ) {
+		float zoom = get_img_zoom( image );
 		return scr_rect{
-			images[image].x,
-			images[image].y,
-			images[image].w,
-			images[image].h
+			(scr_coord_val)floor( images[image].base_x * zoom ),
+			(scr_coord_val)floor( images[image].base_y * zoom ),
+			(scr_coord_val)ceil( images[image].base_w * zoom ),
+			(scr_coord_val)ceil( images[image].base_h * zoom )
 		};
 	}
 	else {
@@ -2140,335 +1716,353 @@ static scr_rect simgraphgl_get_base_image_offset(image_id image)
 // forward declaration, implementation is further below
 PIXVAL colors_blend_alpha32(PIXVAL background, PIXVAL foreground, int alpha);
 
-/**
- * Copy Pixel from src to dest
- */
-static inline void pixcopy(PIXVAL *dest, const PIXVAL *src, const PIXVAL * const end)
+static uint64_t tex_hash(const void *ptr, size_t size)
 {
-	// for gcc this seems to produce the optimal code ...
-	while (src < end) {
-		*dest++ = *src++;
-	}
-}
-
-
-/**
- * Composite semi-transparent pixels that are already in SCREEN space.
- *
- * The source is a recoded cache, and the caller has already established from
- * the run header (TRANSPARENT_RUN) that this run is semi-transparent, so no
- * classification by pixel value is needed or done here.
- */
-static inline void colorpixcopy_screen(PIXVAL* dest, const PIXVAL* src, const PIXVAL* const end)
-{
-	while (src < end) {
-		// a semi-transparent pixel
-		uint16 aux   = *src++ - 0x8020;
-		uint16 alpha = (aux % 31) + 1;
-
-		*dest = colors_blend_alpha32(*dest, rgbmap_day_night[0x8000 + aux / 31], alpha);
-		dest++;
-	}
-}
-
-
-/**
- * Copy pixel from STORED space, replace player color.
- *
- * The source is original image data, so the historical stored encoding applies
- * and classifying a pixel by its value is part of that encoding, not an
- * assumption about screen colours.
- */
-static inline void colorpixcopy_stored(PIXVAL* dest, const STORED_PIXVAL* src, const STORED_PIXVAL* const end)
-{
-	if(  *src < 0x8020  ) {
-		while(  src < end  ) {
-			*dest++ = rgbmap_current[*src++];
+	//take max max_samples samples
+	const char *p = (const char*)ptr;
+	unsigned int smps = size / 8;
+	unsigned int off = 8;
+	if(  smps > 5000  ) {
+		off = ( size + 4999 ) / 5000;
+		if(  off & 7  ) {
+			off &= ~7;
+			off += 8;
 		}
+		smps = size / off;
+	}
+	uint64_t h = uint64_t( ptr );
+	while(  smps > 0  ) {
+		h ^= h >> 3;
+		h ^= h << 61;
+		h ^= *(const uint64_t*)p;
+		p += off;
+		smps--;
+	}
+	return h;
+}
+
+
+static GLuint getPlainImgTex(struct imd &image,
+                             const STORED_PIXVAL *sp,
+                             unsigned player_nr)
+{
+	scr_coord_val w = image.base_w;
+	scr_coord_val h = image.base_h;
+
+	if(  image.plain_tex[player_nr] != 0 &&
+	                !( image.plain_tex_flags & ( 1 << player_nr ) )  ) {
+		return image.plain_tex[player_nr];
+	}
+	if(  h <= 0 || w <= 0  ) {
+		return 0;
+	}
+
+	GLuint ret;
+	if(  image.plain_tex[player_nr] != 0  ) {
+		ret = image.plain_tex[player_nr];
 	}
 	else {
-		while(  src < end  ) {
-			// a semi-transparent pixel
-			uint16 aux   = *src++ - 0x8020;
-			uint16 alpha = ( aux % 31 ) + 1;
+		glGenTextures( 1, &ret );
+	}
+	glBindTexture( GL_TEXTURE_2D, ret );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
 
-			*dest = colors_blend_alpha32( *dest, rgbmap_day_night[0x8000 + aux / 31], alpha );
-			dest++;
+	//now upload the array
+	glPixelStorei( GL_UNPACK_ROW_LENGTH, w );
+	glPixelStorei( GL_UNPACK_ALIGNMENT, 4 );
+	glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
+	glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
+
+	PIX32 *tmp = (PIX32 *)malloc( w * h * sizeof(PIX32) );
+	memset( tmp, 0, w * h * sizeof(PIX32) );
+	PIX32 *p = tmp;
+	scr_coord_val y;
+	for(  y = 0; y < h; y++  ) {
+		scr_coord_val xpos = 0;
+		uint16 runlen = *sp++;
+		do {
+			// we start with a clear run
+			runlen &= ~TRANSPARENT_RUN;
+			xpos += runlen;
+
+			// now get colored pixels
+			runlen = *sp++;
+			runlen &= ~TRANSPARENT_RUN;
+
+			scr_coord_val x;
+			for(  x = 0; x < runlen; x++  ) {
+				/* directly using the indexed colors.
+				 could extract the transparency information
+				 here and map the the correct colors or do
+				 it in or around updateRGBMap() */
+				STORED_PIXVAL col = sp[x];
+				p[x + xpos].R = ( ( ( col & 0xf800 ) * 0x21 ) >> 13 ) & 0xff;
+				p[x + xpos].G = ( ( ( col & 0x07e0 ) * 0x41 ) >> 9 ) & 0xff;
+				p[x + xpos].B = ( ( ( col & 0x001f ) * 0x21 ) >> 2 ) & 0xff;
+				p[x + xpos].A = 0xff;
+			}
+			sp += runlen;
+			xpos += runlen;
+		} while(  ( runlen = *sp++ )  );
+		p += w;
+	}
+
+	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0,
+	              GL_RGBA, GL_UNSIGNED_BYTE,
+	              tmp );
+	free( tmp );
+
+	image.plain_tex[player_nr] = ret;
+	image.plain_tex_flags &= ~( 1 << player_nr );
+
+	return ret;
+}
+
+static GLuint getBaseImgTex(struct imd &image,
+                            const STORED_PIXVAL *sp)
+{
+	scr_coord_val w = image.base_w;
+	scr_coord_val h = image.base_h;
+	if(  image.base_tex != 0  ) {
+		return image.base_tex;
+	}
+	if(  h <= 0 || w <= 0  ) {
+		return 0;
+	}
+
+	GLuint ret;
+	glGenTextures( 1, &ret );
+	glBindTexture( GL_TEXTURE_2D, ret );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+
+	//now upload the array
+	glPixelStorei( GL_UNPACK_ROW_LENGTH, w );
+	glPixelStorei( GL_UNPACK_ALIGNMENT, 4 );
+	glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
+	glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
+
+	PIX32 *tmp = (PIX32 *)malloc( w * h * 4 );
+	memset( tmp, 0, w * h * 4 );
+	PIX32 *p = tmp;
+	scr_coord_val y;
+	for(  y = 0; y < h; y++  ) {
+		scr_coord_val xpos = 0;
+		uint16 runlen = *sp++;
+		do {
+			// we start with a clear run
+			runlen &= ~TRANSPARENT_RUN;
+			xpos += runlen;
+
+			// now get colored pixels
+			runlen = *sp++;
+
+			runlen &= ~TRANSPARENT_RUN;
+
+			scr_coord_val x;
+			for(  x = 0; x < runlen; x++  ) {
+				/* RGB565 to ARGB8888. no transparency encoded. */
+				STORED_PIXVAL col = sp[x];
+				p[x + xpos].R = ( ( ( col & 0xf800 ) * 0x21 ) >> 13 )
+				                & 0xff;
+				p[x + xpos].G = ( ( ( col & 0x07e0 ) * 0x41 ) >> 9 )
+				                & 0xff;
+				p[x + xpos].B = ( ( ( col & 0x001f ) * 0x21 ) >> 2 )
+				                & 0xff;
+				p[x + xpos].A = 0xff;
+			}
+			sp += runlen;
+			xpos += runlen;
+		} while(  ( runlen = *sp++ )  );
+		p += w;
+	}
+
+	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0,
+	              GL_RGBA, GL_UNSIGNED_BYTE,
+	              tmp );
+	free( tmp );
+
+	image.base_tex = ret;
+
+	return ret;
+}
+
+std::map<uint64_t,GLuint> colorGLuint;
+
+static GLuint getColorImgTex(const struct imd &image,
+                             const STORED_PIXVAL *sp)
+{
+	scr_coord_val w = image.base_w;
+	scr_coord_val h = image.base_h;
+	if(  h <= 0 ||  w <= 0  ) {
+		return 0;
+	}
+
+	//now parse sp for the first time to
+	//1) get the length (in PIXVALs) and
+	//2) get the width
+	const STORED_PIXVAL *spp = sp;
+	scr_coord_val y;
+	for(  y = 0; y < h; y++  ) {
+		uint16 runlen;
+
+		spp++;
+		do {
+			// now get colored pixels
+			runlen = *spp++;
+
+			runlen &= ~TRANSPARENT_RUN;
+
+			spp += runlen;
+		} while(  ( runlen = *spp++ )  );
+	}
+
+	size_t size = ( spp - sp ) * 2;
+
+	uint64_t hash = tex_hash( sp, size ) ^ size;
+	//also hash the current rgbmap
+	hash ^= tex_hash( rgbmap_current, RGBMAPSIZE * 2 );
+
+	auto it = colorGLuint.find( hash );
+	if(  it != colorGLuint.end()  ) {
+		return it->second;
+	}
+
+	GLuint ret;
+	glGenTextures( 1, &ret );
+	glBindTexture( GL_TEXTURE_2D, ret );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+
+	//now upload the array
+	glPixelStorei( GL_UNPACK_ROW_LENGTH, w );
+	glPixelStorei( GL_UNPACK_ALIGNMENT, 4 );
+	glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
+	glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
+
+	PIX32 *tmp = (PIX32 *)malloc( w * h * 4 );
+	memset( tmp, 0, w * h * 4 );
+	PIX32 *p = tmp;
+	for(  y = 0; y < h; y++  ) {
+		scr_coord_val xpos = 0;
+		uint16 runlen = *sp++;
+		do {
+			// we start with a clear run
+			runlen &= ~TRANSPARENT_RUN;
+			xpos += runlen;
+
+			// now get colored pixels
+			runlen = *sp++;
+
+			runlen &= ~TRANSPARENT_RUN;
+
+			scr_coord_val x;
+			for(  x = 0; x < runlen; x++  ) {
+				PIXVAL col = rgbmap_current[sp[x]];
+				p[x + xpos].R = ( ( ( col & 0xf800 ) * 0x21 ) >> 13 ) & 0xff;
+				p[x + xpos].G = ( ( ( col & 0x07e0 ) * 0x41 ) >> 9 ) & 0xff;
+				p[x + xpos].B = ( ( ( col & 0x001f ) * 0x21 ) >> 2 ) & 0xff;
+				p[x + xpos].A = 0xff;
+			}
+			sp += runlen;
+			xpos += runlen;
+		} while(  ( runlen = *sp++ )  );
+		p += w;
+	}
+
+	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0,
+	              GL_RGBA, GL_UNSIGNED_BYTE,
+	              tmp );
+
+	colorGLuint[hash] = ret;
+	free( tmp );
+
+	return ret;
+}
+
+
+static GLuint getArrayTex(const PIXVAL *arr, scr_coord_val w, scr_coord_val h)
+{
+	if(  w * h == 0  ) {
+		return 0;
+	}
+	size_t size = w * h;
+	uint64_t hash = tex_hash( arr, size );
+	auto it = arrayCache.find( hash );
+	if(  it != arrayCache.end()  ) {
+		return it->second;
+	}
+
+	GLuint texname;
+	glGenTextures( 1, &texname );
+	glBindTexture( GL_TEXTURE_2D, texname );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+
+	//now upload the array
+	glPixelStorei( GL_UNPACK_ROW_LENGTH, w );
+	glPixelStorei( GL_UNPACK_ALIGNMENT, 2 );
+	glPixelStorei( GL_UNPACK_SKIP_PIXELS, 0 );
+	glPixelStorei( GL_UNPACK_SKIP_ROWS, 0 );
+
+	//this already uses raw RGB 565 as defined by get_system_color
+	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGB, w, h, 0,
+	              GL_RGB, GL_UNSIGNED_SHORT_5_6_5,
+	              arr );
+	arrayCache[hash] = texname;
+
+	return texname;
+}
+
+
+static void display_img_pc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h,
+                           GLuint tex  CLIP_NUM_DEF)
+{
+	scr_coord_val rw = w;
+	scr_coord_val rh = h;
+
+	const scr_coord_val xoff = clip_wh( &xp, &w, CR.clip_rect.x, CR.clip_rect.xx );
+	const scr_coord_val yoff = clip_wh( &yp, &h, CR.clip_rect.y, CR.clip_rect.yy );
+
+	if(  w > 0 && h > 0  ) {
+		if(  CR.number_of_clips > 0  )
+		{
+			build_stencil( xp, yp, xp + w, yp + h, CR );
+			glEnable( GL_STENCIL_TEST );
+			glStencilOp( GL_KEEP, GL_KEEP, GL_KEEP );
+			glStencilFunc( GL_NOTEQUAL, 1, 1 );
 		}
-	}
-}
 
+		glEnable( GL_TEXTURE_2D );
+		glBindTexture( GL_TEXTURE_2D, tex );
+		glColor3f( 1, 1, 1 );
+		glEnable( GL_BLEND );
+		glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+		glBegin( GL_QUADS );
+		glTexCoord2f( xoff   / float( rw ),  yoff   / float( rh ) );
+		glVertex2i( xp,     yp );
+		glTexCoord2f( ( xoff + w ) / float( rw ),  yoff   / float( rh ) );
+		glVertex2i( xp + w,   yp );
+		glTexCoord2f( ( xoff + w ) / float( rw ), ( yoff + h ) / float( rh ) );
+		glVertex2i( xp + w,   yp + h );
+		glTexCoord2f( xoff   / float( rw ), ( yoff + h ) / float( rh ) );
+		glVertex2i( xp,     yp + h );
+		glEnd();
+		glDisable( GL_TEXTURE_2D );
 
-/**
- * As colorpixcopy_stored(), but resolving semi-transparent pixels against the
- * all-day table. Also STORED space.
- */
-static inline void colorpixcopydaytime_stored(PIXVAL* dest, const STORED_PIXVAL* src, const STORED_PIXVAL* const end)
-{
-	if(  *src < 0x8020  ) {
-		while(  src < end  ) {
-			*dest++ = rgbmap_current[*src++];
+		if(  CR.number_of_clips > 0  ) {
+			glDisable( GL_STENCIL_TEST );
+			glStencilFunc( GL_ALWAYS, 1, 1 );
 		}
-	}
-	else {
-		while(  src < end  ) {
-			// a semi-transparent pixel
-			uint16 aux   = *src++ - 0x8020;
-			uint16 alpha = ( aux % 31 ) + 1;
-
-			*dest = colors_blend_alpha32( *dest, rgbmap_all_day[0x8000 + aux / 31], alpha );
-			dest++;
-		}
-	}
-}
-
-
-/**
- * templated pixel copy routines
- * to be used in display_img_pc
- */
-enum pixcopy_routines {
-	plain = 0,    /// simply copies the pixels
-	colored = 1,  /// replaces player colors
-	daytime = 2   /// use daytime color lookup for transparent pixels
-};
-
-
-/**
- * Which source space each routine reads.
- *
- * plain draws from a recoded screen cache; colored and daytime draw from the
- * original stored image data. Keeping that in the type is what stops the two
- * being confused once a screen pixel is no longer the same width as a stored
- * one.
- */
-template<pixcopy_routines copyroutine> struct pixcopy_source_t;
-template<> struct pixcopy_source_t<plain>   { typedef PIXVAL        type; };
-template<> struct pixcopy_source_t<colored> { typedef STORED_PIXVAL type; };
-template<> struct pixcopy_source_t<daytime> { typedef STORED_PIXVAL type; };
-
-template<pixcopy_routines copyroutine>
-using pixcopy_src = typename pixcopy_source_t<copyroutine>::type;
-
-
-template<pixcopy_routines copyroutine> void templated_pixcopy(PIXVAL *dest, const pixcopy_src<copyroutine> *src, const pixcopy_src<copyroutine> * const end);
-
-
-template<> void templated_pixcopy<plain>(PIXVAL *dest, const PIXVAL *src, const PIXVAL * const end)
-{
-	pixcopy( dest, src, end );
-}
-
-
-template<> void templated_pixcopy<colored>(PIXVAL* dest, const STORED_PIXVAL* src, const STORED_PIXVAL* const end)
-{
-	colorpixcopy_stored( dest, src, end );
-}
-
-
-template<> void templated_pixcopy<daytime>(PIXVAL* dest, const STORED_PIXVAL* src, const STORED_PIXVAL* const end)
-{
-	colorpixcopydaytime_stored( dest, src, end );
-}
-
-
-/**
- * The semi-transparent run of the same routine.
- *
- * daytime deliberately maps to the day/night stored variant rather than the
- * all-day one: that is what the historical code did for alpha runs, and this
- * cut preserves it rather than correcting it.
- */
-template<pixcopy_routines copyroutine> void templated_alphacopy(PIXVAL *dest, const pixcopy_src<copyroutine> *src, const pixcopy_src<copyroutine> * const end);
-
-
-template<> void templated_alphacopy<plain>(PIXVAL *dest, const PIXVAL *src, const PIXVAL * const end)
-{
-	colorpixcopy_screen( dest, src, end );
-}
-
-
-template<> void templated_alphacopy<colored>(PIXVAL* dest, const STORED_PIXVAL* src, const STORED_PIXVAL* const end)
-{
-	colorpixcopy_stored( dest, src, end );
-}
-
-
-template<> void templated_alphacopy<daytime>(PIXVAL* dest, const STORED_PIXVAL* src, const STORED_PIXVAL* const end)
-{
-	colorpixcopy_stored( dest, src, end );
-}
-
-
-/**
- * draws image with clipping along arbitrary lines
- */
-template<pixcopy_routines copyroutine>
-static void display_img_pc(scr_coord_val h, const scr_coord_val xp, const scr_coord_val yp, const pixcopy_src<copyroutine> *sp  CLIP_NUM_DEF)
-{
-	if(  h > 0  ) {
-		PIXVAL *tp = textur + yp * disp_width;
-
-		// initialize clipping
-		init_ranges( yp  CLIP_NUM_PAR );
-		do { // line decoder
-			int xpos = xp;
-
-			// display image
-			int runlen = *sp++;
-
-			// get left/right boundary, step
-			int xmin, xmax;
-			get_xrange_and_step_y( xmin, xmax  CLIP_NUM_PAR );
-			do {
-				// we start with a clear run (which may be 0 pixels)
-				xpos += ( runlen & ~TRANSPARENT_RUN );
-
-				// now get colored pixels
-				runlen = *sp++;
-				uint16 has_alpha = runlen & TRANSPARENT_RUN;
-				runlen &= ~TRANSPARENT_RUN;
-
-				// something to display?
-				if(  xmin < xmax && xpos + runlen > xmin && xpos < xmax  ) {
-					const int left = ( xpos >= xmin ? 0 : xmin - xpos );
-					const int len  = ( xmax - xpos >= runlen ? runlen : xmax - xpos );
-					if(  !has_alpha  ) {
-						templated_pixcopy<copyroutine>( tp + xpos + left, sp + left, sp + len );
-					}
-					else {
-						templated_alphacopy<copyroutine>( tp + xpos + left, sp + left, sp + len );
-					}
-				}
-
-				sp += runlen;
-				xpos += runlen;
-
-			} while(  ( runlen = *sp++ )  );
-
-			tp += disp_width;
-		} while(  --h  );
-	}
-}
-
-
-/**
- * Draw image with horizontal clipping
- */
-static void display_img_wc(scr_coord_val h, const scr_coord_val xp, const scr_coord_val yp, const PIXVAL *sp  CLIP_NUM_DEF)
-{
-	if(  h > 0  ) {
-		PIXVAL *tp = textur + yp * disp_width;
-
-		do { // line decoder
-			int xpos = xp;
-
-			// display image
-			uint16 runlen = *sp++;
-
-			do {
-				// we start with a clear run
-				xpos += ( runlen & ~TRANSPARENT_RUN );
-
-				// now get colored pixels
-				runlen = *sp++;
-				uint16 has_alpha = runlen & TRANSPARENT_RUN;
-				runlen &= ~TRANSPARENT_RUN;
-
-				// something to display?
-				if(  xpos + runlen > CR.clip_rect.x && xpos < CR.clip_rect.xx  ) {
-					const int left = ( xpos >= CR.clip_rect.x ? 0 : CR.clip_rect.x - xpos );
-					const int len  = ( CR.clip_rect.xx - xpos >= runlen ? runlen : CR.clip_rect.xx - xpos );
-					if(  !has_alpha  ) {
-						pixcopy( tp + xpos + left, sp + left, sp + len );
-					}
-					else {
-						colorpixcopy_screen( tp + xpos + left, sp + left, sp + len );
-					}
-				}
-
-				sp += runlen;
-				xpos += runlen;
-			} while(  ( runlen = *sp++ )  );
-
-			tp += disp_width;
-		} while(  --h  );
-	}
-}
-
-
-/**
- * Draw each image without clipping
- */
-static void display_img_nc(scr_coord_val h, const scr_coord_val xp, const scr_coord_val yp, const PIXVAL *sp)
-{
-	if(  h > 0  ) {
-		PIXVAL *tp = textur + xp + yp * disp_width;
-
-		do { // line decoder
-			uint16 runlen = *sp++;
-			PIXVAL *p = tp;
-
-			// one line decoder
-			do {
-				// we start with a clear run
-				p += ( runlen & ~TRANSPARENT_RUN );
-
-				// now get colored pixels
-				runlen = *sp++;
-				if(  runlen & TRANSPARENT_RUN  ) {
-					runlen &= ~TRANSPARENT_RUN;
-					colorpixcopy_screen( p, sp, sp+runlen );
-					p += runlen;
-					sp += runlen;
-				}
-				else {
-#ifdef LOW_LEVEL
-#ifdef SIM_BIG_ENDIAN
-					// low level c++ without any unrolling
-					while(  runlen--  ) {
-						*p++ = *sp++;
-					}
-#else
-					// trying to merge reads and writes
-					if(  runlen  ) {
-						// align to 4 bytes, should use uintptr_t but not available
-						if(  reinterpret_cast<size_t>( p ) & 0x2  ) {
-							*p++ = *sp++;
-							runlen--;
-						}
-						// aligned fast copy loop
-						bool const postalign = runlen & 1;
-						runlen >>= 1;
-						uint32 *ld = reinterpret_cast<uint32 *>( p );
-						while(  runlen--  ) {
-#if defined _MSC_VER // MSVC can read unaligned
-							*ld++ = *( uint32 const * const )sp;
-#else
-							// little endian order, assumed by default
-							*ld++ = ( uint32( sp[1] ) << 16 ) | uint32( sp[0] );
-#endif
-							sp += 2;
-						}
-						p = (PIXVAL *)ld;
-						// finish unaligned remainder
-						if(  postalign  ) {
-							*p++ = *sp++;
-						}
-					}
-#endif
-#else
-					// high level c++
-					const PIXVAL *const splast = sp + runlen;
-					p = std::copy( sp, splast, p );
-					sp = splast;
-#endif
-				}
-				runlen = *sp++;
-			} while(  runlen != 0  );
-
-			tp += disp_width;
-		} while(  --h > 0  );
 	}
 }
 
@@ -2479,24 +2073,25 @@ static void simgraphgl_draw_img_aligned(const image_id n, scr_rect area, int ali
 	if(  n < anz_images  ) {
 		scr_coord_val x, y;
 
-		// align the image horizontally
+		float zoom = get_img_zoom( n );
+		// either the image is not touced or moved to middle or right of the rect
 		x = area.x;
 		if(  ( align & ALIGN_RIGHT ) == ALIGN_CENTER_H  ) {
-			x -= images[n].x;
-			x += ( area.w - images[n].w ) / 2;
+			x -= floor( images[n].base_x * zoom );
+			x += ( area.w - ceil( images[n].base_w * zoom ) ) / 2;
 		}
 		else if(  ( align & ALIGN_RIGHT ) == ALIGN_RIGHT  ) {
-			x = area.get_right() - images[n].x - images[n].w;
+			x = area.get_right() - ceil( ( images[n].base_x + images[n].base_w ) * zoom );
 		}
 
-		// align the image vertically
+		// either the image is not touced or moved to middle or bottom of the rect
 		y = area.y;
 		if(  ( align & ALIGN_BOTTOM ) == ALIGN_CENTER_V  ) {
-			y -= images[n].y;
-			y += ( area.h - images[n].h ) / 2;
+			y -= floor( images[n].base_y * zoom );
+			y += ( area.h - ceil( images[n].base_h * zoom ) ) / 2;
 		}
 		else if(  ( align & ALIGN_BOTTOM ) == ALIGN_BOTTOM  ) {
-			y = area.get_bottom() - images[n].y - images[n].h;
+			y = area.get_bottom() - ceil( ( images[n].base_y + images[n].base_h ) * zoom );
 		}
 
 		gfx->draw_color_img( n, x, y, 0, false, dirty  CLIP_NUM_DEFAULT );
@@ -2514,14 +2109,23 @@ static void simgraphgl_draw_img_aux(const image_id n, scr_coord_val xp, scr_coor
 		const sint8 use_player = (images[n].recode_flags & FLAG_HAS_PLAYER_COLOR) * player_nr_raw;
 		// need to go to nightmode and or re-zoomed?
 		PIXVAL *sp;
+		GLuint tex;
 
 		if(  use_player > 0  ) {
-			// player colour images are rezoomed/recoloured in display_color_img
+			if(  ( images[n].recode_flags & FLAG_REZOOM )  ) {
+				rezoom_img( n );
+				recode_img( n, 0 );
+				recode_img( n, use_player );
+			}
+			else if(  ( images[n].player_flags & 1 )  ) {
+				recode_img( n, use_player );
+			}
 			sp = images[n].data[use_player];
 			if(  sp == NULL  ) {
 				dbg->warning( "display_img_aux", "CImg[%i] %u failed!", use_player, n );
 				return;
 			}
+			tex = getPlainImgTex( images[n], sp, use_player );
 		}
 		else {
 			if(  ( images[n].recode_flags & FLAG_REZOOM )  ) {
@@ -2536,79 +2140,19 @@ static void simgraphgl_draw_img_aux(const image_id n, scr_coord_val xp, scr_coor
 				dbg->warning( "display_img_aux", "Img %u failed!", n );
 				return;
 			}
+
+			tex = getPlainImgTex( images[n], sp, 0 );
 		}
 		// now, since zooming may have change this image
-		yp += images[n].y;
-		scr_coord_val h = images[n].h; // may change due to vertical clipping
+		float zoom = get_img_zoom( n );
 
-		// in the next line the vertical clipping will be handled
-		// by that way the drawing routines must only take into account the horizontal clipping
-		// this should be much faster in most cases
+		yp += floor( images[n].base_y * zoom );
+		xp += floor( images[n].base_x * zoom );
 
-		// must the height be reduced?
-		scr_coord_val reduce_h = yp + h - CR.clip_rect.yy;
-		if(  reduce_h > 0  ) {
-			h -= reduce_h;
-		}
-		// still something to draw
-		if(  h <= 0  ) {
-			return;
-		}
-
-		// vertically lines to skip (only bottom is visible
-		scr_coord_val skip_lines = CR.clip_rect.y - ( int )yp;
-		if(  skip_lines > 0  ) {
-			if(  skip_lines >= h  ) {
-				// not visible at all
-				return;
-			}
-			h -= skip_lines;
-			yp += skip_lines;
-			// now skip them
-			while(  skip_lines--  ) {
-				do {
-					// clear run + colored run + next clear run
-					sp++;
-					sp += ( *sp ) & ( ~TRANSPARENT_RUN );
-					sp ++;
-				} while(  *sp  );
-				sp++;
-			}
-			// now sp is the new start of an image with height h
-		}
-
-		// new block for new variables
-		{
-			// needed now ...
-			const scr_coord_val w = images[n].w;
-			xp += images[n].x;
-
-			// clipping at poly lines?
-			if(  CR.number_of_clips > 0  ) {
-					display_img_pc<plain>( h, xp, yp, sp  CLIP_NUM_PAR );
-					// since height may be reduced, start marking here
-					if(  dirty  ) {
-						simgraphgl_mark_rect_dirty_clip( xp, yp, xp + w - 1, yp + h - 1  CLIP_NUM_PAR );
-					}
-			}
-			else {
-				// use horizontal clipping or skip it?
-				if(  xp >= CR.clip_rect.x && xp + w <= CR.clip_rect.xx  ) {
-					// marking change?
-					if(  dirty  ) {
-						mark_rect_dirty_nc( xp, yp, xp + w - 1, yp + h - 1 );
-					}
-					display_img_nc( h, xp, yp, sp );
-				}
-				else if(  xp < CR.clip_rect.xx && xp + w > CR.clip_rect.x  ) {
-					display_img_wc( h, xp, yp, sp  CLIP_NUM_PAR );
-					// since height may be reduced, start marking here
-					if(  dirty  ) {
-						simgraphgl_mark_rect_dirty_clip( xp, yp, xp + w - 1, yp + h - 1  CLIP_NUM_PAR );
-					}
-				}
-			}
-		}
+		display_img_pc( xp, yp,
+		                ceil( images[n].base_w * zoom ),
+		                ceil( images[n].base_h * zoom ),
+		                tex  CLIP_NUM_PAR );
 	}
 }
 
@@ -2617,20 +2161,23 @@ static void simgraphgl_draw_img_aux(const image_id n, scr_coord_val xp, scr_coor
 static void display_three_image_row(image_id i1, image_id i2, image_id i3, scr_rect row, FLAGGED_PIXVAL)
 {
 	if(  i1 != IMG_EMPTY  ) {
-		scr_coord_val w = images[i1].w;
+		float zoom1 = get_img_zoom( i1 );
+		scr_coord_val w = ceil( images[i1].base_w * zoom1 );
 		gfx->draw_color_img( i1, row.x, row.y, 0, false, true  CLIP_NUM_DEFAULT );
 		row.x += w;
 		row.w -= w;
 	}
 	// right
 	if(  i3 != IMG_EMPTY  ) {
-		scr_coord_val w = images[i3].w;
+		float zoom3 = get_img_zoom( i3 );
+		scr_coord_val w = ceil( images[i3].base_w * zoom3 );
 		gfx->draw_color_img( i3, row.get_right() - w, row.y, 0, false, true  CLIP_NUM_DEFAULT );
 		row.w -= w;
 	}
 	// middle
 	if(  i2 != IMG_EMPTY  ) {
-		scr_coord_val w = images[i2].w;
+		float zoom2 = get_img_zoom( i2 );
+		scr_coord_val w = ceil( images[i2].base_w * zoom2 );
 		// tile it wide
 		while(  w <= row.w  ) {
 			gfx->draw_color_img( i2, row.x, row.y, 0, false, true  CLIP_NUM_DEFAULT );
@@ -2649,11 +2196,19 @@ static void display_three_image_row(image_id i1, image_id i2, image_id i3, scr_r
 
 static scr_coord_val get_img_width(image_id img)
 {
-	return img != IMG_EMPTY ? images[ img ].w : 0;
+	if(  img == IMG_EMPTY  ) {
+		return 0;
+	}
+	float zoom = get_img_zoom( img );
+	return ceil( images[img].base_w * zoom );
 }
 static scr_coord_val get_img_height(image_id img)
 {
-	return img != IMG_EMPTY ? images[ img ].h : 0;
+	if(  img == IMG_EMPTY  ) {
+		return 0;
+	}
+	float zoom = get_img_zoom( img );
+	return ceil( images[img].base_h * zoom );
 }
 
 typedef void (*DISP_THREE_ROW_FUNC)(image_id, image_id, image_id, scr_rect, FLAGGED_PIXVAL);
@@ -2721,20 +2276,23 @@ static void simgraphgl_draw_stretch_map(const stretch_map_t &imag, scr_rect area
 static void display_three_blend_row(image_id i1, image_id i2, image_id i3, scr_rect row, FLAGGED_PIXVAL color)
 {
 	if(  i1 != IMG_EMPTY  ) {
-		scr_coord_val w = images[i1].w;
+		float zoom1 = get_img_zoom( i1 );
+		scr_coord_val w = ceil( images[i1].base_w * zoom1 );
 		gfx->draw_rezoomed_img_blend( i1, row.x, row.y, 0, color, false, true  CLIPNUM_IGNORE );
 		row.x += w;
 		row.w -= w;
 	}
 	// right
 	if(  i3 != IMG_EMPTY  ) {
-		scr_coord_val w = images[i3].w;
+		float zoom3 = get_img_zoom( i3 );
+		scr_coord_val w = ceil( images[i3].base_w * zoom3 );
 		gfx->draw_rezoomed_img_blend( i3, row.get_right() - w, row.y, 0, color, false, true  CLIPNUM_IGNORE );
 		row.w -= w;
 	}
 	// middle
 	if(  i2 != IMG_EMPTY  ) {
-		scr_coord_val w = images[i2].w;
+		float zoom2 = get_img_zoom( i2 );
+		scr_coord_val w = ceil( images[i2].base_w * zoom2 );
 		// tile it wide
 		while(  w <= row.w  ) {
 			gfx->draw_rezoomed_img_blend( i2, row.x, row.y, 0, color, false, true CLIPNUM_IGNORE );
@@ -2861,48 +2419,31 @@ void simgraphgl_draw_color_img(const image_id n, scr_coord_val xp, scr_coord_val
 		else {
 			// do player colour substitution but not daynight - can't use cached images. Do NOT call multithreaded.
 			// now test if visible and clipping needed
-			const scr_coord_val x = images[n].x + xp;
-			      scr_coord_val y = images[n].y + yp;
-			const scr_coord_val w = images[n].w;
-			      scr_coord_val h = images[n].h;
+			const scr_coord_val x = images[n].base_x + xp;
+			const scr_coord_val y = images[n].base_y + yp;
+			const scr_coord_val w = images[n].base_w;
+			const scr_coord_val h = images[n].base_h;
 			if(  h <= 0 || x >= CR.clip_rect.xx || y >= CR.clip_rect.yy || x + w <= CR.clip_rect.x || y + h <= CR.clip_rect.y  ) {
 				// not visible => we are done
 				// happens quite often ...
 				return;
 			}
 
-			if(  dirty  ) {
-				simgraphgl_mark_rect_dirty_wc( x, y, x + w - 1, y + h - 1 );
+			// colors for 2nd company color
+			if(  player_nr >= 0  ) {
+				activate_player_color( player_nr, daynight );
 			}
-
-			activate_player_color( player_nr, daynight );
-
+			else {
+				// no player
+				activate_player_color( 0, daynight );
+			}
 			// color replacement needs the original data => sp points to non-cached data
-			const STORED_PIXVAL *sp = images[n].zoom_data != NULL ? images[n].zoom_data : images[n].base_data;
+			const STORED_PIXVAL *sp = images[n].base_data;
 
-			// clip top/bottom
-			scr_coord_val yoff = clip_wh( &y, &h, CR.clip_rect.y, CR.clip_rect.yy );
-			if(  h > 0  ) { // clipping may have reduced it
-				// clip top
-				while(  yoff  ) {
-					yoff--;
-					do {
-						// clear run + colored run + next clear run
-						++sp;
-						sp += ( *sp ) & ( ~TRANSPARENT_RUN );
-						sp++;
-					} while(  *sp  );
-					sp++;
-				}
-
-				// clipping at poly lines?
-				if(  CR.number_of_clips > 0  ) {
-					daynight ? display_img_pc<colored>( h, x, y, sp  CLIP_NUM_PAR ) : display_img_pc<daytime>( h, x, y, sp  CLIP_NUM_PAR );
-				}
-				else {
-					daynight ? display_color_img_wc( sp, x, y, h  CLIP_NUM_PAR ) : display_color_img_wc_daytime( sp, x, y, h  CLIP_NUM_PAR );
-				}
-			}
+			GLuint tex = getColorImgTex( images[n], sp );
+			display_img_pc( x, y,
+			                images[n].base_w, images[n].base_h,
+			                tex  CLIP_NUM_PAR );
 		}
 	} // number ok
 }
@@ -2920,18 +2461,14 @@ static void simgraphgl_draw_base_img(const image_id n, scr_coord_val xp, scr_coo
 	else if(  n < anz_images  ) {
 		// now test if visible and clipping needed
 		const scr_coord_val x = images[n].base_x + xp;
-		      scr_coord_val y = images[n].base_y + yp;
+		const scr_coord_val y = images[n].base_y + yp;
 		const scr_coord_val w = images[n].base_w;
-		      scr_coord_val h = images[n].base_h;
+		const scr_coord_val h = images[n].base_h;
 
 		if(  h <= 0 || x >= CR.clip_rect.xx || y >= CR.clip_rect.yy || x + w <= CR.clip_rect.x || y + h <= CR.clip_rect.y  ) {
 			// not visible => we are done
 			// happens quite often ...
 			return;
-		}
-
-		if (dirty) {
-			simgraphgl_mark_rect_dirty_wc( x, y, x + w - 1, y + h - 1 );
 		}
 
 		// colors for 2nd company color
@@ -2946,29 +2483,9 @@ static void simgraphgl_draw_base_img(const image_id n, scr_coord_val xp, scr_coo
 		// color replacement needs the original data => sp points to non-cached data
 		const STORED_PIXVAL *sp = images[n].base_data;
 
-		// clip top/bottom
-		scr_coord_val yoff = clip_wh( &y, &h, CR.clip_rect.y, CR.clip_rect.yy );
-		if(  h > 0  ) { // clipping may have reduced it
-			// clip top
-			while(  yoff  ) {
-				yoff--;
-				do {
-					// clear run + colored run + next clear run
-					sp++;
-					sp += ( *sp ) & ( ~TRANSPARENT_RUN );
-					sp++;
-				} while(  *sp  );
-				sp++;
-			}
-			// clipping at poly lines?
-			if(  CR.number_of_clips > 0  ) {
-				daynight ? display_img_pc<colored>( h, x, y, sp  CLIP_NUM_PAR ) : display_img_pc<daytime>( h, x, y, sp  CLIP_NUM_PAR );
-			}
-			else {
-				daynight ? display_color_img_wc( sp, x, y, h  CLIP_NUM_PAR ) : display_color_img_wc_daytime( sp, x, y, h  CLIP_NUM_PAR );
-			}
-		}
-
+		GLuint tex = getColorImgTex( images[n], sp );
+		display_img_pc( x, y, images[n].base_w, images[n].base_h,
+		                tex  CLIP_NUM_PAR );
 	} // number ok
 }
 
@@ -3071,87 +2588,84 @@ static blend_proc outline[3] = {
  */
 static void simgraphgl_tint_rect(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL colval, int percent_blend)
 {
-	if(  clip_lr( &xp, &w, CR0.clip_rect.x, CR0.clip_rect.xx ) && clip_lr( &yp, &h, CR0.clip_rect.y, CR0.clip_rect.yy )  ) {
-		const PIXVAL alpha = ( percent_blend * 64 ) / 100;
+	scr_coord_val rw = w;
+	scr_coord_val rh = h;
+	const scr_coord_val xoff = clip_wh( &xp, &w, CR0.clip_rect.x, CR0.clip_rect.xx );
+	const scr_coord_val yoff = clip_wh( &yp, &h, CR0.clip_rect.y, CR0.clip_rect.yy );
 
-		switch( alpha ) {
-			case 0: // nothing to do
-				break;
+	if(  w > 0 && h > 0  ) {
 
-			case 16:
-			case 32:
-			case 48:
-			{
-			// fast blending with 1/4 | 1/2 | 3/4 percentage
-				blend_proc blend = outline[( alpha >> 4 ) - 1 ];
+		const float alpha = percent_blend / 100.0;
 
-				for(  scr_coord_val y = 0; y < h; y++  ) {
-					blend( textur + xp + ( yp + y ) * disp_width, NULL, colval, w );
-				}
-			}
-			break;
+		glBindTexture( GL_TEXTURE_2D, 0 );
+		glColor4f( ( colval & 0xf800 ) / float( 0xf800 ),
+		           ( colval & 0x07e0 ) / float( 0x07e0 ),
+		           ( colval & 0x001f ) / float( 0x001f ),
+		           alpha );
+		glTexEnvi( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE );
+		glTexEnvi( GL_TEXTURE_ENV, GL_SRC0_RGB, GL_PREVIOUS );
+		glTexEnvi( GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_REPLACE );
 
-			case 64: // opaque
-				simgraphgl_draw_rect( xp, yp, w, h, colval, false );
-				break;
+		glEnable( GL_BLEND );
+		glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+		glBegin( GL_QUADS );
+		glTexCoord2f( xoff   / float( rw ),  yoff   / float( rh ) );
+		glVertex2i( xp,     yp );
+		glTexCoord2f( ( xoff + w ) / float( rw ),  yoff   / float( rh ) );
+		glVertex2i( xp + w,   yp );
+		glTexCoord2f( ( xoff + w ) / float( rw ), ( yoff + h ) / float( rh ) );
+		glVertex2i( xp + w,   yp + h );
+		glTexCoord2f( xoff   / float( rw ), ( yoff + h ) / float( rh ) );
+		glVertex2i( xp,     yp + h );
+		glEnd();
 
-			default:
-				// any percentage blending: SLOW!
-				{
-				const PIXVAL r_src = red( colval );
-				const PIXVAL g_src = green( colval );
-				const PIXVAL b_src = blue( colval );
-				for(  ; h > 0; yp++, h--  ) {
-					PIXVAL *dest = textur + yp * disp_width + xp;
-					const PIXVAL *const end = dest + w;
-					while(  dest < end  ) {
-						const PIXVAL r_dest = red( *dest );
-						const PIXVAL g_dest = green( *dest );
-						const PIXVAL b_dest = blue( *dest );
-						const PIXVAL r = r_dest + ( ( ( r_src - r_dest ) * alpha ) >> 6 );
-						const PIXVAL g = g_dest + ( ( ( g_src - g_dest ) * alpha ) >> 6 );
-						const PIXVAL b = b_dest + ( ( ( b_src - b_dest ) * alpha ) >> 6 );
-						*dest++ = rgb( r, g, b );
-					}
-				}
-			}
-			break;
-		}
+		glTexEnvi( GL_TEXTURE_ENV, GL_SRC0_RGB, GL_TEXTURE );
+		glTexEnvi( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE );
+		glTexEnvi( GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE );
 	}
 }
 
 
-static void display_img_blend_wc(scr_coord_val h, const scr_coord_val xp, const scr_coord_val yp, const PIXVAL *sp, int colour, blend_proc p  CLIP_NUM_DEF)
+static void display_img_blend_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, GLuint tex, int colour, bool use_colour, float alpha  CLIP_NUM_DEF)
 {
-	if(  h > 0  ) {
-		PIXVAL *tp = textur + yp * disp_width;
+	scr_coord_val rw = w;
+	scr_coord_val rh = h;
+	const scr_coord_val xoff = clip_wh( &xp, &w, CR.clip_rect.x, CR.clip_rect.xx );
+	const scr_coord_val yoff = clip_wh( &yp, &h, CR.clip_rect.y, CR.clip_rect.yy );
 
-		do { // line decoder
-			int xpos = xp;
-
-			// display image
-			uint16 runlen = *sp++;
-
-			do {
-				// we start with a clear run
-				xpos += ( runlen & ~TRANSPARENT_RUN );
-
-				// now get colored pixels
-				runlen = ( *sp++ ) & ( ~TRANSPARENT_RUN );
-
-				// something to display?
-				if(  xpos + runlen > CR.clip_rect.x && xpos < CR.clip_rect.xx  ) {
-					const int left = ( xpos >= CR.clip_rect.x ? 0 : CR.clip_rect.x - xpos );
-					const int len  = ( CR.clip_rect.xx - xpos >= runlen ? runlen : CR.clip_rect.xx - xpos );
-					p( tp + xpos + left, sp + left, colour, len - left );
-				}
-
-				sp += runlen;
-				xpos += runlen;
-			} while(  ( runlen = *sp++ )  );
-
-			tp += disp_width;
-		} while(  --h  );
+	if(  w > 0 && h > 0  ) {
+		glEnable( GL_TEXTURE_2D );
+		glBindTexture( GL_TEXTURE_2D, tex );
+		if(  use_colour  ) {
+			glColor4f( ( colour & 0xf800 ) / float( 0xf800 ),
+			           ( colour & 0x07e0 ) / float( 0x07e0 ),
+			           ( colour & 0x001f ) / float( 0x001f ),
+			           alpha );
+			glTexEnvi( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE );
+			glTexEnvi( GL_TEXTURE_ENV, GL_SRC0_RGB, GL_PREVIOUS );
+			glTexEnvi( GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_REPLACE );
+		}
+		else {
+			glColor4f( 1, 1, 1, alpha );
+		}
+		glEnable( GL_BLEND );
+		glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+		glBegin( GL_QUADS );
+		glTexCoord2f( xoff   / float( rw ),  yoff   / float( rh ) );
+		glVertex2i( xp,     yp );
+		glTexCoord2f( ( xoff + w ) / float( rw ),  yoff   / float( rh ) );
+		glVertex2i( xp + w,   yp );
+		glTexCoord2f( ( xoff + w ) / float( rw ), ( yoff + h ) / float( rh ) );
+		glVertex2i( xp + w,   yp + h );
+		glTexCoord2f( xoff   / float( rw ), ( yoff + h ) / float( rh ) );
+		glVertex2i( xp,     yp + h );
+		glEnd();
+		if(  use_colour  ) {
+			glTexEnvi( GL_TEXTURE_ENV, GL_SRC0_RGB, GL_TEXTURE );
+			glTexEnvi( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE );
+			glTexEnvi( GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE );
+		}
+		glDisable( GL_TEXTURE_2D );
 	}
 }
 
@@ -3222,41 +2736,55 @@ static void alpha_recode(PIXVAL *dest, const PIXVAL *src, const PIXVAL *alphamap
 }
 
 
-static void display_img_alpha_wc(scr_coord_val h, const scr_coord_val xp, const scr_coord_val yp, const PIXVAL *sp, const PIXVAL *alphamap, const PIXVAL alpha_mask, int colour, alpha_proc p  CLIP_NUM_DEF)
+static void display_img_alpha_wc(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, GLuint tex, GLuint alphatex, const uint8 alpha_flags, PIXVAL  CLIP_NUM_DEF )
 {
-	if(  h > 0  ) {
-		PIXVAL *tp = textur + yp * disp_width;
+	//more exact: r/g/b channel from alphatex is selected by alpha_flags
+	//to be the alpha channel for this blt.
+	//we assume here that only one of the RGB channels is used for alpha
 
-		do { // line decoder
-			int xpos = xp;
+	scr_coord_val rw = w;
+	scr_coord_val rh = h;
+	const scr_coord_val xoff = clip_wh( &xp, &w, CR.clip_rect.x, CR.clip_rect.xx );
+	const scr_coord_val yoff = clip_wh( &yp, &h, CR.clip_rect.y, CR.clip_rect.yy );
 
-			// display image
-			uint16 runlen = *sp++;
-			alphamap++;
+	if(  w > 0 && h > 0  ) {
+		glActiveTextureARB( GL_TEXTURE0_ARB );
+		glEnable( GL_TEXTURE_2D );
+		glBindTexture( GL_TEXTURE_2D, tex );
+		glActiveTextureARB( GL_TEXTURE1_ARB );
+		glEnable( GL_TEXTURE_2D );
+		glBindTexture( GL_TEXTURE_2D, alphatex );
 
-			do {
-				// we start with a clear run
-				xpos += runlen;
+		glUseProgram( img_alpha_program );
 
-				// now get colored pixels
-				runlen = ( ( *sp++ ) & ~TRANSPARENT_RUN );
-				alphamap++;
+		float alpha_mask[4];
+		//todo: someone please explain to me why there is 2.0 needed here
+		alpha_mask[0] = ( alpha_flags & ALPHA_RED ) ? 2.0 : 0.0;
+		alpha_mask[1] = ( alpha_flags & ALPHA_GREEN ) ? 2.0 : 0.0;
+		alpha_mask[2] = ( alpha_flags & ALPHA_BLUE ) ? 1.0 : 0.0;
+		alpha_mask[3] = 0.0;
+		glUniform4fv( img_alpha_alphaMask_Location, 1, alpha_mask );
+		glUniform1i( img_alpha_texColor_Location, 0 );
+		glUniform1i( img_alpha_texAlpha_Location, 1 );
 
-				// something to display?
-				if(  xpos + runlen > CR.clip_rect.x && xpos < CR.clip_rect.xx  ) {
-					const int left = ( xpos >= CR.clip_rect.x ? 0 : CR.clip_rect.x - xpos );
-					const int len  = ( CR.clip_rect.xx - xpos >= runlen ? runlen : CR.clip_rect.xx - xpos );
-					p( tp + xpos + left, sp + left, alphamap + left, alpha_mask, colour, len - left );
-				}
+		glEnable( GL_BLEND );
+		glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+		glBegin( GL_QUADS );
+		glTexCoord2f( xoff   / float( rw ),  yoff   / float( rh ) );
+		glVertex2i( xp,     yp );
+		glTexCoord2f( ( xoff + w ) / float( rw ),  yoff   / float( rh ) );
+		glVertex2i( xp + w,   yp );
+		glTexCoord2f( ( xoff + w ) / float( rw ), ( yoff + h ) / float( rh ) );
+		glVertex2i( xp + w,   yp + h );
+		glTexCoord2f( xoff   / float( rw ), ( yoff + h ) / float( rh ) );
+		glVertex2i( xp,     yp + h );
+		glEnd();
 
-				sp += runlen;
-				alphamap += runlen;
-				xpos += runlen;
-				alphamap++;
-			} while(  ( runlen = *sp++ )  );
+		glUseProgram( 0 );
 
-			tp += disp_width;
-		} while(  --h  );
+		glActiveTextureARB( GL_TEXTURE1_ARB );
+		glDisable( GL_TEXTURE_2D );
+		glActiveTextureARB( GL_TEXTURE0_ARB );
 	}
 }
 
@@ -3278,62 +2806,22 @@ static void simgraphgl_draw_rezoomed_img_blend(const image_id n, scr_coord_val x
 		PIXVAL *sp = images[n].data[0];
 
 		// now, since zooming may have change this image
-		xp += images[n].x;
-		yp += images[n].y;
-		scr_coord_val h = images[n].h; // may change due to vertical clipping
+		float zoom = get_img_zoom( n );
 
-		// in the next line the vertical clipping will be handled
-		// by that way the drawing routines must only take into account the horizontal clipping
-		// this should be much faster in most cases
+		xp += floor( images[n].base_x * zoom );
+		yp += floor( images[n].base_y * zoom );
 
-		// must the height be reduced?
-		scr_coord_val reduce_h = yp + h - CR.clip_rect.yy;
-		if(  reduce_h > 0  ) {
-			h -= reduce_h;
-		}
-		// still something to draw
-		if(  h <= 0  ) {
-			return;
-		}
+		// get the real color
+		const PIXVAL color = color_index & 0xFFFF;
+		float alpha = ( color_index & TRANSPARENT_FLAGS ) / TRANSPARENT25_FLAG / 4.0;
 
-		// vertically lines to skip (only bottom is visible)
-		scr_coord_val skip_lines = CR.clip_rect.y - ( int )yp;
-		if(  skip_lines > 0  ) {
-			if(  skip_lines >= h  ) {
-				// not visible at all
-				return;
-			}
-			h -= skip_lines;
-			yp += skip_lines;
-			// now skip them
-			while(  skip_lines--  ) {
-				do {
-					// clear run + colored run + next clear run
-					sp++;
-					sp += ( *sp ) & ( ~TRANSPARENT_RUN );
-					sp++;
-				} while(  *sp  );
-				sp++;
-			}
-			// now sp is the new start of an image with height h
-		}
-
-		// new block for new variables
-		{
-			// needed now ...
-			const scr_coord_val w = images[n].w;
-			// get the real color
-			const PIXVAL color = get_flagged_colour( color_index );
-			// we use function pointer for the blend runs for the moment ...
-			const uint8 level = get_transparency_level( color_index );
-			blend_proc pix_blend = has_outline_flag( color_index ) ? outline[ level - 1 ] : blend[ level - 1 ];
-
-			// marking change?
-			if(  dirty  ) {
-				simgraphgl_mark_rect_dirty_wc( xp, yp, xp + w - 1, yp + h - 1 );
-			}
-			display_img_blend_wc( h, xp, yp, sp, color, pix_blend  CLIP_NUM_PAR );
-		}
+		GLuint tex = getPlainImgTex( images[n], sp, 0 );
+		display_img_blend_wc( xp, yp,
+		                      ceil( images[n].base_w * zoom ),
+		                      ceil( images[n].base_h * zoom ),
+		                      tex,
+		                      color, color_index & OUTLINE_FLAG, alpha
+		                      CLIP_NUM_PAR );
 	}
 }
 
@@ -3354,65 +2842,24 @@ static void simgraphgl_draw_rezoomed_img_alpha(const image_id n, const image_id 
 		}
 		PIXVAL *sp = images[n].data[0];
 		// alphamap image uses base data as we don't want to recode
-		PIXVAL *alphamap = images[alpha_n].zoom_data != NULL ? images[alpha_n].zoom_data : images[alpha_n].base_data;
+		PIXVAL *alphamap = images[alpha_n].base_data;
+
 		// now, since zooming may have change this image
-		xp += images[n].x;
-		yp += images[n].y;
-		scr_coord_val h = images[n].h; // may change due to vertical clipping
+		float zoom = get_img_zoom( n );
 
-		// in the next line the vertical clipping will be handled
-		// by that way the drawing routines must only take into account the horizontal clipping
-		// this should be much faster in most cases
+		xp += floor( images[n].base_x * zoom );
+		yp += floor( images[n].base_y * zoom );
 
-		// must the height be reduced?
-		scr_coord_val reduce_h = yp + h - CR.clip_rect.yy;
-		if(  reduce_h > 0  ) {
-			h -= reduce_h;
-		}
-		// still something to draw
-		if(  h <= 0  ) {
-			return;
-		}
+		// get the real color
+		const PIXVAL color = color_index & 0xFFFF;
 
-		// vertically lines to skip (only bottom is visible
-		scr_coord_val skip_lines = CR.clip_rect.y - ( int )yp;
-		if(  skip_lines > 0  ) {
-			if(  skip_lines >= h  ) {
-				// not visible at all
-				return;
-			}
-			h -= skip_lines;
-			yp += skip_lines;
-			// now skip them
-			while(  skip_lines--  ) {
-				do {
-					// clear run + colored run + next clear run
-					sp++;
-					sp += ( *sp ) & ( ~TRANSPARENT_RUN );
-					sp++;
-					alphamap++;
-					alphamap += ( *alphamap ) & ( ~TRANSPARENT_RUN );
-					alphamap++;
-				} while(  *sp  );
-				sp++;
-				alphamap++;
-			}
-			// now sp is the new start of an image with height h (same for alphamap)
-		}
-
-		// new block for new variables
-		{
-			// needed now ...
-			const scr_coord_val w = images[n].w;
-			// get the real color
-			const PIXVAL color = get_flagged_colour( color_index );
-
-			// marking change?
-			if(  dirty  ) {
-				simgraphgl_mark_rect_dirty_wc( xp, yp, xp + w - 1, yp + h - 1 );
-			}
-			display_img_alpha_wc( h, xp, yp, sp, alphamap, get_alpha_mask( alpha_flags ), color, alpha  CLIP_NUM_PAR );
-		}
+		GLuint tex = getPlainImgTex( images[n], sp, 0 );
+		GLuint alphatex = getBaseImgTex( images[alpha_n], alphamap );
+		display_img_alpha_wc( xp, yp,
+		                      ceil( images[n].base_w * zoom ),
+		                      ceil( images[n].base_h * zoom ),
+		                      tex, alphatex, alpha_flags,
+		                      color  CLIP_NUM_PAR );
 	}
 }
 
@@ -3438,35 +2885,13 @@ static void simgraphgl_draw_base_img_blend(const image_id n, scr_coord_val xp, s
 
 		PIXVAL *sp = images[n].base_data;
 
-		// must the height be reduced?
-		scr_coord_val reduce_h = y + h - CR.clip_rect.yy;
-		if(  reduce_h > 0  ) {
-			h -= reduce_h;
-		}
-
-		// vertical lines to skip (only bottom is visible)
-		scr_coord_val skip_lines = CR.clip_rect.y - ( int )y;
-		if(  skip_lines > 0  ) {
-			h -= skip_lines;
-			y += skip_lines;
-			// now skip them
-			while(  skip_lines--  ) {
-				do {
-					// clear run + colored run + next clear run
-					sp++;
-					sp += ( *sp ) & ( ~TRANSPARENT_RUN );
-					sp++;
-				} while(  *sp  );
-				sp++;
-			}
-			// now sp is the new start of an image with height h
-		}
-
 		// new block for new variables
 		{
 			const PIXVAL color = get_flagged_colour( color_index );
 			const uint8 level = get_transparency_level( color_index );
-			blend_proc pix_blend = has_outline_flag( color_index ) ? outline[ level - 1 ] : blend_recode[ level - 1 ];
+
+			float alpha = level / 4.0;
+			GLuint tex;
 
 			// recode is needed only for blending
 			if(  !has_outline_flag( color_index )  ) {
@@ -3478,12 +2903,17 @@ static void simgraphgl_draw_base_img_blend(const image_id n, scr_coord_val xp, s
 					// no player
 					activate_player_color( 0, daynight );
 				}
+				tex = getColorImgTex( images[n], sp );
+			}
+			else {
+				tex = getBaseImgTex( images[n], sp );
 			}
 
-			if(  dirty  ) {
-				simgraphgl_mark_rect_dirty_wc( x, y, x + w - 1, y + h - 1 );
-			}
-			display_img_blend_wc( h, x, y, sp, color, pix_blend  CLIP_NUM_PAR );
+			display_img_blend_wc( x, y,
+			                      images[n].base_w, images[n].base_h,
+			                      tex,
+			                      color, color_index & OUTLINE_FLAG, alpha
+			                      CLIP_NUM_PAR );
 		}
 	} // number ok
 }
@@ -3510,57 +2940,25 @@ static void simgraphgl_draw_base_img_alpha(const image_id n, const image_id alph
 		PIXVAL *sp = images[n].base_data;
 		PIXVAL *alphamap = images[alpha_n].base_data;
 
-		// must the height be reduced?
-		scr_coord_val reduce_h = y + h - CR.clip_rect.yy;
-		if(  reduce_h > 0  ) {
-			h -= reduce_h;
-		}
-
-		// vertical lines to skip (only bottom is visible)
-		scr_coord_val skip_lines = CR.clip_rect.y - ( int )y;
-		if(  skip_lines > 0  ) {
-			h -= skip_lines;
-			y += skip_lines;
-			// now skip them
-			while(  skip_lines--  ) {
-				do {
-					// clear run + colored run + next clear run
-					sp++;
-					sp += ( *sp ) & ( ~TRANSPARENT_RUN );
-					sp++;
-				} while(  *sp  );
-				do {
-					// clear run + colored run + next clear run
-					alphamap++;
-					alphamap += ( *alphamap ) & ( ~TRANSPARENT_RUN );
-					alphamap++;
-				} while(  *alphamap  );
-				sp++;
-				alphamap++;
-			}
-			// now sp is the new start of an image with height h
-		}
-
 		// new block for new variables
 		{
 			const PIXVAL color = get_flagged_colour( color_index );
 
-			// recode is needed only for blending
-			if(  !has_outline_flag( color_index )  ) {
-				// colors for 2nd company color
-				if(  player_nr >= 0  ) {
-					activate_player_color( player_nr, daynight );
-				}
-				else {
-					// no player
-					activate_player_color( 0, daynight );
-				}
+			// colors for 2nd company color
+			if(  player_nr >= 0  ) {
+				activate_player_color( player_nr, daynight );
 			}
+			else {
+				// no player
+				activate_player_color( 0, daynight );
+			}
+			GLuint tex = getColorImgTex( images[n], sp );
+			GLuint alphatex = getColorImgTex( images[n], alphamap );
 
-			if(  dirty  ) {
-				simgraphgl_mark_rect_dirty_wc( x, y, x + w - 1, y + h - 1 );
-			}
-			display_img_alpha_wc( h, x, y, sp, alphamap, get_alpha_mask( alpha_flags ), color, alpha_recode  CLIP_NUM_PAR );
+			display_img_alpha_wc( x, y,
+			                      images[n].base_w, images[n].base_h,
+			                      tex, alphatex, alpha_flags,
+			                      color  CLIP_NUM_PAR );
 		}
 	} // number ok
 }
@@ -3572,38 +2970,35 @@ static void simgraphgl_draw_base_img_alpha(const image_id n, const image_id alph
 // scrolls horizontally, will ignore clipping etc.
 static void simgraphgl_move_scroll_band(scr_coord_val start_y, scr_coord_val x_offset, scr_coord_val h)
 {
-	start_y  = max( start_y,  0 );
-	x_offset = min( x_offset, disp_width );
-	h        = min( h,        disp_height );
-
-	const PIXVAL *const src = textur + start_y * disp_width + x_offset;
-	PIXVAL *const dst = textur + start_y * disp_width;
-	const size_t amount = sizeof(PIXVAL) * ( h * disp_width - x_offset );
-
-	memmove( dst, src, amount );
+	if(  x_offset > 0  ) {
+		glRasterPos2i( 0,        start_y + h );
+		glCopyPixels( x_offset, disp_height - start_y - h,
+		              disp_width - x_offset, h, GL_COLOR );
+	}
+	else {
+		glRasterPos2i( x_offset, start_y + h );
+		glCopyPixels( 0,        disp_height - start_y - h,
+		              disp_width + x_offset, h, GL_COLOR );
+	}
 }
 
 
 /**
  * Draw one Pixel
  */
-#ifdef DEBUG_FLUSH_BUFFER
-static void display_pixel(scr_coord_val x, scr_coord_val y, PIXVAL color, bool mark_dirty=true)
-#else
 static void display_pixel(scr_coord_val x, scr_coord_val y, PIXVAL color)
-#endif
 {
 	if(  x >= CR0.clip_rect.x && x < CR0.clip_rect.xx && y >= CR0.clip_rect.y && y < CR0.clip_rect.yy  ) {
-		PIXVAL *const p = textur + x + y * disp_width;
-
-		*p = color;
-#ifdef DEBUG_FLUSH_BUFFER
-		if(  mark_dirty  ) {
-#endif
-			mark_tile_dirty( x >> DIRTY_TILE_SHIFT, y >> DIRTY_TILE_SHIFT );
-#ifdef DEBUG_FLUSH_BUFFER
-		}
-#endif
+		glColor3f( ( color & 0xf800 ) / float( 0x10000 ),
+		           ( color & 0x07e0 ) / float( 0x00800 ),
+		           ( color & 0x001f ) / float( 0x00020 ) );
+		glBindTexture( GL_TEXTURE_2D, 0 );
+		glBegin( GL_QUADS );
+		glVertex2i( x + 1, y );
+		glVertex2i( x, y );
+		glVertex2i( x, y + 1 );
+		glVertex2i( x + 1, y + 1 );
+		glEnd();
 	}
 }
 
@@ -3614,66 +3009,16 @@ static void display_pixel(scr_coord_val x, scr_coord_val y, PIXVAL color)
 static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL colval, bool dirty, scr_coord_val cL, scr_coord_val cR, scr_coord_val cT, scr_coord_val cB)
 {
 	if(  clip_lr( &xp, &w, cL, cR ) && clip_lr( &yp, &h, cT, cB )  ) {
-		PIXVAL *p = textur + xp + yp * disp_width;
-		const int dx = disp_width - w;
-
-		if(  dirty  ) {
-			mark_rect_dirty_nc( xp, yp, xp + w - 1, yp + h - 1 );
-		}
-#if defined USE_ASSEMBLER && defined __GNUC__ && defined __i686__
-		// GCC might not use "rep stos" so force its use
-		const uint32 longcolval = ( colval << 16 ) | colval;
-		do {
-			unsigned int count = w;
-			asm volatile (
-				// uneven words to copy?
-				"shrl %1\n\t"
-				"jnc 0f\n\t"
-				// set first word
-				"stosw\n\t"
-				"0:\n\t"
-				// now we set long words ...
-				"rep\n\t"
-				"stosl"
-				: "+D" (p), "+c" (count)
-				: "a" (longcolval)
-				: "cc", "memory"
-			);
-			p += dx;
-		} while(  --h  );
-#elif defined LOW_LEVEL
-		// low level c++
-		const uint32 colvald = ( colval << 16 ) | colval;
-		do {
-			scr_coord_val count = w;
-
-			// align to 4 bytes, should use uintptr_t but not available
-			if(  reinterpret_cast<size_t>( p ) & 0x2  ) {
-				*p++ = (PIXVAL)colvald;
-				count--;
-			}
-			// aligned fast fill loop
-			bool const postalign = count & 1;
-			count >>= 1;
-			uint32 *lp = reinterpret_cast<uint32 *>( p );
-			while(  count--  ) {
-				*lp++ = colvald;
-			}
-			p = (PIXVAL *)lp;
-			// finish unaligned remainder
-			if(  postalign  ) {
-				*p++ = (PIXVAL)colvald;
-			}
-			p += dx;
-		} while(  --h  );
-#else
-		// high level c++
-		do {
-			PIXVAL *const fillend = p + w;
-			std::fill( p, fillend, colval );
-			p = fillend + dx;
-		} while(  --h  );
-#endif
+		glColor3f( ( colval & 0xf800 ) / float( 0x10000 ),
+		           ( colval & 0x07e0 ) / float( 0x00800 ),
+		           ( colval & 0x001f ) / float( 0x00020 ) );
+		glBindTexture( GL_TEXTURE_2D, 0 );
+		glBegin( GL_QUADS );
+		glVertex2i( xp + w, yp );
+		glVertex2i( xp, yp );
+		glVertex2i( xp, yp + h );
+		glVertex2i( xp + w, yp + h );
+		glEnd();
 	}
 }
 
@@ -3727,16 +3072,16 @@ static void simgraphgl_draw_rounded_rect_clipped(scr_coord_val xp, scr_coord_val
 static void display_vl_internal(const scr_coord_val xp, scr_coord_val yp, scr_coord_val h, const PIXVAL colval, int dirty, scr_coord_val cL, scr_coord_val cR, scr_coord_val cT, scr_coord_val cB)
 {
 	if(  xp >= cL && xp < cR && clip_lr( &yp, &h, cT, cB )  ) {
-		PIXVAL *p = textur + xp + yp * disp_width;
-
-		if(  dirty  ) {
-			mark_rect_dirty_nc( xp, yp, xp, yp + h - 1 );
-		}
-
-		do {
-			*p = colval;
-			p += disp_width;
-		} while(  --h != 0  );
+		glColor3f( ( colval & 0xf800 ) / float( 0x10000 ),
+		           ( colval & 0x07e0 ) / float( 0x00800 ),
+		           ( colval & 0x001f ) / float( 0x00020 ) );
+		glBindTexture( GL_TEXTURE_2D, 0 );
+		glBegin( GL_QUADS );
+		glVertex2i( xp + 1, yp );
+		glVertex2i( xp, yp );
+		glVertex2i( xp, yp + h );
+		glVertex2i( xp + 1, yp + h );
+		glEnd();
 	}
 }
 
@@ -3759,28 +3104,28 @@ static void simgraphgl_draw_vline_clipped(const scr_coord_val xp, scr_coord_val 
 static void simgraphgl_draw_array(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, const PIXVAL *arr)
 {
 	const int arr_w = w;
+	const int arr_h = h;
+
 	const scr_coord_val xoff = clip_wh( &xp, &w, CR0.clip_rect.x, CR0.clip_rect.xx );
 	const scr_coord_val yoff = clip_wh( &yp, &h, CR0.clip_rect.y, CR0.clip_rect.yy );
+
 	if(  w > 0 && h > 0  ) {
-		PIXVAL *p = textur + xp + yp * disp_width;
-		const PIXVAL *arr_src = arr;
+		GLuint texname = getArrayTex( arr, arr_w, arr_h );
 
-		mark_rect_dirty_nc( xp, yp, xp + w - 1, yp + h - 1 );
-		if(  xp == CR0.clip_rect.x  ) {
-			arr_src += xoff;
-		}
-		if(  yp == CR0.clip_rect.y  ) {
-			arr_src += yoff * arr_w;
-		}
-		do {
-			unsigned int ww = w;
-
-			do {
-				*p++ = *arr_src++;
-			} while(  --ww > 0  );
-			arr_src += arr_w - w;
-			p += disp_width - w;
-		} while(  --h != 0  );
+		glEnable( GL_TEXTURE_2D );
+		glBindTexture( GL_TEXTURE_2D, texname );
+		glColor3f( 1, 1, 1 );
+		glBegin( GL_QUADS );
+		glTexCoord2f( xoff / float( arr_w ), yoff / float( arr_h ) );
+		glVertex2i( xp, yp );
+		glTexCoord2f( ( xoff + w ) / float( arr_w ), yoff / float( arr_h ) );
+		glVertex2i( xp + w, yp );
+		glTexCoord2f( ( xoff + w ) / float( arr_w ), ( yoff + h ) / float( arr_h ) );
+		glVertex2i( xp + w, yp + h );
+		glTexCoord2f( xoff / float( arr_w ), ( yoff + h ) / float( arr_h ) );
+		glVertex2i( xp, yp + h );
+		glEnd();
+		glDisable( GL_TEXTURE_2D );
 	}
 }
 
@@ -4273,6 +3618,7 @@ static scr_coord_val simgraphgl_draw_multiline_text(scr_coord_val x, scr_coord_v
  **/
 static void simgraphgl_draw_line(const scr_coord_val x, const scr_coord_val y, const scr_coord_val xx, const scr_coord_val yy, const PIXVAL colval)
 {
+	//todo: make GL do this
 	int i, steps;
 	sint64 xp, yp;
 	sint64 xs, ys;
@@ -4292,11 +3638,7 @@ static void simgraphgl_draw_line(const scr_coord_val x, const scr_coord_val y, c
 	yp = (sint64)y << 16;
 
 	for(  i = 0; i <= steps; i++  ) {
-#ifdef DEBUG_FLUSH_BUFFER
-		display_pixel( xp >> 16, yp >> 16, colval, false );
-#else
 		display_pixel( xp >> 16, yp >> 16, colval );
-#endif
 		xp += xs;
 		yp += ys;
 	}
@@ -4306,6 +3648,7 @@ static void simgraphgl_draw_line(const scr_coord_val x, const scr_coord_val y, c
 //taken from function simgraphgl_draw_line() above, to draw a dotted line: draw=pixels drawn, dontDraw=pixels skipped
 static void simgraphgl_draw_line_dotted(const scr_coord_val x, const scr_coord_val y, const scr_coord_val xx, const scr_coord_val yy, const scr_coord_val draw, const scr_coord_val dontDraw, const PIXVAL colval)
 {
+	//todo: make GL do this
 	int i, steps;
 	sint64 xp, yp;
 	sint64 xs, ys;
@@ -4570,7 +3913,6 @@ static void simgraphgl_draw_bezier(scr_coord_val Ax, scr_coord_val Ay, scr_coord
 		const sint32 oldy = ry;
 		rx = Ax * b * b * b + 3 * Cx * b * b * a + 3 * Dx * b * a * a + Bx * a * a * a;
 		ry = Ay * b * b * b + 3 * Cy * b * b * a + 3 * Dy * b * a * a + By * a * a * a;
-
 		// fixed point: due to cycling between 0 and 32 (1<<5), we divide by 32^3 == 1<<15 because of cubic interpolation
 		if(  !draw && !dontDraw  ) {
 			gfx->draw_line( rx >> 15, ry >> 15, oldx >> 15, oldy >> 15, colore );
@@ -4599,149 +3941,13 @@ static void simgraphgl_draw_right_triangle(scr_coord_val x, scr_coord_val y, scr
 // ------------------- other support routines that actually interface with the OS -----------------
 
 
-/// Returns the index of the least significant set bit of a number, e.g. returns 2 for @p val == 12.
-/// Returns 0 for @p val == 0.
-static inline uint32 get_lowest_set_bit(uint32 val)
-{
-	static const uint8 MultiplyDeBruijnBitPosition[32] =
- {
-		0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8, 31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9
-	};
-
-	return MultiplyDeBruijnBitPosition[( ( ( val & -val ) * 0x077CB531U ) ) >> 27];
-}
-
-
 /**
  * copies only the changed areas to the screen using the "tile dirty buffer"
  * To get large changes, actually the current and the previous one is used.
  */
 static void simgraphgl_flush_framebuffer()
 {
-#ifdef USE_SOFTPOINTER
-	ex_ord_update_mx_my();
-
-	const scr_coord_val ticker_ypos_bottom = display_get_height() - win_get_statusbar_height() - ( env_t::menupos == MENU_BOTTOM ) * env_t::iconsize.h;
-	const scr_coord_val ticker_ypos_top = ticker_ypos_bottom - TICKER_HEIGHT;
-
-	// use mouse pointer image if available
-	if(  softpointer != -1 && standard_pointer >= 0  ) {
-		simgraphgl_draw_color_img( standard_pointer, sys_event.mx, sys_event.my, 0, false, true  CLIP_NUM_DEFAULT );
-
-		// if software emulated mouse pointer is over the ticker, redraw it totally at next occurs
-		if(  !ticker::empty() && sys_event.my + images[standard_pointer].h >= ticker_ypos_top &&
-		                sys_event.my <= ticker_ypos_bottom  ) {
-			ticker::set_redraw_all( true );
-		}
-	}
-	// no pointer image available, draw a crosshair
-	else {
-		display_fb_internal( sys_event.mx - 1, sys_event.my - 3, 3, 7, gfx->palette_lookup( COL_WHITE ), true, 0, disp_width, 0, disp_height );
-		display_fb_internal( sys_event.mx - 3, sys_event.my - 1, 7, 3, gfx->palette_lookup( COL_WHITE ), true, 0, disp_width, 0, disp_height );
-		simgraphgl_draw_line( sys_event.mx - 2, sys_event.my, sys_event.mx + 2, sys_event.my, gfx->palette_lookup( COL_BLACK ) );
-		display_direct_line_rgb( sys_event.mx, sys_event.my - 2, sys_event.mx, sys_event.my + 2, gfx->palette_lookup( COL_BLACK ) );
-
-		// if crosshair is over the ticker, redraw it totally at next occurs
-		if(  !ticker::empty() && sys_event.my + 2 >= ticker_ypos_top && sys_event.my - 2 <= ticker_ypos_bottom  ) {
-			ticker::set_redraw_all( true );
-		}
-	}
-	old_my = sys_event.my;
-#endif
-
-	// combine current with last dirty tiles
-	for(  int i = 0; i < tile_buffer_length; i++  ) {
-		tile_dirty_old[i] |= tile_dirty[i];
-	}
-
-	const int tile_words_per_line = tile_buffer_per_line >> 5;
-	ALLOCA( uint32, masks, tile_words_per_line );
-
-	for(  int x1 = 0; x1 < tiles_per_line; x1++  ) {
-		const uint32 x_search_mask = 1 << ( x1 & 31 ); // bit mask for finding bit x set
-		int y1 = 0;
-		do {
-			const int word_max = ( 0 + ( y1 + 1 ) * tile_buffer_per_line ) >> 5; // first word on next line. limit search to < max
-			const int word_x1 = ( x1 + y1 * tile_buffer_per_line ) >> 5;
-			if(  ( tile_dirty_old[word_x1] & x_search_mask ) == x_search_mask  ) {
-				// found dirty tile at x1, now find contiguous block of dirties - x2
-				const uint32 testval = ~( ( ~( 0xFFFFFFFF << ( x1 & 31 ) ) ) | tile_dirty_old[word_x1] );
-				int word_x2 = word_x1;
-				int x2;
-				if(  testval == 0  ) {   // dirty block spans words
-					masks[0] = tile_dirty_old[word_x1];
-					word_x2++;
-					while(  word_x2 < word_max && tile_dirty_old[word_x2] == 0xFFFFFFFF  ) {
-						masks[word_x2 - word_x1] = 0xFFFFFFFF; // dirty block spans this entire word
-						word_x2++;
-					}
-					if(  word_x2 >= word_max                    // dirty tiles extend all the way to screen edge
-					                || !( tile_dirty_old[word_x2] & 1 ) ) {  // dirty block actually ended on the word edge
-						x2 = 32; // set to whole word
-						word_x2--; // masks already set in while loop above
-					}
-					else { // dirty block ends in word_x2
-						x2 = get_lowest_set_bit( ~tile_dirty_old[word_x2] );
-						masks[word_x2 - word_x1] = 0xFFFFFFFF >> ( 32 - x2 );
-					}
-				}
-				else { // dirty block is all within one word - word_x1
-					x2 = get_lowest_set_bit( testval );
-					masks[0] = ( 0xFFFFFFFF << ( 32 - x2 + ( x1 & 31 ) ) ) >> ( 32 - x2 );
-				}
-
-				for(  int i = word_x1; i <= word_x2; i++  ) { // clear dirty
-					tile_dirty_old[i] &= ~masks[i - word_x1];
-				}
-
-				// x2 from bit index to tile coords
-				x2 += ( x1 & ~31 ) + ( ( word_x2 - word_x1 ) << 5 );
-
-				// find how many rows can be combined into one rectangle
-				int y2 = y1 + 1;
-				bool xmatch = true;
-				while(  y2 < tile_lines && xmatch  ) {
-					const int li = ( x1 + y2 * tile_buffer_per_line ) >> 5;
-					const int ri = li + word_x2 - word_x1;
-					for(  int i = li; i <= ri; i++ ) {
-						if(  ( tile_dirty_old[i] & masks[i - li] ) !=  masks[i - li]  ) {
-							xmatch = false;
-							break;
-						}
-					}
-					if(  xmatch  ) {
-						for(  int i = li; i <= ri; i++  ) { // clear dirty
-							tile_dirty_old[i] &= ~masks[i - li];
-						}
-						y2++;
-					}
-				}
-
-#ifdef DEBUG_FLUSH_BUFFER
-				simgraphgl_draw_vline( ( x1 << DIRTY_TILE_SHIFT ) - 1, y1 << DIRTY_TILE_SHIFT, ( y2 - y1 ) << DIRTY_TILE_SHIFT, gfx->palette_lookup( COL_YELLOW ), false );
-				simgraphgl_draw_vline( x2 << DIRTY_TILE_SHIFT,  y1 << DIRTY_TILE_SHIFT, ( y2 - y1 ) << DIRTY_TILE_SHIFT, gfx->palette_lookup( COL_YELLOW ), false );
-				simgraphgl_draw_rect( x1 << DIRTY_TILE_SHIFT, y1 << DIRTY_TILE_SHIFT, ( x2 - x1 ) << DIRTY_TILE_SHIFT, 1, gfx->palette_lookup( COL_YELLOW ), false );
-				simgraphgl_draw_rect( x1 << DIRTY_TILE_SHIFT, ( y2 << DIRTY_TILE_SHIFT ) - 1, ( x2 - x1 ) << DIRTY_TILE_SHIFT, 1, gfx->palette_lookup( COL_YELLOW ), false );
-				simgraphgl_draw_line( x1 << DIRTY_TILE_SHIFT, y1 << DIRTY_TILE_SHIFT, x2 << DIRTY_TILE_SHIFT, ( y2 << DIRTY_TILE_SHIFT ) - 1, gfx->palette_lookup( COL_YELLOW ) );
-				simgraphgl_draw_line( x1 << DIRTY_TILE_SHIFT, ( y2 << DIRTY_TILE_SHIFT ) - 1, x2 << DIRTY_TILE_SHIFT, y1 << DIRTY_TILE_SHIFT, gfx->palette_lookup( COL_YELLOW ) );
-#else
-				dr_textur( x1 << DIRTY_TILE_SHIFT, y1 << DIRTY_TILE_SHIFT, ( x2 - x1 ) << DIRTY_TILE_SHIFT, ( y2 - y1 ) << DIRTY_TILE_SHIFT );
-#endif
-				y1 = y2; // continue search from bottom of found rectangle
-			}
-			else {
-				y1++;
-			}
-		} while(  y1 < tile_lines  );
-	}
-#ifdef DEBUG_FLUSH_BUFFER
-	dr_textur( 0, 0, disp_actual_width, disp_height );
-#endif
-
-	// swap tile buffers
-	uint32 *tmp = tile_dirty_old;
-	tile_dirty_old = tile_dirty;
-	tile_dirty = tmp; // _old was cleared to 0 in above loops
+	dr_textur( 0, 0, disp_width, disp_height );
 }
 
 
@@ -4780,6 +3986,8 @@ static void simgraphgl_set_show_load_cursor(bool show)
 }
 
 
+static int inited = false;
+
 /**
  * Initialises the graphics module
  */
@@ -4788,20 +3996,6 @@ static bool simgraphgl_init(scr_size window_size, sint16 full_screen)
 	disp_actual_width = window_size.w;
 	disp_height = window_size.h;
 
-#ifdef MULTI_THREAD
-	pthread_mutex_init( &recode_img_mutex, NULL );
-#endif
-
-	// init rezoom_img()
-	for(  int i = 0; i < MAX_THREADS; i++  ) {
-#ifdef MULTI_THREAD
-		pthread_mutex_init( &rezoom_img_mutex[i], NULL );
-#endif
-		rezoom_baseimage[i] = NULL;
-		rezoom_baseimage2[i] = NULL;
-		rezoom_size[i] = 0;
-	}
-
 	// get real width from os-dependent routines
 	disp_width = dr_os_open( window_size, full_screen );
 	if(  disp_width <= 0  ) {
@@ -4809,7 +4003,8 @@ static bool simgraphgl_init(scr_size window_size, sint16 full_screen)
 		return false;
 	}
 
-	textur = dr_textur_init();
+	dr_textur_init();
+	inited = true;
 
 	// init, load, and check fonts
 	if(  !gfx->load_font( env_t::fontname.c_str(), false )  ) {
@@ -4822,18 +4017,6 @@ static bool simgraphgl_init(scr_size window_size, sint16 full_screen)
 			}
 		}
 	}
-
-	// allocate dirty tile flags
-	tiles_per_line = ( disp_width + DIRTY_TILE_SIZE - 1 ) / DIRTY_TILE_SIZE;
-	tile_buffer_per_line = ( tiles_per_line + 31 ) & ~31;
-	tile_lines = ( disp_height + DIRTY_TILE_SIZE - 1 ) / DIRTY_TILE_SIZE;
-	tile_buffer_length = ( tile_lines * tile_buffer_per_line / 32 );
-
-	tile_dirty = MALLOCN( uint32, tile_buffer_length );
-	tile_dirty_old = MALLOCN( uint32, tile_buffer_length );
-
-	simgraphgl_mark_screen_dirty();
-	MEMZERON( tile_dirty_old, tile_buffer_length );
 
 	// init player colors
 	for(  int i = 0; i < MAX_PLAYER_COUNT; i++  ) {
@@ -4849,25 +4032,65 @@ static bool simgraphgl_init(scr_size window_size, sint16 full_screen)
 	memcpy( specialcolormap_all_day, specialcolormap_day_night, 256 * sizeof(PIXVAL) );
 	memcpy( rgbmap_all_day, rgbmap_day_night, RGBMAPSIZE * sizeof(PIXVAL) );
 
-	// find out bit depth
-	{
-		PIXVAL c = get_system_color( { 0, 0xFF, 0 } );
-		while(  (  c & 1 ) == 0  ) {
-			c >>= 1;
-		}
+	GLuint img_alpha_fragmentShader;
+	GLuint vertexShader;
+	GLint result;
+	GLint length;
+	char const *text;
 
-		if(  c == 0x1F  ) {
-			// 5 bits for green channel -> 15 bits per pixel)
-#ifndef RGB555
-			dr_fatal_notify( "Compiled for 16 bit color depth but using 15!" );
-#endif
-		}
-		else {
-#ifdef RGB555
-			dr_fatal_notify( "Compiled for 15 bit color depth but using 16!" );
-#endif
-		}
+	img_alpha_program = glCreateProgram();
+
+	img_alpha_fragmentShader = glCreateShader( GL_FRAGMENT_SHADER );
+	length = sizeof( img_alpha_fragmentShaderText );
+	text = img_alpha_fragmentShaderText;
+	glShaderSource( img_alpha_fragmentShader, 1, ( const char ** )&text, &length );
+	glCompileShader( img_alpha_fragmentShader );
+	glGetShaderiv( img_alpha_fragmentShader, GL_COMPILE_STATUS, &result );
+	if(  result == GL_FALSE  ) {
+		char info[65536];
+		GLsizei len;
+		glGetShaderInfoLog( img_alpha_fragmentShader, sizeof(info), &len, info );
+		fputs( info, stderr );
+
+		glDeleteShader( img_alpha_fragmentShader );
+		img_alpha_fragmentShader = 0;
+		dbg->fatal( "simgraph_init", "Failed to compile fragment shader" );
 	}
+
+	vertexShader = glCreateShader( GL_VERTEX_SHADER );
+	length = sizeof(vertexShaderText);
+	text = vertexShaderText;
+	glShaderSource( vertexShader, 1, (const char **)&text, &length );
+	glCompileShader( vertexShader );
+	glGetShaderiv( vertexShader, GL_COMPILE_STATUS, &result );
+	if(  result == GL_FALSE  ) {
+		char info[65536];
+		GLsizei len;
+		glGetShaderInfoLog( vertexShader, sizeof(info), &len, info );
+		fputs( info, stderr );
+
+		glDeleteShader( vertexShader );
+		vertexShader = 0;
+		dbg->fatal( "simgraph_init", "Failed to compile vertex shader" );
+	}
+
+	glAttachShader( img_alpha_program, img_alpha_fragmentShader );
+	glDeleteShader( img_alpha_fragmentShader );
+	glAttachShader( img_alpha_program, vertexShader );
+	glDeleteShader( vertexShader );
+
+	glLinkProgram( img_alpha_program );
+	glGetProgramiv( img_alpha_program, GL_LINK_STATUS, &result );
+	if(  result == GL_FALSE  ) {
+		dbg->fatal( "simgraph_init", "Failed to link img_alpha program" );
+		glDeleteProgram( img_alpha_program );
+		img_alpha_program = 0;
+	}
+
+	img_alpha_alphaMask_Location = glGetUniformLocation( img_alpha_program, "alphaMask" );
+	img_alpha_texColor_Location = glGetUniformLocation( img_alpha_program, "texColor" );
+	img_alpha_texAlpha_Location = glGetUniformLocation( img_alpha_program, "texAlpha" );
+
 
 	return true;
 }
@@ -4878,7 +4101,7 @@ static bool simgraphgl_init(scr_size window_size, sint16 full_screen)
  */
 static bool simgraphgl_is_display_init()
 {
-	return textur != NULL && default_font.is_loaded() && images != NULL;
+	return inited && default_font.is_loaded() && images != NULL;
 }
 
 
@@ -4887,21 +4110,12 @@ static bool simgraphgl_is_display_init()
  */
 static void simgraphgl_exit()
 {
-	dr_os_close();
-
-	free( tile_dirty_old );
-	free( tile_dirty );
 	gfx->free_all_images_above( 0 );
 	free( images );
 
-	tile_dirty = tile_dirty_old = NULL;
 	images = NULL;
-#ifdef MULTI_THREAD
-	pthread_mutex_destroy( &recode_img_mutex );
-	for(  int i = 0; i < MAX_THREADS; i++  ) {
-		pthread_mutex_destroy( &rezoom_img_mutex[i] );
-	}
-#endif
+
+	dr_os_close();
 }
 
 
@@ -4915,28 +4129,13 @@ static void simgraphgl_on_window_resized(scr_size new_window_size)
 	}
 	// only resize, if internal values are different
 	if(  disp_width != new_window_size.w || disp_height != new_window_size.h  ) {
-		scr_coord_val new_pitch = dr_textur_resize( &textur, new_window_size.w, new_window_size.h );
+		scr_coord_val new_pitch = dr_textur_resize( NULL, new_window_size.w, new_window_size.h );
 		if(  new_pitch != disp_width || disp_height != new_window_size.h  ) {
 			disp_width = new_pitch;
 			disp_height = new_window_size.h;
 
-			free( tile_dirty_old );
-			free( tile_dirty );
-
-			// allocate dirty tile flags
-			tiles_per_line = ( disp_width + DIRTY_TILE_SIZE - 1 ) / DIRTY_TILE_SIZE;
-			tile_buffer_per_line = ( tiles_per_line + 31 ) & ~31;
-			tile_lines = ( disp_height + DIRTY_TILE_SIZE - 1 ) / DIRTY_TILE_SIZE;
-			tile_buffer_length = ( tile_lines * tile_buffer_per_line / 32 );
-
-			tile_dirty = MALLOCN( uint32, tile_buffer_length );
-			tile_dirty_old = MALLOCN( uint32, tile_buffer_length );
-
 			gfx->set_clip_rect( 0, 0, disp_actual_width, disp_height  CLIP_NUM_DEFAULT, false );
 		}
-
-		simgraphgl_mark_screen_dirty();
-		MEMZERON( tile_dirty_old, tile_buffer_length );
 	}
 }
 
@@ -4952,6 +4151,7 @@ static bool simgraphgl_take_screenshot(const scr_rect &area, const char *filenam
 
 	raw_image_t img( clipped_area.w, clipped_area.h, raw_image_t::FMT_RGB888 );
 
+#if 0
 	for(  scr_coord_val y = 0; y < clipped_area.h; ++y  ) {
 		uint8 *dst = img.access_pixel( 0, y );
 		const PIXVAL *row = textur + ( clipped_area.x + 0 ) + ( clipped_area.y + y ) * disp_width;
@@ -4963,7 +4163,7 @@ static bool simgraphgl_take_screenshot(const scr_rect &area, const char *filenam
 			*dst++ = pixel.b;
 		}
 	}
-
+#endif
 	return img.write_png( filename );
 }
 
