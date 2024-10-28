@@ -544,19 +544,15 @@ void dr_os_close()
 	SDL_StopTextInput();
 }
 
+GLfloat gl_MVP_mat[16] = { 1,0,0,0,0,1,0,0,0,0,1,0,-1,1,0,1 };
+
 static void setupGL()
 {
 	glViewport(0,0,width,height);
 	//map x[0,width] to x[-1,1]: X(x) = x/width*2-1
 	//map y[0,height] to y[1,-1]: Y(x) = -x/height*2+1
-	double mat[16] = {
-	  2.0/width, 0,      0, -1,
-	  0,     -2.0/height, 0, 1,
-	  0,     0,      1, 0,
-	  0,     0,      0, 1};
-	glMatrixMode(GL_PROJECTION);
-	glLoadTransposeMatrixd(mat);
-
+	gl_MVP_mat[0] = 2.0/width;
+	gl_MVP_mat[5] = -2.0/height;
 	glClear(GL_COLOR_BUFFER_BIT);
 
 	glFlush();
@@ -634,13 +630,13 @@ void dr_flush()
 {
 	display_flush_buffer();
 
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer);
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 	glDisable(GL_TEXTURE_2D);
 	glDisable(GL_BLEND);
-	glRasterPos2i(0,height);
+	glRasterPos2f(-1,-1);
 	glCopyPixels(0,0,width,height,GL_COLOR);
-        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 	glFlush();
 	glFinish();
 	SDL_GL_SwapWindow(window);
