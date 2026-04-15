@@ -492,93 +492,93 @@ static const rgb888_t special_pal[SPECIAL_COLOR_COUNT] =
 // fwd decls
 //
 
-static PIXVAL          simgraph16_palette_lookup             (palette_index_t idx);
-static palette_index_t simgraph16_palette_indexof            (PIXVAL color);
-static rgb888_t        simgraph16_get_color_rgb              (palette_index_t idx);
-static void            simgraph16_env_t_rgb_to_system_colors ();
-static void            simgraph16_set_player_color_scheme    (const int player, const uint8 col1, const uint8 col2);
-static void            simgraph16_set_light_color            (int color_idx, rgb888_t day_colour, rgb888_t night_colour);
-static void            simgraph16_set_daynight_level         (int night);
-static scr_coord_val   simgraph16_set_base_raster_width      (scr_coord_val new_raster);
-static int             simgraph16_zoom_factor_up             ();
-static int             simgraph16_zoom_factor_down           ();
-static bool            simgraph16_init                       (scr_size window_size, sint16 full_screen);
-static bool            simgraph16_is_display_init            ();
-static void            simgraph16_exit                       ();
-static void            simgraph16_on_window_resized          (scr_size new_window_size);
-static bool            simgraph16_load_font                  (const char *fname, bool reload);
-static image_id        simgraph16_get_image_count            ();
-static image_id        simgraph16_register_image             (const image_t *image_in);
-static void            simgraph16_free_all_images_above      (image_id above );
-static scr_rect        simgraph16_get_base_image_offset      (image_id image);
-static scr_rect        simgraph16_get_image_offset           (image_id image);
-static void            simgraph16_mark_img_dirty             (image_id image, scr_coord_val xp, scr_coord_val yp);
-static void            simgraph16_mark_rect_dirty_wc         (scr_coord_val x1, scr_coord_val y1, scr_coord_val x2, scr_coord_val y2);
-static void            simgraph16_mark_rect_dirty_clip       (scr_coord_val x1, scr_coord_val y1, scr_coord_val x2, scr_coord_val y2  CLIP_NUM_DEF);
-static void            simgraph16_mark_screen_dirty          ();
-static scr_size        simgraph16_get_screen_size            ();
-static void            simgraph16_set_screen_actual_width    (scr_coord_val w);
-static void            simgraph16_set_screen_height          (scr_coord_val const h);
-static scr_size        simgraph16_get_best_matching_size     (const image_id n, sint16 zoom_percent);
-static void            simgraph16_fit_img_to_width           (const image_id n, sint16 new_w);
-static void            simgraph16_move_scroll_band           (scr_coord_val start_y, scr_coord_val x_offset, scr_coord_val h);
-static void            simgraph16_draw_img_aligned           (const image_id n, scr_rect area, int align, const bool dirty);
-static void            simgraph16_set_image_procs            (bool is_global);
-static void            simgraph16_draw_img_aux               (const image_id, scr_coord_val, scr_coord_val, const sint8, const bool, const bool  CLIP_NUM_DEF_NOUSE);
-static void            simgraph16_draw_rezoomed_img_blend    (const image_id, scr_coord_val, scr_coord_val, const sint8, const FLAGGED_PIXVAL, const bool, const bool  CLIP_NUM_DEF_NOUSE);
-static void            simgraph16_draw_rezoomed_img_alpha    (const image_id, const image_id, const unsigned, scr_coord_val, scr_coord_val, const sint8, const FLAGGED_PIXVAL, const bool, const bool  CLIP_NUM_DEF_NOUSE);
-static void            simgraph16_draw_color_img             (const image_id, scr_coord_val, scr_coord_val, const sint8, const bool, const bool  CLIP_NUM_DEF_NOUSE);
-static void            simgraph16_draw_base_img              (const image_id, scr_coord_val, scr_coord_val, const sint8, const bool, const bool  CLIP_NUM_DEF_NOUSE);
-static void            simgraph16_draw_base_img_blend        (const image_id, scr_coord_val, scr_coord_val, const sint8, const FLAGGED_PIXVAL, const bool, const bool  CLIP_NUM_DEF_NOUSE);
-static void            simgraph16_draw_base_img_alpha        (const image_id, const image_id, const unsigned, scr_coord_val, scr_coord_val, const sint8, const FLAGGED_PIXVAL, const bool, bool  CLIP_NUM_DEF_NOUSE);
-static void            simgraph16_draw_stretch_map           (const stretch_map_t &imag, scr_rect area);
-static void            simgraph16_draw_stretch_map_blend     (const stretch_map_t &imag, scr_rect area, FLAGGED_PIXVAL color);
-static PIXVAL          simgraph16_blend_colors               (PIXVAL background, PIXVAL foreground, int percent_blend);
-static void            simgraph16_tint_rect                  (scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL colval, int opacity);
-static void            simgraph16_draw_rect                  (scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL color, bool dirty);
-static void            simgraph16_draw_rect_clipped          (scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL color, bool dirty  CLIP_NUM_DEF);
-static void            simgraph16_draw_rounded_rect_clipped  (scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL color, bool dirty);
-static void            simgraph16_draw_vline_clipped         (scr_coord_val xp, scr_coord_val yp, scr_coord_val h, PIXVAL color, bool dirty  CLIP_NUM_DEF);
-static void            simgraph16_flush_framebuffer          ();
-static void            simgraph16_set_cursor_visible         (bool show);
-static void            simgraph16_set_default_cursor         (int cursor_id);
-static void            simgraph16_set_show_load_cursor       (bool show);
-static void            simgraph16_draw_array                 (scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, const PIXVAL *arr);
-static scr_coord_val   simgraph16_calc_text_width_n          (const char *text, size_t len);
-static scr_size        simgraph16_calc_multiline_text_size   (const char *text);
-static size_t          simgraph16_calc_text_index_for_width  (const char *, scr_coord_val);
-static bool            simgraph16_font_has_character         (utf16 char_code);
-static utf32           simgraph16_get_next_char_with_metrics (const char* &text, unsigned char &byte_length, unsigned char &pixel_width);
-static utf32           simgraph16_get_prev_char_with_metrics (const char* &text, const char *const text_start, unsigned char &byte_length, unsigned char &pixel_width);
-static scr_coord_val   simgraph16_get_char_width             (utf32 c);
-static scr_coord_val   simgraph16_get_number_width           ();
-static scr_coord_val   simgraph16_draw_text_clipped_n        (scr_coord_val x, scr_coord_val y, const char* txt, control_alignment_t flags, const PIXVAL color, bool dirty, sint32 len  CLIP_NUM_DEF);
-static scr_coord_val   simgraph16_draw_multiline_text        (scr_coord_val, scr_coord_val, const char *, PIXVAL);
-static void            simgraph16_draw_text_ellipsis_shadowed(scr_rect, const char *, int, PIXVAL, bool, bool, PIXVAL);
-static void            simgraph16_draw_text_outlined         (scr_coord_val, scr_coord_val, PIXVAL, PIXVAL, const char *, int);
-static void            simgraph16_draw_text_shadowed         (scr_coord_val, scr_coord_val, PIXVAL, PIXVAL, const char *, int);
-static void            simgraph16_draw_box3d                 (scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val, PIXVAL, PIXVAL, bool);
-static void            simgraph16_draw_box3d_clipped         (scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val, PIXVAL, PIXVAL);
-static void            simgraph16_draw_textbox3d_clipped     (scr_coord_val, scr_coord_val, FLAGGED_PIXVAL, FLAGGED_PIXVAL, const char *, int  CLIP_NUM_DEF_NOUSE);
-static void            simgraph16_draw_line                  (scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val, PIXVAL);
-static void            simgraph16_draw_line_dotted           (scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val, PIXVAL);
-static void            simgraph16_draw_empty_circle          (scr_coord_val, scr_coord_val, int, const PIXVAL);
-static void            simgraph16_draw_filled_circle         (scr_coord_val, scr_coord_val, int, const PIXVAL);
-static void            simgraph16_draw_bezier                (scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val, const PIXVAL, scr_coord_val, scr_coord_val);
-static void            simgraph16_draw_right_triangle        (scr_coord_val, scr_coord_val, scr_coord_val, const PIXVAL, const bool);
-static bool            simgraph16_take_screenshot            (const scr_rect &);
-static void            simgraph16_draw_signal_direction      (scr_coord_val, scr_coord_val, uint8, uint8, PIXVAL, PIXVAL, bool, uint8);
-static void            simgraph16_set_clip_rect              (scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val  CLIP_NUM_DEF, bool fit);
-static clip_dimension  simgraph16_get_clip_rect              (CLIP_NUM_DEF_NOUSE0);
-static void            simgraph16_push_clip_rect             (scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val  CLIP_NUM_DEF_NOUSE);
-static void            simgraph16_swap_clip_rect             (CLIP_NUM_DEF_NOUSE0);
-static void            simgraph16_pop_clip_rect              (CLIP_NUM_DEF_NOUSE0);
-static void            simgraph16_add_poly_clip              (int x0,int y0, int x1, int y1, int ribi  CLIP_NUM_DEF);
-static void            simgraph16_clear_all_poly_clip        (CLIP_NUM_DEF0);
-static void            simgraph16_activate_ribi_clip         (int ribi  CLIP_NUM_DEF);
+static PIXVAL          simgraphgl_palette_lookup             (palette_index_t idx);
+static palette_index_t simgraphgl_palette_indexof            (PIXVAL color);
+static rgb888_t        simgraphgl_get_color_rgb              (palette_index_t idx);
+static void            simgraphgl_env_t_rgb_to_system_colors ();
+static void            simgraphgl_set_player_color_scheme    (const int player, const uint8 col1, const uint8 col2);
+static void            simgraphgl_set_light_color            (int color_idx, rgb888_t day_colour, rgb888_t night_colour);
+static void            simgraphgl_set_daynight_level         (int night);
+static scr_coord_val   simgraphgl_set_base_raster_width      (scr_coord_val new_raster);
+static int             simgraphgl_zoom_factor_up             ();
+static int             simgraphgl_zoom_factor_down           ();
+static bool            simgraphgl_init                       (scr_size window_size, sint16 full_screen);
+static bool            simgraphgl_is_display_init            ();
+static void            simgraphgl_exit                       ();
+static void            simgraphgl_on_window_resized          (scr_size new_window_size);
+static bool            simgraphgl_load_font                  (const char *fname, bool reload);
+static image_id        simgraphgl_get_image_count            ();
+static image_id        simgraphgl_register_image             (const image_t *image_in);
+static void            simgraphgl_free_all_images_above      (image_id above );
+static scr_rect        simgraphgl_get_base_image_offset      (image_id image);
+static scr_rect        simgraphgl_get_image_offset           (image_id image);
+static void            simgraphgl_mark_img_dirty             (image_id image, scr_coord_val xp, scr_coord_val yp);
+static void            simgraphgl_mark_rect_dirty_wc         (scr_coord_val x1, scr_coord_val y1, scr_coord_val x2, scr_coord_val y2);
+static void            simgraphgl_mark_rect_dirty_clip       (scr_coord_val x1, scr_coord_val y1, scr_coord_val x2, scr_coord_val y2  CLIP_NUM_DEF);
+static void            simgraphgl_mark_screen_dirty          ();
+static scr_size        simgraphgl_get_screen_size            ();
+static void            simgraphgl_set_screen_actual_width    (scr_coord_val w);
+static void            simgraphgl_set_screen_height          (scr_coord_val const h);
+static scr_size        simgraphgl_get_best_matching_size     (const image_id n, sint16 zoom_percent);
+static void            simgraphgl_fit_img_to_width           (const image_id n, sint16 new_w);
+static void            simgraphgl_move_scroll_band           (scr_coord_val start_y, scr_coord_val x_offset, scr_coord_val h);
+static void            simgraphgl_draw_img_aligned           (const image_id n, scr_rect area, int align, const bool dirty);
+static void            simgraphgl_set_image_procs            (bool is_global);
+static void            simgraphgl_draw_img_aux               (const image_id, scr_coord_val, scr_coord_val, const sint8, const bool, const bool  CLIP_NUM_DEF_NOUSE);
+static void            simgraphgl_draw_rezoomed_img_blend    (const image_id, scr_coord_val, scr_coord_val, const sint8, const FLAGGED_PIXVAL, const bool, const bool  CLIP_NUM_DEF_NOUSE);
+static void            simgraphgl_draw_rezoomed_img_alpha    (const image_id, const image_id, const unsigned, scr_coord_val, scr_coord_val, const sint8, const FLAGGED_PIXVAL, const bool, const bool  CLIP_NUM_DEF_NOUSE);
+static void            simgraphgl_draw_color_img             (const image_id, scr_coord_val, scr_coord_val, const sint8, const bool, const bool  CLIP_NUM_DEF_NOUSE);
+static void            simgraphgl_draw_base_img              (const image_id, scr_coord_val, scr_coord_val, const sint8, const bool, const bool  CLIP_NUM_DEF_NOUSE);
+static void            simgraphgl_draw_base_img_blend        (const image_id, scr_coord_val, scr_coord_val, const sint8, const FLAGGED_PIXVAL, const bool, const bool  CLIP_NUM_DEF_NOUSE);
+static void            simgraphgl_draw_base_img_alpha        (const image_id, const image_id, const unsigned, scr_coord_val, scr_coord_val, const sint8, const FLAGGED_PIXVAL, const bool, bool  CLIP_NUM_DEF_NOUSE);
+static void            simgraphgl_draw_stretch_map           (const stretch_map_t &imag, scr_rect area);
+static void            simgraphgl_draw_stretch_map_blend     (const stretch_map_t &imag, scr_rect area, FLAGGED_PIXVAL color);
+static PIXVAL          simgraphgl_blend_colors               (PIXVAL background, PIXVAL foreground, int percent_blend);
+static void            simgraphgl_tint_rect                  (scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL colval, int opacity);
+static void            simgraphgl_draw_rect                  (scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL color, bool dirty);
+static void            simgraphgl_draw_rect_clipped          (scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL color, bool dirty  CLIP_NUM_DEF);
+static void            simgraphgl_draw_rounded_rect_clipped  (scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL color, bool dirty);
+static void            simgraphgl_draw_vline_clipped         (scr_coord_val xp, scr_coord_val yp, scr_coord_val h, PIXVAL color, bool dirty  CLIP_NUM_DEF);
+static void            simgraphgl_flush_framebuffer          ();
+static void            simgraphgl_set_cursor_visible         (bool show);
+static void            simgraphgl_set_default_cursor         (int cursor_id);
+static void            simgraphgl_set_show_load_cursor       (bool show);
+static void            simgraphgl_draw_array                 (scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, const PIXVAL *arr);
+static scr_coord_val   simgraphgl_calc_text_width_n          (const char *text, size_t len);
+static scr_size        simgraphgl_calc_multiline_text_size   (const char *text);
+static size_t          simgraphgl_calc_text_index_for_width  (const char *, scr_coord_val);
+static bool            simgraphgl_font_has_character         (utf16 char_code);
+static utf32           simgraphgl_get_next_char_with_metrics (const char* &text, unsigned char &byte_length, unsigned char &pixel_width);
+static utf32           simgraphgl_get_prev_char_with_metrics (const char* &text, const char *const text_start, unsigned char &byte_length, unsigned char &pixel_width);
+static scr_coord_val   simgraphgl_get_char_width             (utf32 c);
+static scr_coord_val   simgraphgl_get_number_width           ();
+static scr_coord_val   simgraphgl_draw_text_clipped_n        (scr_coord_val x, scr_coord_val y, const char* txt, control_alignment_t flags, const PIXVAL color, bool dirty, sint32 len  CLIP_NUM_DEF);
+static scr_coord_val   simgraphgl_draw_multiline_text        (scr_coord_val, scr_coord_val, const char *, PIXVAL);
+static void            simgraphgl_draw_text_ellipsis_shadowed(scr_rect, const char *, int, PIXVAL, bool, bool, PIXVAL);
+static void            simgraphgl_draw_text_outlined         (scr_coord_val, scr_coord_val, PIXVAL, PIXVAL, const char *, int);
+static void            simgraphgl_draw_text_shadowed         (scr_coord_val, scr_coord_val, PIXVAL, PIXVAL, const char *, int);
+static void            simgraphgl_draw_box3d                 (scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val, PIXVAL, PIXVAL, bool);
+static void            simgraphgl_draw_box3d_clipped         (scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val, PIXVAL, PIXVAL);
+static void            simgraphgl_draw_textbox3d_clipped     (scr_coord_val, scr_coord_val, FLAGGED_PIXVAL, FLAGGED_PIXVAL, const char *, int  CLIP_NUM_DEF_NOUSE);
+static void            simgraphgl_draw_line                  (scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val, PIXVAL);
+static void            simgraphgl_draw_line_dotted           (scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val, PIXVAL);
+static void            simgraphgl_draw_empty_circle          (scr_coord_val, scr_coord_val, int, const PIXVAL);
+static void            simgraphgl_draw_filled_circle         (scr_coord_val, scr_coord_val, int, const PIXVAL);
+static void            simgraphgl_draw_bezier                (scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val, const PIXVAL, scr_coord_val, scr_coord_val);
+static void            simgraphgl_draw_right_triangle        (scr_coord_val, scr_coord_val, scr_coord_val, const PIXVAL, const bool);
+static bool            simgraphgl_take_screenshot            (const scr_rect &);
+static void            simgraphgl_draw_signal_direction      (scr_coord_val, scr_coord_val, uint8, uint8, PIXVAL, PIXVAL, bool, uint8);
+static void            simgraphgl_set_clip_rect              (scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val  CLIP_NUM_DEF, bool fit);
+static clip_dimension  simgraphgl_get_clip_rect              (CLIP_NUM_DEF_NOUSE0);
+static void            simgraphgl_push_clip_rect             (scr_coord_val, scr_coord_val, scr_coord_val, scr_coord_val  CLIP_NUM_DEF_NOUSE);
+static void            simgraphgl_swap_clip_rect             (CLIP_NUM_DEF_NOUSE0);
+static void            simgraphgl_pop_clip_rect              (CLIP_NUM_DEF_NOUSE0);
+static void            simgraphgl_add_poly_clip              (int x0,int y0, int x1, int y1, int ribi  CLIP_NUM_DEF);
+static void            simgraphgl_clear_all_poly_clip        (CLIP_NUM_DEF0);
+static void            simgraphgl_activate_ribi_clip         (int ribi  CLIP_NUM_DEF);
 
 
-simgraph_t g_simgraph16 = {
+simgraph_t g_simgraphgl = {
 	/*.type                      =*/ SIMGRAPH_TYPE_SOFTWARE,
 
 	/*.tile_raster_width         =*/ 16, // zoomed
@@ -592,91 +592,91 @@ simgraph_t g_simgraph16 = {
 	/*.zoom_num =*/ { 2, 3, 4, 1, 3, 5, 1, 3, 1, 1 },
 	/*.zoom_den =*/ { 1, 2, 3, 1, 4, 8, 2, 8, 4, 8 },
 
-	/*.palette_lookup              =*/ simgraph16_palette_lookup,
-	/*.palette_indexof             =*/ simgraph16_palette_indexof,
-	/*.get_color_rgb               =*/ simgraph16_get_color_rgb,
-	/*.env_t_rgb_to_system_colors  =*/ simgraph16_env_t_rgb_to_system_colors,
-	/*.set_player_color_scheme     =*/ simgraph16_set_player_color_scheme,
-	/*.set_light_color             =*/ simgraph16_set_light_color,
-	/*.set_daynight_level          =*/ simgraph16_set_daynight_level,
+	/*.palette_lookup              =*/ simgraphgl_palette_lookup,
+	/*.palette_indexof             =*/ simgraphgl_palette_indexof,
+	/*.get_color_rgb               =*/ simgraphgl_get_color_rgb,
+	/*.env_t_rgb_to_system_colors  =*/ simgraphgl_env_t_rgb_to_system_colors,
+	/*.set_player_color_scheme     =*/ simgraphgl_set_player_color_scheme,
+	/*.set_light_color             =*/ simgraphgl_set_light_color,
+	/*.set_daynight_level          =*/ simgraphgl_set_daynight_level,
 
-	/*.set_base_raster_width       =*/ simgraph16_set_base_raster_width,
-	/*.zoom_factor_up              =*/ simgraph16_zoom_factor_up,
-	/*.zoom_factor_down            =*/ simgraph16_zoom_factor_down,
-	/*.init                        =*/ simgraph16_init,
-	/*.is_display_init             =*/ simgraph16_is_display_init,
-	/*.exit                        =*/ simgraph16_exit,
-	/*.on_window_resized           =*/ simgraph16_on_window_resized,
-	/*.load_font                   =*/ simgraph16_load_font,
-	/*.get_image_count             =*/ simgraph16_get_image_count,
-	/*.register_image              =*/ simgraph16_register_image,
-	/*.free_all_images_above       =*/ simgraph16_free_all_images_above,
-	/*.get_base_image_offset       =*/ simgraph16_get_base_image_offset,
-	/*.get_image_offset            =*/ simgraph16_get_image_offset,
-	/*.mark_img_dirty              =*/ simgraph16_mark_img_dirty,
-	/*.mark_rect_dirty_wc          =*/ simgraph16_mark_rect_dirty_wc,
-	/*.mark_rect_dirty_clip        =*/ simgraph16_mark_rect_dirty_clip,
-	/*.mark_screen_dirty           =*/ simgraph16_mark_screen_dirty,
-	/*.get_screen_size             =*/ simgraph16_get_screen_size,
-	/*.set_screen_height           =*/ simgraph16_set_screen_height,
-	/*.set_screen_actual_width     =*/ simgraph16_set_screen_actual_width,
-	/*.get_best_matching_size      =*/ simgraph16_get_best_matching_size,
-	/*.fit_img_to_width            =*/ simgraph16_fit_img_to_width,
-	/*.move_scroll_band            =*/ simgraph16_move_scroll_band,
-	/*.set_image_procs             =*/ simgraph16_set_image_procs,
-	/*.draw_img_aligned            =*/ simgraph16_draw_img_aligned,
-	/*.draw_img_aux                =*/ simgraph16_draw_img_aux,
-	/*.draw_rezoomed_img_blend     =*/ simgraph16_draw_rezoomed_img_blend,
-	/*.draw_rezoomed_img_alpha     =*/ simgraph16_draw_rezoomed_img_alpha,
-	/*.draw_color_img              =*/ simgraph16_draw_color_img,
-	/*.draw_base_img               =*/ simgraph16_draw_base_img,
-	/*.draw_base_img_blend         =*/ simgraph16_draw_base_img_blend,
-	/*.draw_base_img_alpha         =*/ simgraph16_draw_base_img_alpha,
-	/*.draw_stretch_map            =*/ simgraph16_draw_stretch_map,
-	/*.draw_stretch_map_blend      =*/ simgraph16_draw_stretch_map_blend,
-	/*.blend_colors                =*/ simgraph16_blend_colors,
-	/*.tint_rect                   =*/ simgraph16_tint_rect,
-	/*.draw_rect                   =*/ simgraph16_draw_rect,
-	/*.draw_rect_clipped           =*/ simgraph16_draw_rect_clipped,
-	/*.draw_rounded_rect_clipped   =*/ simgraph16_draw_rounded_rect_clipped,
-	/*.draw_vline_clipped          =*/ simgraph16_draw_vline_clipped,
-	/*.flush_framebuffer           =*/ simgraph16_flush_framebuffer,
-	/*.set_cursor_visible          =*/ simgraph16_set_cursor_visible,
-	/*.set_default_cursor          =*/ simgraph16_set_default_cursor,
-	/*.set_show_load_cursor        =*/ simgraph16_set_show_load_cursor,
-	/*.draw_array                  =*/ simgraph16_draw_array,
-	/*.font_has_character          =*/ simgraph16_font_has_character,
-	/*.get_char_width              =*/ simgraph16_get_char_width,
-	/*.get_number_width            =*/ simgraph16_get_number_width,
-	/*.get_next_char_with_metrics  =*/ simgraph16_get_next_char_with_metrics,
-	/*.get_prev_char_with_metrics  =*/ simgraph16_get_prev_char_with_metrics,
-	/*.calc_text_width_n           =*/ simgraph16_calc_text_width_n,
-	/*.calc_multiline_text_size    =*/ simgraph16_calc_multiline_text_size,
-	/*.calc_text_index_for_width   =*/ simgraph16_calc_text_index_for_width,
-	/*.draw_text_clipped_n         =*/ simgraph16_draw_text_clipped_n,
-	/*.draw_multiline_text         =*/ simgraph16_draw_multiline_text,
-	/*.draw_text_ellipsis_shadowed =*/ simgraph16_draw_text_ellipsis_shadowed,
-	/*.draw_text_outlined          =*/ simgraph16_draw_text_outlined,
-	/*.draw_text_shadowed          =*/ simgraph16_draw_text_shadowed,
-	/*.draw_box3d                  =*/ simgraph16_draw_box3d,
-	/*.draw_box3d_clipped          =*/ simgraph16_draw_box3d_clipped,
-	/*.draw_textbox3d_clipped      =*/ simgraph16_draw_textbox3d_clipped,
-	/*.draw_line                   =*/ simgraph16_draw_line,
-	/*.draw_line_dotted            =*/ simgraph16_draw_line_dotted,
-	/*.draw_empty_circle           =*/ simgraph16_draw_empty_circle,
-	/*.draw_filled_circle          =*/ simgraph16_draw_filled_circle,
-	/*.draw_bezier                 =*/ simgraph16_draw_bezier,
-	/*.draw_right_triangle         =*/ simgraph16_draw_right_triangle,
-	/*.draw_signal_direction       =*/ simgraph16_draw_signal_direction,
-	/*.take_screenshot             =*/ simgraph16_take_screenshot,
-	/*.set_clip_rect               =*/ simgraph16_set_clip_rect,
-	/*.get_clip_rect               =*/ simgraph16_get_clip_rect,
-	/*.push_clip_rect              =*/ simgraph16_push_clip_rect,
-	/*.swap_clip_rect              =*/ simgraph16_swap_clip_rect,
-	/*.pop_clip_rect               =*/ simgraph16_pop_clip_rect,
-	/*.add_poly_clip               =*/ simgraph16_add_poly_clip,
-	/*.clear_all_poly_clip         =*/ simgraph16_clear_all_poly_clip,
-	/*.activate_ribi_clip          =*/ simgraph16_activate_ribi_clip,
+	/*.set_base_raster_width       =*/ simgraphgl_set_base_raster_width,
+	/*.zoom_factor_up              =*/ simgraphgl_zoom_factor_up,
+	/*.zoom_factor_down            =*/ simgraphgl_zoom_factor_down,
+	/*.init                        =*/ simgraphgl_init,
+	/*.is_display_init             =*/ simgraphgl_is_display_init,
+	/*.exit                        =*/ simgraphgl_exit,
+	/*.on_window_resized           =*/ simgraphgl_on_window_resized,
+	/*.load_font                   =*/ simgraphgl_load_font,
+	/*.get_image_count             =*/ simgraphgl_get_image_count,
+	/*.register_image              =*/ simgraphgl_register_image,
+	/*.free_all_images_above       =*/ simgraphgl_free_all_images_above,
+	/*.get_base_image_offset       =*/ simgraphgl_get_base_image_offset,
+	/*.get_image_offset            =*/ simgraphgl_get_image_offset,
+	/*.mark_img_dirty              =*/ simgraphgl_mark_img_dirty,
+	/*.mark_rect_dirty_wc          =*/ simgraphgl_mark_rect_dirty_wc,
+	/*.mark_rect_dirty_clip        =*/ simgraphgl_mark_rect_dirty_clip,
+	/*.mark_screen_dirty           =*/ simgraphgl_mark_screen_dirty,
+	/*.get_screen_size             =*/ simgraphgl_get_screen_size,
+	/*.set_screen_height           =*/ simgraphgl_set_screen_height,
+	/*.set_screen_actual_width     =*/ simgraphgl_set_screen_actual_width,
+	/*.get_best_matching_size      =*/ simgraphgl_get_best_matching_size,
+	/*.fit_img_to_width            =*/ simgraphgl_fit_img_to_width,
+	/*.move_scroll_band            =*/ simgraphgl_move_scroll_band,
+	/*.set_image_procs             =*/ simgraphgl_set_image_procs,
+	/*.draw_img_aligned            =*/ simgraphgl_draw_img_aligned,
+	/*.draw_img_aux                =*/ simgraphgl_draw_img_aux,
+	/*.draw_rezoomed_img_blend     =*/ simgraphgl_draw_rezoomed_img_blend,
+	/*.draw_rezoomed_img_alpha     =*/ simgraphgl_draw_rezoomed_img_alpha,
+	/*.draw_color_img              =*/ simgraphgl_draw_color_img,
+	/*.draw_base_img               =*/ simgraphgl_draw_base_img,
+	/*.draw_base_img_blend         =*/ simgraphgl_draw_base_img_blend,
+	/*.draw_base_img_alpha         =*/ simgraphgl_draw_base_img_alpha,
+	/*.draw_stretch_map            =*/ simgraphgl_draw_stretch_map,
+	/*.draw_stretch_map_blend      =*/ simgraphgl_draw_stretch_map_blend,
+	/*.blend_colors                =*/ simgraphgl_blend_colors,
+	/*.tint_rect                   =*/ simgraphgl_tint_rect,
+	/*.draw_rect                   =*/ simgraphgl_draw_rect,
+	/*.draw_rect_clipped           =*/ simgraphgl_draw_rect_clipped,
+	/*.draw_rounded_rect_clipped   =*/ simgraphgl_draw_rounded_rect_clipped,
+	/*.draw_vline_clipped          =*/ simgraphgl_draw_vline_clipped,
+	/*.flush_framebuffer           =*/ simgraphgl_flush_framebuffer,
+	/*.set_cursor_visible          =*/ simgraphgl_set_cursor_visible,
+	/*.set_default_cursor          =*/ simgraphgl_set_default_cursor,
+	/*.set_show_load_cursor        =*/ simgraphgl_set_show_load_cursor,
+	/*.draw_array                  =*/ simgraphgl_draw_array,
+	/*.font_has_character          =*/ simgraphgl_font_has_character,
+	/*.get_char_width              =*/ simgraphgl_get_char_width,
+	/*.get_number_width            =*/ simgraphgl_get_number_width,
+	/*.get_next_char_with_metrics  =*/ simgraphgl_get_next_char_with_metrics,
+	/*.get_prev_char_with_metrics  =*/ simgraphgl_get_prev_char_with_metrics,
+	/*.calc_text_width_n           =*/ simgraphgl_calc_text_width_n,
+	/*.calc_multiline_text_size    =*/ simgraphgl_calc_multiline_text_size,
+	/*.calc_text_index_for_width   =*/ simgraphgl_calc_text_index_for_width,
+	/*.draw_text_clipped_n         =*/ simgraphgl_draw_text_clipped_n,
+	/*.draw_multiline_text         =*/ simgraphgl_draw_multiline_text,
+	/*.draw_text_ellipsis_shadowed =*/ simgraphgl_draw_text_ellipsis_shadowed,
+	/*.draw_text_outlined          =*/ simgraphgl_draw_text_outlined,
+	/*.draw_text_shadowed          =*/ simgraphgl_draw_text_shadowed,
+	/*.draw_box3d                  =*/ simgraphgl_draw_box3d,
+	/*.draw_box3d_clipped          =*/ simgraphgl_draw_box3d_clipped,
+	/*.draw_textbox3d_clipped      =*/ simgraphgl_draw_textbox3d_clipped,
+	/*.draw_line                   =*/ simgraphgl_draw_line,
+	/*.draw_line_dotted            =*/ simgraphgl_draw_line_dotted,
+	/*.draw_empty_circle           =*/ simgraphgl_draw_empty_circle,
+	/*.draw_filled_circle          =*/ simgraphgl_draw_filled_circle,
+	/*.draw_bezier                 =*/ simgraphgl_draw_bezier,
+	/*.draw_right_triangle         =*/ simgraphgl_draw_right_triangle,
+	/*.draw_signal_direction       =*/ simgraphgl_draw_signal_direction,
+	/*.take_screenshot             =*/ simgraphgl_take_screenshot,
+	/*.set_clip_rect               =*/ simgraphgl_set_clip_rect,
+	/*.get_clip_rect               =*/ simgraphgl_get_clip_rect,
+	/*.push_clip_rect              =*/ simgraphgl_push_clip_rect,
+	/*.swap_clip_rect              =*/ simgraphgl_swap_clip_rect,
+	/*.pop_clip_rect               =*/ simgraphgl_pop_clip_rect,
+	/*.add_poly_clip               =*/ simgraphgl_add_poly_clip,
+	/*.clear_all_poly_clip         =*/ simgraphgl_clear_all_poly_clip,
+	/*.activate_ribi_clip          =*/ simgraphgl_activate_ribi_clip,
 };
 
 static uint32 zoom_factor = ZOOM_NEUTRAL;
@@ -718,7 +718,7 @@ static inline PIXVAL pixval_to_rgb343(PIXVAL rgb)
 /*
  * Gets a colour index and returns RGB888
  */
-static rgb888_t simgraph16_get_color_rgb(palette_index_t idx)
+static rgb888_t simgraphgl_get_color_rgb(palette_index_t idx)
 {
 	// special_pal has 224 rgb colors
 	if (idx < SPECIAL_COLOR_COUNT) {
@@ -737,12 +737,12 @@ static rgb888_t simgraph16_get_color_rgb(palette_index_t idx)
 /**
  * Convert indexed colors to rgb and back
  */
-static PIXVAL simgraph16_palette_lookup(palette_index_t idx)
+static PIXVAL simgraphgl_palette_lookup(palette_index_t idx)
 {
 	return specialcolormap_all_day[idx];
 }
 
-static palette_index_t simgraph16_palette_indexof(PIXVAL color)
+static palette_index_t simgraphgl_palette_indexof(PIXVAL color)
 {
 	for(PIXVAL i=0; i<=0xff; i++) {
 		if (specialcolormap_all_day[i] == color) {
@@ -756,7 +756,7 @@ static palette_index_t simgraph16_palette_indexof(PIXVAL color)
 /*
  * Convert env_t colours from RGB888 to the system format
  */
-static void simgraph16_env_t_rgb_to_system_colors()
+static void simgraphgl_env_t_rgb_to_system_colors()
 {
 	// get system colours for the default colours or settings.xml
 	env_t::default_window_title_color = get_system_color(env_t::default_window_title_color_rgb);
@@ -770,11 +770,11 @@ static void simgraph16_env_t_rgb_to_system_colors()
 
 
 /* changes the raster width after loading */
-static scr_coord_val simgraph16_set_base_raster_width(scr_coord_val new_raster)
+static scr_coord_val simgraphgl_set_base_raster_width(scr_coord_val new_raster)
 {
-	scr_coord_val old = g_simgraph16.base_tile_raster_width;
-	g_simgraph16.base_tile_raster_width = new_raster;
-	g_simgraph16.tile_raster_width = (new_raster *  g_simgraph16.zoom_num[zoom_factor]) / g_simgraph16.zoom_den[zoom_factor];
+	scr_coord_val old = g_simgraphgl.base_tile_raster_width;
+	g_simgraphgl.base_tile_raster_width = new_raster;
+	g_simgraphgl.tile_raster_width = (new_raster *  g_simgraphgl.zoom_num[zoom_factor]) / g_simgraphgl.zoom_den[zoom_factor];
 	return old;
 }
 
@@ -782,20 +782,20 @@ static scr_coord_val simgraph16_set_base_raster_width(scr_coord_val new_raster)
 // ----------------------------------- clipping routines ------------------------------------------
 
 
-static scr_size simgraph16_get_screen_size()
+static scr_size simgraphgl_get_screen_size()
 {
 	return scr_size{ disp_actual_width, disp_height };
 }
 
 
 // only use, if you are really really sure!
-static void simgraph16_set_screen_actual_width(scr_coord_val w)
+static void simgraphgl_set_screen_actual_width(scr_coord_val w)
 {
 	disp_actual_width = w;
 }
 
 
-static void simgraph16_set_screen_height(scr_coord_val const h)
+static void simgraphgl_set_screen_height(scr_coord_val const h)
 {
 	disp_height = h;
 }
@@ -838,7 +838,7 @@ static bool clip_lr(scr_coord_val *x, scr_coord_val *w, const scr_coord_val left
 /**
  * Get the clipping rectangle dimensions
  */
-static clip_dimension simgraph16_get_clip_rect(CLIP_NUM_DEF0)
+static clip_dimension simgraphgl_get_clip_rect(CLIP_NUM_DEF0)
 {
 	return CR.clip_rect;
 }
@@ -853,7 +853,7 @@ static clip_dimension simgraph16_get_clip_rect(CLIP_NUM_DEF0)
  *  clip.x < xp+w <= clip.xx
  * analogously for the y coordinate
  */
-static void simgraph16_set_clip_rect(scr_coord_val x, scr_coord_val y, scr_coord_val w, scr_coord_val h  CLIP_NUM_DEF, bool fit)
+static void simgraphgl_set_clip_rect(scr_coord_val x, scr_coord_val y, scr_coord_val w, scr_coord_val h  CLIP_NUM_DEF, bool fit)
 {
 	if (!fit) {
 		clip_wh( &x, &w, 0, disp_width);
@@ -872,17 +872,17 @@ static void simgraph16_set_clip_rect(scr_coord_val x, scr_coord_val y, scr_coord
 	CR.clip_rect.yy = y + h; // watch out, clips to scr_coord_val max
 }
 
-static void simgraph16_push_clip_rect(scr_coord_val x, scr_coord_val y, scr_coord_val w, scr_coord_val h  CLIP_NUM_DEF)
+static void simgraphgl_push_clip_rect(scr_coord_val x, scr_coord_val y, scr_coord_val w, scr_coord_val h  CLIP_NUM_DEF)
 {
 	assert(!CR.swap_active);
 	// save active clipping rectangle
 	CR.clip_rect_swap = CR.clip_rect;
 	// active rectangle provided by parameters
-	simgraph16_set_clip_rect(x, y, w, h  CLIP_NUM_PAR, false);
+	simgraphgl_set_clip_rect(x, y, w, h  CLIP_NUM_PAR, false);
 	CR.swap_active = true;
 }
 
-static void simgraph16_swap_clip_rect(CLIP_NUM_DEF0)
+static void simgraphgl_swap_clip_rect(CLIP_NUM_DEF0)
 {
 	if (CR.swap_active) {
 		// swap clipping rectangles
@@ -892,7 +892,7 @@ static void simgraph16_swap_clip_rect(CLIP_NUM_DEF0)
 	}
 }
 
-static void simgraph16_pop_clip_rect(CLIP_NUM_DEF0)
+static void simgraphgl_pop_clip_rect(CLIP_NUM_DEF0)
 {
 	if (CR.swap_active) {
 		// swap original clipping rectangle back
@@ -906,7 +906,7 @@ static void simgraph16_pop_clip_rect(CLIP_NUM_DEF0)
  * with associated ribi
  * if ribi & 16 then non-convex clipping.
  */
-static void simgraph16_add_poly_clip(int x0,int y0, int x1, int y1, int ribi  CLIP_NUM_DEF)
+static void simgraphgl_add_poly_clip(int x0,int y0, int x1, int y1, int ribi  CLIP_NUM_DEF)
 {
 	if(  CR.number_of_clips < MAX_POLY_CLIPS  ) {
 		CR.poly_clips[CR.number_of_clips].clip_from_to( x0, y0, x1, y1, ribi&16 );
@@ -919,7 +919,7 @@ static void simgraph16_add_poly_clip(int x0,int y0, int x1, int y1, int ribi  CL
 /*
  * Clears all clipping lines
  */
-static void simgraph16_clear_all_poly_clip(CLIP_NUM_DEF0)
+static void simgraphgl_clear_all_poly_clip(CLIP_NUM_DEF0)
 {
 	CR.number_of_clips = 0;
 	CR.active_ribi = 15; // set all to active
@@ -930,7 +930,7 @@ static void simgraph16_clear_all_poly_clip(CLIP_NUM_DEF0)
  * Activates clipping lines associated with ribi
  * ie if clip_ribi[i] & active_ribi
  */
-static void simgraph16_activate_ribi_clip(int ribi  CLIP_NUM_DEF)
+static void simgraphgl_activate_ribi_clip(int ribi  CLIP_NUM_DEF)
 {
 	CR.active_ribi = ribi;
 }
@@ -1017,7 +1017,7 @@ static void mark_rect_dirty_nc(scr_coord_val x1, scr_coord_val y1, scr_coord_val
 /**
  * Mark tile as dirty, with clipping
  */
-static void simgraph16_mark_rect_dirty_wc(scr_coord_val x1, scr_coord_val y1, scr_coord_val x2, scr_coord_val y2)
+static void simgraphgl_mark_rect_dirty_wc(scr_coord_val x1, scr_coord_val y1, scr_coord_val x2, scr_coord_val y2)
 {
 	// inside display?
 	if(  x2 >= 0  &&  y2 >= 0  &&  x1 < disp_width  &&  y1 < disp_height  ) {
@@ -1038,7 +1038,7 @@ static void simgraph16_mark_rect_dirty_wc(scr_coord_val x1, scr_coord_val y1, sc
 }
 
 
-static void simgraph16_mark_rect_dirty_clip(scr_coord_val x1, scr_coord_val y1, scr_coord_val x2, scr_coord_val y2  CLIP_NUM_DEF)
+static void simgraphgl_mark_rect_dirty_clip(scr_coord_val x1, scr_coord_val y1, scr_coord_val x2, scr_coord_val y2  CLIP_NUM_DEF)
 {
 	// inside clip_rect?
 	if(  x2 >= CR.clip_rect.x  &&  y2 >= CR.clip_rect.y  &&  x1 < CR.clip_rect.xx  &&  y1 < CR.clip_rect.yy  ) {
@@ -1063,7 +1063,7 @@ static void simgraph16_mark_rect_dirty_clip(scr_coord_val x1, scr_coord_val y1, 
  * Mark the whole screen as dirty.
  *
  */
-static void simgraph16_mark_screen_dirty()
+static void simgraphgl_mark_screen_dirty()
 {
 	memset( tile_dirty, 0xFFFFFFFF, sizeof(uint32) * tile_buffer_length );
 }
@@ -1072,10 +1072,10 @@ static void simgraph16_mark_screen_dirty()
 /**
  * the area of this image need update
  */
-static void simgraph16_mark_img_dirty(image_id image, scr_coord_val xp, scr_coord_val yp)
+static void simgraphgl_mark_img_dirty(image_id image, scr_coord_val xp, scr_coord_val yp)
 {
 	if(  image < anz_images  ) {
-		simgraph16_mark_rect_dirty_wc(
+		simgraphgl_mark_rect_dirty_wc(
 			xp + images[image].x,
 			yp + images[image].y,
 			xp + images[image].x + images[image].w - 1,
@@ -1108,16 +1108,16 @@ static void rezoom()
 void set_zoom_factor(int z)
 {
 	// do not zoom beyond 4 pixels
-	if(  (g_simgraph16.base_tile_raster_width * g_simgraph16.zoom_num[z]) / g_simgraph16.zoom_den[z] > 4  ) {
+	if(  (g_simgraphgl.base_tile_raster_width * g_simgraphgl.zoom_num[z]) / g_simgraphgl.zoom_den[z] > 4  ) {
 		zoom_factor = z;
-		g_simgraph16.tile_raster_width = (g_simgraph16.base_tile_raster_width * g_simgraph16.zoom_num[zoom_factor]) / g_simgraph16.zoom_den[zoom_factor];
-		dbg->message("set_zoom_factor()", "Zoom level now %d (%i/%i)", zoom_factor, g_simgraph16.zoom_num[zoom_factor], g_simgraph16.zoom_den[zoom_factor] );
+		g_simgraphgl.tile_raster_width = (g_simgraphgl.base_tile_raster_width * g_simgraphgl.zoom_num[zoom_factor]) / g_simgraphgl.zoom_den[zoom_factor];
+		dbg->message("set_zoom_factor()", "Zoom level now %d (%i/%i)", zoom_factor, g_simgraphgl.zoom_num[zoom_factor], g_simgraphgl.zoom_den[zoom_factor] );
 		rezoom();
 	}
 }
 
 
-static int simgraph16_zoom_factor_up()
+static int simgraphgl_zoom_factor_up()
 {
 	// zoom out, if size permits
 	if(  zoom_factor > 0  ) {
@@ -1128,7 +1128,7 @@ static int simgraph16_zoom_factor_up()
 }
 
 
-static int simgraph16_zoom_factor_down()
+static int simgraphgl_zoom_factor_down()
 {
 	if(  zoom_factor < MAX_ZOOM_FACTOR  ) {
 		set_zoom_factor( zoom_factor+1 );
@@ -1221,7 +1221,7 @@ static void recode_img_src_target(scr_coord_val h, PIXVAL *src, PIXVAL *target)
 }
 
 
-static image_id simgraph16_get_image_count()
+static image_id simgraphgl_get_image_count()
 {
 	return anz_images;
 }
@@ -1373,18 +1373,18 @@ static void rezoom_img(const image_id n)
 
 		// now we want to downsize the image
 		// just divide the sizes
-		images[n].x = (images[n].base_x * g_simgraph16.zoom_num[zoom_factor]) / g_simgraph16.zoom_den[zoom_factor];
-		images[n].y = (images[n].base_y * g_simgraph16.zoom_num[zoom_factor]) / g_simgraph16.zoom_den[zoom_factor];
-		images[n].w = (images[n].base_w * g_simgraph16.zoom_num[zoom_factor]) / g_simgraph16.zoom_den[zoom_factor];
-		images[n].h = (images[n].base_h * g_simgraph16.zoom_num[zoom_factor]) / g_simgraph16.zoom_den[zoom_factor];
+		images[n].x = (images[n].base_x * g_simgraphgl.zoom_num[zoom_factor]) / g_simgraphgl.zoom_den[zoom_factor];
+		images[n].y = (images[n].base_y * g_simgraphgl.zoom_num[zoom_factor]) / g_simgraphgl.zoom_den[zoom_factor];
+		images[n].w = (images[n].base_w * g_simgraphgl.zoom_num[zoom_factor]) / g_simgraphgl.zoom_den[zoom_factor];
+		images[n].h = (images[n].base_h * g_simgraphgl.zoom_num[zoom_factor]) / g_simgraphgl.zoom_den[zoom_factor];
 
 		if(  images[n].h > 0  &&  images[n].w > 0  ) {
 			// just recalculate the image in the new size
 			PIXVAL *src = images[n].base_data;
 			PIXVAL *dest = NULL;
 			// embed the baseimage in an image with margin ~ remainder
-			const sint16 x_rem = (images[n].base_x * g_simgraph16.zoom_num[zoom_factor]) % g_simgraph16.zoom_den[zoom_factor];
-			const sint16 y_rem = (images[n].base_y * g_simgraph16.zoom_num[zoom_factor]) % g_simgraph16.zoom_den[zoom_factor];
+			const sint16 x_rem = (images[n].base_x * g_simgraphgl.zoom_num[zoom_factor]) % g_simgraphgl.zoom_den[zoom_factor];
+			const sint16 y_rem = (images[n].base_y * g_simgraphgl.zoom_num[zoom_factor]) % g_simgraphgl.zoom_den[zoom_factor];
 			const sint16 xl_margin = max( x_rem, 0);
 			const sint16 xr_margin = max(-x_rem, 0);
 			const sint16 yl_margin = max( y_rem, 0);
@@ -1392,10 +1392,10 @@ static void rezoom_img(const image_id n)
 			// baseimage top-left  corner is at (xl_margin, yl_margin)
 			// ...       low-right corner is at (xr_margin, yr_margin)
 
-			sint32 orgzoomwidth = ((images[n].base_w + g_simgraph16.zoom_den[zoom_factor] - 1 ) / g_simgraph16.zoom_den[zoom_factor]) * g_simgraph16.zoom_den[zoom_factor];
-			sint32 newzoomwidth = (orgzoomwidth*g_simgraph16.zoom_num[zoom_factor])/g_simgraph16.zoom_den[zoom_factor];
-			sint32 orgzoomheight = ((images[n].base_h + g_simgraph16.zoom_den[zoom_factor] - 1 ) / g_simgraph16.zoom_den[zoom_factor]) * g_simgraph16.zoom_den[zoom_factor];
-			sint32 newzoomheight = (orgzoomheight * g_simgraph16.zoom_num[zoom_factor]) / g_simgraph16.zoom_den[zoom_factor];
+			sint32 orgzoomwidth = ((images[n].base_w + g_simgraphgl.zoom_den[zoom_factor] - 1 ) / g_simgraphgl.zoom_den[zoom_factor]) * g_simgraphgl.zoom_den[zoom_factor];
+			sint32 newzoomwidth = (orgzoomwidth*g_simgraphgl.zoom_num[zoom_factor])/g_simgraphgl.zoom_den[zoom_factor];
+			sint32 orgzoomheight = ((images[n].base_h + g_simgraphgl.zoom_den[zoom_factor] - 1 ) / g_simgraphgl.zoom_den[zoom_factor]) * g_simgraphgl.zoom_den[zoom_factor];
+			sint32 newzoomheight = (orgzoomheight * g_simgraphgl.zoom_num[zoom_factor]) / g_simgraphgl.zoom_den[zoom_factor];
 
 			// we will unpack, re-sample, pack it
 
@@ -1456,9 +1456,9 @@ static void rezoom_img(const image_id n)
 
 			// now we have the image, we do a repack then
 			dest = rezoom_baseimage2[n % env_t::num_threads];
-			switch(  g_simgraph16.zoom_den[zoom_factor]  ) {
+			switch(  g_simgraphgl.zoom_den[zoom_factor]  ) {
 				case 1: {
-					assert(g_simgraph16.zoom_num[zoom_factor]==2);
+					assert(g_simgraphgl.zoom_num[zoom_factor]==2);
 
 					// first half row - just copy values, do not fiddle with neighbor colors
 					uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff;
@@ -1515,13 +1515,13 @@ static void rezoom_img(const image_id n)
 				}
 				case 2:
 					for(  sint16 y = 0;  y < newzoomheight;  y++  ) {
-						uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraph16.zoom_den[zoom_factor] + 0 - y_rem) / g_simgraph16.zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p2 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraph16.zoom_den[zoom_factor] + 1 - y_rem) / g_simgraph16.zoom_num[zoom_factor]) * (basewidth * 4);
+						uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraphgl.zoom_den[zoom_factor] + 0 - y_rem) / g_simgraphgl.zoom_num[zoom_factor]) * (basewidth * 4);
+						uint8 *p2 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraphgl.zoom_den[zoom_factor] + 1 - y_rem) / g_simgraphgl.zoom_num[zoom_factor]) * (basewidth * 4);
 						for(  sint16 x = 0;  x < newzoomwidth;  x++  ) {
 							uint8 valid = 0;
 							uint8 r = 0, g = 0, b = 0;
-							sint16 xreal1 = ((x * g_simgraph16.zoom_den[zoom_factor] + 0 - x_rem) / g_simgraph16.zoom_num[zoom_factor]) * 4;
-							sint16 xreal2 = ((x * g_simgraph16.zoom_den[zoom_factor] + 1 - x_rem) / g_simgraph16.zoom_num[zoom_factor]) * 4;
+							sint16 xreal1 = ((x * g_simgraphgl.zoom_den[zoom_factor] + 0 - x_rem) / g_simgraphgl.zoom_num[zoom_factor]) * 4;
+							sint16 xreal2 = ((x * g_simgraphgl.zoom_den[zoom_factor] + 1 - x_rem) / g_simgraphgl.zoom_num[zoom_factor]) * 4;
 							SumSubpixel( p1 + xreal1 );
 							SumSubpixel( p1 + xreal2 );
 							SumSubpixel( p2 + xreal1 );
@@ -1540,15 +1540,15 @@ static void rezoom_img(const image_id n)
 					break;
 				case 3:
 					for(  sint16 y = 0;  y < newzoomheight;  y++  ) {
-						uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraph16.zoom_den[zoom_factor] + 0 - y_rem) / g_simgraph16.zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p2 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraph16.zoom_den[zoom_factor] + 1 - y_rem) / g_simgraph16.zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p3 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraph16.zoom_den[zoom_factor] + 2 - y_rem) / g_simgraph16.zoom_num[zoom_factor]) * (basewidth * 4);
+						uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraphgl.zoom_den[zoom_factor] + 0 - y_rem) / g_simgraphgl.zoom_num[zoom_factor]) * (basewidth * 4);
+						uint8 *p2 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraphgl.zoom_den[zoom_factor] + 1 - y_rem) / g_simgraphgl.zoom_num[zoom_factor]) * (basewidth * 4);
+						uint8 *p3 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraphgl.zoom_den[zoom_factor] + 2 - y_rem) / g_simgraphgl.zoom_num[zoom_factor]) * (basewidth * 4);
 						for(  sint16 x = 0;  x < newzoomwidth;  x++  ) {
 							uint8 valid = 0;
 							uint16 r = 0, g = 0, b = 0;
-							sint16 xreal1 = ((x * g_simgraph16.zoom_den[zoom_factor] + 0 - x_rem) / g_simgraph16.zoom_num[zoom_factor]) * 4;
-							sint16 xreal2 = ((x * g_simgraph16.zoom_den[zoom_factor] + 1 - x_rem) / g_simgraph16.zoom_num[zoom_factor]) * 4;
-							sint16 xreal3 = ((x * g_simgraph16.zoom_den[zoom_factor] + 2 - x_rem) / g_simgraph16.zoom_num[zoom_factor]) * 4;
+							sint16 xreal1 = ((x * g_simgraphgl.zoom_den[zoom_factor] + 0 - x_rem) / g_simgraphgl.zoom_num[zoom_factor]) * 4;
+							sint16 xreal2 = ((x * g_simgraphgl.zoom_den[zoom_factor] + 1 - x_rem) / g_simgraphgl.zoom_num[zoom_factor]) * 4;
+							sint16 xreal3 = ((x * g_simgraphgl.zoom_den[zoom_factor] + 2 - x_rem) / g_simgraphgl.zoom_num[zoom_factor]) * 4;
 							SumSubpixel( p1 + xreal1 );
 							SumSubpixel( p1 + xreal2 );
 							SumSubpixel( p1 + xreal3 );
@@ -1572,17 +1572,17 @@ static void rezoom_img(const image_id n)
 					break;
 				case 4:
 					for(  sint16 y = 0;  y < newzoomheight;  y++  ) {
-						uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraph16.zoom_den[zoom_factor] + 0 - y_rem) / g_simgraph16.zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p2 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraph16.zoom_den[zoom_factor] + 1 - y_rem) / g_simgraph16.zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p3 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraph16.zoom_den[zoom_factor] + 2 - y_rem) / g_simgraph16.zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p4 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraph16.zoom_den[zoom_factor] + 3 - y_rem) / g_simgraph16.zoom_num[zoom_factor]) * (basewidth * 4);
+						uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraphgl.zoom_den[zoom_factor] + 0 - y_rem) / g_simgraphgl.zoom_num[zoom_factor]) * (basewidth * 4);
+						uint8 *p2 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraphgl.zoom_den[zoom_factor] + 1 - y_rem) / g_simgraphgl.zoom_num[zoom_factor]) * (basewidth * 4);
+						uint8 *p3 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraphgl.zoom_den[zoom_factor] + 2 - y_rem) / g_simgraphgl.zoom_num[zoom_factor]) * (basewidth * 4);
+						uint8 *p4 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraphgl.zoom_den[zoom_factor] + 3 - y_rem) / g_simgraphgl.zoom_num[zoom_factor]) * (basewidth * 4);
 						for(  sint16 x = 0;  x < newzoomwidth;  x++  ) {
 							uint8 valid = 0;
 							uint16 r = 0, g = 0, b = 0;
-							sint16 xreal1 = ((x * g_simgraph16.zoom_den[zoom_factor] + 0 - x_rem) / g_simgraph16.zoom_num[zoom_factor]) * 4;
-							sint16 xreal2 = ((x * g_simgraph16.zoom_den[zoom_factor] + 1 - x_rem) / g_simgraph16.zoom_num[zoom_factor]) * 4;
-							sint16 xreal3 = ((x * g_simgraph16.zoom_den[zoom_factor] + 2 - x_rem) / g_simgraph16.zoom_num[zoom_factor]) * 4;
-							sint16 xreal4 = ((x * g_simgraph16.zoom_den[zoom_factor] + 3 - x_rem) / g_simgraph16.zoom_num[zoom_factor]) * 4;
+							sint16 xreal1 = ((x * g_simgraphgl.zoom_den[zoom_factor] + 0 - x_rem) / g_simgraphgl.zoom_num[zoom_factor]) * 4;
+							sint16 xreal2 = ((x * g_simgraphgl.zoom_den[zoom_factor] + 1 - x_rem) / g_simgraphgl.zoom_num[zoom_factor]) * 4;
+							sint16 xreal3 = ((x * g_simgraphgl.zoom_den[zoom_factor] + 2 - x_rem) / g_simgraphgl.zoom_num[zoom_factor]) * 4;
+							sint16 xreal4 = ((x * g_simgraphgl.zoom_den[zoom_factor] + 3 - x_rem) / g_simgraphgl.zoom_num[zoom_factor]) * 4;
 							SumSubpixel( p1 + xreal1 );
 							SumSubpixel( p1 + xreal2 );
 							SumSubpixel( p1 + xreal3 );
@@ -1613,25 +1613,25 @@ static void rezoom_img(const image_id n)
 					break;
 				case 8:
 					for(  sint16 y = 0;  y < newzoomheight;  y++  ) {
-						uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraph16.zoom_den[zoom_factor] + 0 - y_rem) / g_simgraph16.zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p2 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraph16.zoom_den[zoom_factor] + 1 - y_rem) / g_simgraph16.zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p3 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraph16.zoom_den[zoom_factor] + 2 - y_rem) / g_simgraph16.zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p4 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraph16.zoom_den[zoom_factor] + 3 - y_rem) / g_simgraph16.zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p5 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraph16.zoom_den[zoom_factor] + 4 - y_rem) / g_simgraph16.zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p6 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraph16.zoom_den[zoom_factor] + 5 - y_rem) / g_simgraph16.zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p7 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraph16.zoom_den[zoom_factor] + 6 - y_rem) / g_simgraph16.zoom_num[zoom_factor]) * (basewidth * 4);
-						uint8 *p8 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraph16.zoom_den[zoom_factor] + 7 - y_rem) / g_simgraph16.zoom_num[zoom_factor]) * (basewidth * 4);
+						uint8 *p1 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraphgl.zoom_den[zoom_factor] + 0 - y_rem) / g_simgraphgl.zoom_num[zoom_factor]) * (basewidth * 4);
+						uint8 *p2 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraphgl.zoom_den[zoom_factor] + 1 - y_rem) / g_simgraphgl.zoom_num[zoom_factor]) * (basewidth * 4);
+						uint8 *p3 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraphgl.zoom_den[zoom_factor] + 2 - y_rem) / g_simgraphgl.zoom_num[zoom_factor]) * (basewidth * 4);
+						uint8 *p4 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraphgl.zoom_den[zoom_factor] + 3 - y_rem) / g_simgraphgl.zoom_num[zoom_factor]) * (basewidth * 4);
+						uint8 *p5 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraphgl.zoom_den[zoom_factor] + 4 - y_rem) / g_simgraphgl.zoom_num[zoom_factor]) * (basewidth * 4);
+						uint8 *p6 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraphgl.zoom_den[zoom_factor] + 5 - y_rem) / g_simgraphgl.zoom_num[zoom_factor]) * (basewidth * 4);
+						uint8 *p7 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraphgl.zoom_den[zoom_factor] + 6 - y_rem) / g_simgraphgl.zoom_num[zoom_factor]) * (basewidth * 4);
+						uint8 *p8 = rezoom_baseimage[n % env_t::num_threads] + baseoff + ((y * g_simgraphgl.zoom_den[zoom_factor] + 7 - y_rem) / g_simgraphgl.zoom_num[zoom_factor]) * (basewidth * 4);
 						for(  sint16 x = 0;  x < newzoomwidth;  x++  ) {
 							uint8 valid = 0;
 							uint16 r = 0, g = 0, b = 0;
-							sint16 xreal1 = ((x * g_simgraph16.zoom_den[zoom_factor] + 0 - x_rem) / g_simgraph16.zoom_num[zoom_factor]) * 4;
-							sint16 xreal2 = ((x * g_simgraph16.zoom_den[zoom_factor] + 1 - x_rem) / g_simgraph16.zoom_num[zoom_factor]) * 4;
-							sint16 xreal3 = ((x * g_simgraph16.zoom_den[zoom_factor] + 2 - x_rem) / g_simgraph16.zoom_num[zoom_factor]) * 4;
-							sint16 xreal4 = ((x * g_simgraph16.zoom_den[zoom_factor] + 3 - x_rem) / g_simgraph16.zoom_num[zoom_factor]) * 4;
-							sint16 xreal5 = ((x * g_simgraph16.zoom_den[zoom_factor] + 4 - x_rem) / g_simgraph16.zoom_num[zoom_factor]) * 4;
-							sint16 xreal6 = ((x * g_simgraph16.zoom_den[zoom_factor] + 5 - x_rem) / g_simgraph16.zoom_num[zoom_factor]) * 4;
-							sint16 xreal7 = ((x * g_simgraph16.zoom_den[zoom_factor] + 6 - x_rem) / g_simgraph16.zoom_num[zoom_factor]) * 4;
-							sint16 xreal8 = ((x * g_simgraph16.zoom_den[zoom_factor] + 7 - x_rem) / g_simgraph16.zoom_num[zoom_factor]) * 4;
+							sint16 xreal1 = ((x * g_simgraphgl.zoom_den[zoom_factor] + 0 - x_rem) / g_simgraphgl.zoom_num[zoom_factor]) * 4;
+							sint16 xreal2 = ((x * g_simgraphgl.zoom_den[zoom_factor] + 1 - x_rem) / g_simgraphgl.zoom_num[zoom_factor]) * 4;
+							sint16 xreal3 = ((x * g_simgraphgl.zoom_den[zoom_factor] + 2 - x_rem) / g_simgraphgl.zoom_num[zoom_factor]) * 4;
+							sint16 xreal4 = ((x * g_simgraphgl.zoom_den[zoom_factor] + 3 - x_rem) / g_simgraphgl.zoom_num[zoom_factor]) * 4;
+							sint16 xreal5 = ((x * g_simgraphgl.zoom_den[zoom_factor] + 4 - x_rem) / g_simgraphgl.zoom_num[zoom_factor]) * 4;
+							sint16 xreal6 = ((x * g_simgraphgl.zoom_den[zoom_factor] + 5 - x_rem) / g_simgraphgl.zoom_num[zoom_factor]) * 4;
+							sint16 xreal7 = ((x * g_simgraphgl.zoom_den[zoom_factor] + 6 - x_rem) / g_simgraphgl.zoom_num[zoom_factor]) * 4;
+							sint16 xreal8 = ((x * g_simgraphgl.zoom_den[zoom_factor] + 7 - x_rem) / g_simgraphgl.zoom_num[zoom_factor]) * 4;
 							SumSubpixel( p1 + xreal1 );
 							SumSubpixel( p1 + xreal2 );
 							SumSubpixel( p1 + xreal3 );
@@ -1797,13 +1797,13 @@ static void rezoom_img(const image_id n)
 
 
 // get next smallest size when scaling to percent
-static scr_size simgraph16_get_best_matching_size(const image_id n, sint16 zoom_percent)
+static scr_size simgraphgl_get_best_matching_size(const image_id n, sint16 zoom_percent)
 {
 	if (n < anz_images  &&  images[n].base_h > 0) {
 		int new_w = (images[n].base_w * zoom_percent + 1) / 100;
 		for (int i = 0; i <= MAX_ZOOM_FACTOR; i++) {
-			int zoom_w = (images[n].base_w * g_simgraph16.zoom_num[i]) / g_simgraph16.zoom_den[i];
-			int zoom_h = (images[n].base_h * g_simgraph16.zoom_num[i]) / g_simgraph16.zoom_den[i];
+			int zoom_w = (images[n].base_w * g_simgraphgl.zoom_num[i]) / g_simgraphgl.zoom_den[i];
+			int zoom_h = (images[n].base_h * g_simgraphgl.zoom_num[i]) / g_simgraphgl.zoom_den[i];
 			if (zoom_w <= new_w) {
 				// first size smaller or equal to requested
 				return scr_size(zoom_w, zoom_h);
@@ -1816,12 +1816,12 @@ static scr_size simgraph16_get_best_matching_size(const image_id n, sint16 zoom_
 
 
 // force a certain size on a image (for rescaling tool images)
-static void simgraph16_fit_img_to_width(const image_id n, sint16 new_w)
+static void simgraphgl_fit_img_to_width(const image_id n, sint16 new_w)
 {
 	if(  n < anz_images  &&  images[n].base_h > 0  &&  images[n].w != new_w  ) {
 		int old_zoom_factor = zoom_factor;
 		for(  int i=0;  i<=MAX_ZOOM_FACTOR;  i++  ) {
-			int zoom_w = (images[n].base_w * g_simgraph16.zoom_num[i]) / g_simgraph16.zoom_den[i];
+			int zoom_w = (images[n].base_w * g_simgraphgl.zoom_num[i]) / g_simgraphgl.zoom_den[i];
 			if(  zoom_w <= new_w  ) {
 				uint8 old_zoom_flag = images[n].recode_flags & FLAG_ZOOMABLE;
 				images[n].recode_flags |= FLAG_REZOOM | FLAG_ZOOMABLE;
@@ -1934,18 +1934,18 @@ static void calc_base_pal_from_night_shift(const int night)
 }
 
 
-static void simgraph16_set_daynight_level(int night)
+static void simgraphgl_set_daynight_level(int night)
 {
 	if(  night != night_shift  ) {
 		night_shift = night;
 		calc_base_pal_from_night_shift(night);
-		simgraph16_mark_screen_dirty();
+		simgraphgl_mark_screen_dirty();
 	}
 }
 
 
 // set first and second company color for player
-static void simgraph16_set_player_color_scheme(const int player, const uint8 col1, const uint8 col2)
+static void simgraphgl_set_player_color_scheme(const int player, const uint8 col1, const uint8 col2)
 {
 	if(player_offsets[player][0]!=col1  ||  player_offsets[player][1]!=col2) {
 		// set new player colors
@@ -1964,12 +1964,12 @@ static void simgraph16_set_player_color_scheme(const int player, const uint8 col
 		}
 
 		recode();
-		simgraph16_mark_screen_dirty();
+		simgraphgl_mark_screen_dirty();
 	}
 }
 
 
-static image_id simgraph16_register_image(const image_t *image_in)
+static image_id simgraphgl_register_image(const image_t *image_in)
 {
 	struct imd *image;
 
@@ -2054,7 +2054,7 @@ static image_id simgraph16_register_image(const image_t *image_in)
 
 // delete all images above a certain number ...
 // (mostly needed when changing climate zones)
-static void simgraph16_free_all_images_above( image_id above )
+static void simgraphgl_free_all_images_above( image_id above )
 {
 	while(  above < anz_images  ) {
 		anz_images--;
@@ -2071,7 +2071,7 @@ static void simgraph16_free_all_images_above( image_id above )
 
 
 // query offsets
-static scr_rect simgraph16_get_image_offset(image_id image)
+static scr_rect simgraphgl_get_image_offset(image_id image)
 {
 	if(  image < anz_images  ) {
 		return scr_rect{
@@ -2088,7 +2088,7 @@ static scr_rect simgraph16_get_image_offset(image_id image)
 
 
 // query un-zoomed offsets
-static scr_rect simgraph16_get_base_image_offset(image_id image)
+static scr_rect simgraphgl_get_base_image_offset(image_id image)
 {
 	if(  image < anz_images  ) {
 		return scr_rect{
@@ -2372,7 +2372,7 @@ static void display_img_nc(scr_coord_val h, const scr_coord_val xp, const scr_co
 
 
 // only used for GUI
-static void simgraph16_draw_img_aligned( const image_id n, scr_rect area, int align, const bool dirty)
+static void simgraphgl_draw_img_aligned( const image_id n, scr_rect area, int align, const bool dirty)
 {
 	if(  n < anz_images  ) {
 		scr_coord_val x,y;
@@ -2405,7 +2405,7 @@ static void simgraph16_draw_img_aligned( const image_id n, scr_rect area, int al
 /**
  * Draw image with vertical clipping (quickly) and horizontal (slowly)
  */
-static void simgraph16_draw_img_aux(const image_id n, scr_coord_val xp, scr_coord_val yp, const sint8 player_nr_raw, const bool /*daynight*/, const bool dirty  CLIP_NUM_DEF)
+static void simgraphgl_draw_img_aux(const image_id n, scr_coord_val xp, scr_coord_val yp, const sint8 player_nr_raw, const bool /*daynight*/, const bool dirty  CLIP_NUM_DEF)
 {
 	if(  n < anz_images  ) {
 		// only use player images if needed
@@ -2486,7 +2486,7 @@ static void simgraph16_draw_img_aux(const image_id n, scr_coord_val xp, scr_coor
 					display_img_pc<plain>( h, xp, yp, sp  CLIP_NUM_PAR );
 					// since height may be reduced, start marking here
 					if(  dirty  ) {
-						simgraph16_mark_rect_dirty_clip( xp, yp, xp + w - 1, yp + h - 1  CLIP_NUM_PAR );
+						simgraphgl_mark_rect_dirty_clip( xp, yp, xp + w - 1, yp + h - 1  CLIP_NUM_PAR );
 					}
 			}
 			else {
@@ -2502,7 +2502,7 @@ static void simgraph16_draw_img_aux(const image_id n, scr_coord_val xp, scr_coor
 					display_img_wc( h, xp, yp, sp  CLIP_NUM_PAR);
 					// since height may be reduced, start marking here
 					if(  dirty  ) {
-						simgraph16_mark_rect_dirty_clip( xp, yp, xp + w - 1, yp + h - 1  CLIP_NUM_PAR );
+						simgraphgl_mark_rect_dirty_clip( xp, yp, xp + w - 1, yp + h - 1  CLIP_NUM_PAR );
 					}
 				}
 			}
@@ -2537,10 +2537,10 @@ static void display_three_image_row( image_id i1, image_id i2, image_id i3, scr_
 		}
 		// for the rest we have to clip the rectangle
 		if(  row.w > 0  ) {
-			clip_dimension const cl = simgraph16_get_clip_rect(CLIP_NUM_DEFAULT_VALUE);
-			simgraph16_set_clip_rect( cl.x, cl.y, max(0,min(row.get_right(),cl.xx)-cl.x), cl.h CLIP_NUM_DEFAULT, false);
+			clip_dimension const cl = simgraphgl_get_clip_rect(CLIP_NUM_DEFAULT_VALUE);
+			simgraphgl_set_clip_rect( cl.x, cl.y, max(0,min(row.get_right(),cl.xx)-cl.x), cl.h CLIP_NUM_DEFAULT, false);
 			gfx->draw_color_img( i2, row.x, row.y, 0, false, true  CLIP_NUM_DEFAULT);
-			simgraph16_set_clip_rect(cl.x, cl.y, cl.w, cl.h CLIP_NUM_DEFAULT, false);
+			simgraphgl_set_clip_rect(cl.x, cl.y, cl.w, cl.h CLIP_NUM_DEFAULT, false);
 		}
 	}
 }
@@ -2602,16 +2602,16 @@ static void display_img_stretch_intern( const stretch_map_t &imag, scr_rect area
 		}
 		// for the rest we have to clip the rectangle
 		if(  row.h > 0  ) {
-			clip_dimension const cl = simgraph16_get_clip_rect(CLIP_NUM_DEFAULT_VALUE);
-			simgraph16_set_clip_rect( cl.x, cl.y, cl.w, max(0,min(row.get_bottom(),cl.yy)-cl.y) CLIP_NUM_DEFAULT, false);
+			clip_dimension const cl = simgraphgl_get_clip_rect(CLIP_NUM_DEFAULT_VALUE);
+			simgraphgl_set_clip_rect( cl.x, cl.y, cl.w, max(0,min(row.get_bottom(),cl.yy)-cl.y) CLIP_NUM_DEFAULT, false);
 			display_three_image_rowf( imag[0][1], imag[1][1], imag[2][1], row, color);
-			simgraph16_set_clip_rect(cl.x, cl.y, cl.w, cl.h CLIP_NUM_DEFAULT, false);
+			simgraphgl_set_clip_rect(cl.x, cl.y, cl.w, cl.h CLIP_NUM_DEFAULT, false);
 		}
 	}
 }
 
 
-static void simgraph16_draw_stretch_map(const stretch_map_t &imag, scr_rect area)
+static void simgraphgl_draw_stretch_map(const stretch_map_t &imag, scr_rect area)
 {
 	display_img_stretch_intern(imag, area, display_three_image_row, 0);
 }
@@ -2641,17 +2641,17 @@ static void display_three_blend_row( image_id i1, image_id i2, image_id i3, scr_
 		}
 		// for the rest we have to clip the rectangle
 		if(  row.w > 0  ) {
-			clip_dimension const cl = simgraph16_get_clip_rect(CLIP_NUM_DEFAULT_VALUE);
-			simgraph16_set_clip_rect( cl.x, cl.y, max(0,min(row.get_right(),cl.xx)-cl.x), cl.h CLIP_NUM_DEFAULT, false);
+			clip_dimension const cl = simgraphgl_get_clip_rect(CLIP_NUM_DEFAULT_VALUE);
+			simgraphgl_set_clip_rect( cl.x, cl.y, max(0,min(row.get_right(),cl.xx)-cl.x), cl.h CLIP_NUM_DEFAULT, false);
 			gfx->draw_rezoomed_img_blend( i2, row.x, row.y, 0, color, false, true CLIPNUM_IGNORE );
-			simgraph16_set_clip_rect(cl.x, cl.y, cl.w, cl.h CLIP_NUM_DEFAULT, false);
+			simgraphgl_set_clip_rect(cl.x, cl.y, cl.w, cl.h CLIP_NUM_DEFAULT, false);
 		}
 	}
 }
 
 
 // this displays a 3x3 array of images to fit the scr_rect like above, but blend the color
-static void simgraph16_draw_stretch_map_blend(const stretch_map_t &imag, scr_rect area, FLAGGED_PIXVAL color)
+static void simgraphgl_draw_stretch_map_blend(const stretch_map_t &imag, scr_rect area, FLAGGED_PIXVAL color)
 {
 	display_img_stretch_intern(imag, area, display_three_blend_row, color);
 }
@@ -2738,7 +2738,7 @@ static void display_color_img_wc_daytime(const PIXVAL* sp, scr_coord_val x, scr_
 /**
  * Draw Image, replaced player color
  */
-void simgraph16_draw_color_img(const image_id n, scr_coord_val xp, scr_coord_val yp, sint8 player_nr_raw, const bool daynight, const bool dirty  CLIP_NUM_DEF)
+void simgraphgl_draw_color_img(const image_id n, scr_coord_val xp, scr_coord_val yp, sint8 player_nr_raw, const bool daynight, const bool dirty  CLIP_NUM_DEF)
 {
 	if(  n < anz_images  ) {
 		// do we have to use a player nr?
@@ -2753,7 +2753,7 @@ void simgraph16_draw_color_img(const image_id n, scr_coord_val xp, scr_coord_val
 			if(  (images[n].player_flags & (1<<player_nr))  ) {
 				recode_img( n, player_nr );
 			}
-			simgraph16_draw_img_aux( n, xp, yp, player_nr, true, dirty  CLIP_NUM_PAR);
+			simgraphgl_draw_img_aux( n, xp, yp, player_nr, true, dirty  CLIP_NUM_PAR);
 			return;
 		}
 		else {
@@ -2770,7 +2770,7 @@ void simgraph16_draw_color_img(const image_id n, scr_coord_val xp, scr_coord_val
 			}
 
 			if(  dirty  ) {
-				simgraph16_mark_rect_dirty_wc( x, y, x + w - 1, y + h - 1 );
+				simgraphgl_mark_rect_dirty_wc( x, y, x + w - 1, y + h - 1 );
 			}
 
 			activate_player_color( player_nr, daynight );
@@ -2809,11 +2809,11 @@ void simgraph16_draw_color_img(const image_id n, scr_coord_val xp, scr_coord_val
 /**
  * draw unscaled images, replaces base color
  */
-static void simgraph16_draw_base_img(const image_id n, scr_coord_val xp, scr_coord_val yp, const sint8 player_nr, const bool daynight, const bool dirty  CLIP_NUM_DEF)
+static void simgraphgl_draw_base_img(const image_id n, scr_coord_val xp, scr_coord_val yp, const sint8 player_nr, const bool daynight, const bool dirty  CLIP_NUM_DEF)
 {
-	if(  g_simgraph16.tile_raster_width == g_simgraph16.base_tile_raster_width  ) {
+	if(  g_simgraphgl.tile_raster_width == g_simgraphgl.base_tile_raster_width  ) {
 		// same size => use standard routine
-		simgraph16_draw_color_img( n, xp, yp, player_nr, daynight, dirty  CLIP_NUM_PAR);
+		simgraphgl_draw_color_img( n, xp, yp, player_nr, daynight, dirty  CLIP_NUM_PAR);
 	}
 	else if(  n < anz_images  ) {
 		// now test if visible and clipping needed
@@ -2829,7 +2829,7 @@ static void simgraph16_draw_base_img(const image_id n, scr_coord_val xp, scr_coo
 		}
 
 		if (dirty) {
-			simgraph16_mark_rect_dirty_wc(x, y, x + w - 1, y + h - 1);
+			simgraphgl_mark_rect_dirty_wc(x, y, x + w - 1, y + h - 1);
 		}
 
 		// colors for 2nd company color
@@ -2903,7 +2903,7 @@ PIXVAL display_blend_colors_alpha32(PIXVAL background, PIXVAL foreground, int al
 
 
 // Blends two colors
-static PIXVAL simgraph16_blend_colors(PIXVAL background, PIXVAL foreground, int percent_blend)
+static PIXVAL simgraphgl_blend_colors(PIXVAL background, PIXVAL foreground, int percent_blend)
 {
 	return display_blend_colors_alpha32(background, foreground, (percent_blend*32)/100);
 }
@@ -2967,7 +2967,7 @@ static blend_proc outline[3] = {
 /**
  * Blends a rectangular region with a color
  */
-static void simgraph16_tint_rect(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL colval, int percent_blend)
+static void simgraphgl_tint_rect(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL colval, int percent_blend)
 {
 	if(  clip_lr( &xp, &w, CR0.clip_rect.x, CR0.clip_rect.xx )  &&  clip_lr( &yp, &h, CR0.clip_rect.y, CR0.clip_rect.yy )  ) {
 		const PIXVAL alpha = (percent_blend*64)/100;
@@ -2990,7 +2990,7 @@ static void simgraph16_tint_rect(scr_coord_val xp, scr_coord_val yp, scr_coord_v
 			break;
 
 			case 64: // opaque
-				simgraph16_draw_rect( xp, yp, w, h, colval, false );
+				simgraphgl_draw_rect( xp, yp, w, h, colval, false );
 				break;
 
 			default:
@@ -3162,7 +3162,7 @@ static void display_img_alpha_wc(scr_coord_val h, const scr_coord_val xp, const 
 /**
  * draws the transparent outline of an image
  */
-static void simgraph16_draw_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp, const signed char /*player_nr*/, const FLAGGED_PIXVAL color_index, const bool /*daynight*/, const bool dirty  CLIP_NUM_DEF)
+static void simgraphgl_draw_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp, const signed char /*player_nr*/, const FLAGGED_PIXVAL color_index, const bool /*daynight*/, const bool dirty  CLIP_NUM_DEF)
 {
 	if(  n < anz_images  ) {
 		// need to go to nightmode and or rezoomed?
@@ -3225,7 +3225,7 @@ static void simgraph16_draw_rezoomed_img_blend(const image_id n, scr_coord_val x
 
 			// marking change?
 			if(  dirty  ) {
-				simgraph16_mark_rect_dirty_wc( xp, yp, xp + w - 1, yp + h - 1 );
+				simgraphgl_mark_rect_dirty_wc( xp, yp, xp + w - 1, yp + h - 1 );
 			}
 			display_img_blend_wc( h, xp, yp, sp, color, pix_blend  CLIP_NUM_PAR );
 		}
@@ -3233,7 +3233,7 @@ static void simgraph16_draw_rezoomed_img_blend(const image_id n, scr_coord_val x
 }
 
 
-static void simgraph16_draw_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const unsigned alpha_flags, scr_coord_val xp, scr_coord_val yp, const sint8 /*player_nr*/, const FLAGGED_PIXVAL color_index, const bool /*daynight*/, const bool dirty  CLIP_NUM_DEF)
+static void simgraphgl_draw_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const unsigned alpha_flags, scr_coord_val xp, scr_coord_val yp, const sint8 /*player_nr*/, const FLAGGED_PIXVAL color_index, const bool /*daynight*/, const bool dirty  CLIP_NUM_DEF)
 {
 	if(  n < anz_images  &&  alpha_n < anz_images  ) {
 		// need to go to nightmode and or rezoomed?
@@ -3304,7 +3304,7 @@ static void simgraph16_draw_rezoomed_img_alpha(const image_id n, const image_id 
 
 			// marking change?
 			if(  dirty  ) {
-				simgraph16_mark_rect_dirty_wc( xp, yp, xp + w - 1, yp + h - 1 );
+				simgraphgl_mark_rect_dirty_wc( xp, yp, xp + w - 1, yp + h - 1 );
 			}
 			display_img_alpha_wc( h, xp, yp, sp, alphamap, get_alpha_mask(alpha_flags), color, alpha  CLIP_NUM_PAR );
 		}
@@ -3313,11 +3313,11 @@ static void simgraph16_draw_rezoomed_img_alpha(const image_id n, const image_id 
 
 
 // For blending or outlining unzoomed image. Adapted from display_base_img() and display_unzoomed_img_blend()
-static void simgraph16_draw_base_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp, const signed char player_nr, const FLAGGED_PIXVAL color_index, const bool daynight, const bool dirty  CLIP_NUM_DEF)
+static void simgraphgl_draw_base_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp, const signed char player_nr, const FLAGGED_PIXVAL color_index, const bool daynight, const bool dirty  CLIP_NUM_DEF)
 {
-	if(  g_simgraph16.tile_raster_width == g_simgraph16.base_tile_raster_width  ) {
+	if(  g_simgraphgl.tile_raster_width == g_simgraphgl.base_tile_raster_width  ) {
 		// same size => use standard routine
-		simgraph16_draw_rezoomed_img_blend( n, xp, yp, player_nr, color_index, daynight, dirty  CLIP_NUM_PAR );
+		simgraphgl_draw_rezoomed_img_blend( n, xp, yp, player_nr, color_index, daynight, dirty  CLIP_NUM_PAR );
 	}
 	else if(  n < anz_images  ) {
 		// now test if visible and clipping needed
@@ -3375,7 +3375,7 @@ static void simgraph16_draw_base_img_blend(const image_id n, scr_coord_val xp, s
 			}
 
 			if(  dirty  ) {
-				simgraph16_mark_rect_dirty_wc( x, y, x + w - 1, y + h - 1 );
+				simgraphgl_mark_rect_dirty_wc( x, y, x + w - 1, y + h - 1 );
 			}
 			display_img_blend_wc( h, x, y, sp, color, pix_blend  CLIP_NUM_PAR );
 		}
@@ -3383,11 +3383,11 @@ static void simgraph16_draw_base_img_blend(const image_id n, scr_coord_val xp, s
 }
 
 
-static void simgraph16_draw_base_img_alpha(const image_id n, const image_id alpha_n, const unsigned alpha_flags, scr_coord_val xp, scr_coord_val yp, const sint8 player_nr, const FLAGGED_PIXVAL color_index, const bool daynight, const bool dirty  CLIP_NUM_DEF)
+static void simgraphgl_draw_base_img_alpha(const image_id n, const image_id alpha_n, const unsigned alpha_flags, scr_coord_val xp, scr_coord_val yp, const sint8 player_nr, const FLAGGED_PIXVAL color_index, const bool daynight, const bool dirty  CLIP_NUM_DEF)
 {
-	if(  g_simgraph16.tile_raster_width == g_simgraph16.base_tile_raster_width  ) {
+	if(  g_simgraphgl.tile_raster_width == g_simgraphgl.base_tile_raster_width  ) {
 		// same size => use standard routine
-		simgraph16_draw_rezoomed_img_alpha( n, alpha_n, alpha_flags, xp, yp, player_nr, color_index, daynight, dirty  CLIP_NUM_PAR );
+		simgraphgl_draw_rezoomed_img_alpha( n, alpha_n, alpha_flags, xp, yp, player_nr, color_index, daynight, dirty  CLIP_NUM_PAR );
 	}
 	else if(  n < anz_images  ) {
 		// now test if visible and clipping needed
@@ -3452,7 +3452,7 @@ static void simgraph16_draw_base_img_alpha(const image_id n, const image_id alph
 			}
 
 			if(  dirty  ) {
-				simgraph16_mark_rect_dirty_wc( x, y, x + w - 1, y + h - 1 );
+				simgraphgl_mark_rect_dirty_wc( x, y, x + w - 1, y + h - 1 );
 			}
 			display_img_alpha_wc( h, x, y, sp, alphamap, get_alpha_mask(alpha_flags), color, alpha_recode  CLIP_NUM_PAR );
 		}
@@ -3464,7 +3464,7 @@ static void simgraph16_draw_base_img_alpha(const image_id n, const image_id alph
 
 
 // scrolls horizontally, will ignore clipping etc.
-static void simgraph16_move_scroll_band(scr_coord_val start_y, scr_coord_val x_offset, scr_coord_val h)
+static void simgraphgl_move_scroll_band(scr_coord_val start_y, scr_coord_val x_offset, scr_coord_val h)
 {
 	start_y  = max(start_y,  0);
 	x_offset = min(x_offset, disp_width);
@@ -3572,25 +3572,25 @@ static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_va
 }
 
 
-static void simgraph16_draw_rect(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL color, bool dirty)
+static void simgraphgl_draw_rect(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL color, bool dirty)
 {
 	display_fb_internal(xp, yp, w, h, color, dirty, 0, disp_width, 0, disp_height);
 }
 
 
-static void simgraph16_draw_rect_clipped(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL color, bool dirty  CLIP_NUM_DEF)
+static void simgraphgl_draw_rect_clipped(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL color, bool dirty  CLIP_NUM_DEF)
 {
 	display_fb_internal( xp, yp, w, h, color, dirty, CR.clip_rect.x, CR.clip_rect.xx, CR.clip_rect.y, CR.clip_rect.yy );
 }
 
 
-static void simgraph16_draw_rounded_rect_clipped(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL color, bool dirty)
+static void simgraphgl_draw_rounded_rect_clipped(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, PIXVAL color, bool dirty)
 {
-	simgraph16_draw_rect_clipped(xp+2,   yp,   w-4, h,   color, dirty CLIP_NUM_DEFAULT);
-	simgraph16_draw_rect_clipped(xp,     yp+2, 1,   h-4, color, dirty CLIP_NUM_DEFAULT);
-	simgraph16_draw_rect_clipped(xp+1,   yp+1, 1,   h-2, color, dirty CLIP_NUM_DEFAULT);
-	simgraph16_draw_rect_clipped(xp+w-1, yp+2, 1,   h-4, color, dirty CLIP_NUM_DEFAULT);
-	simgraph16_draw_rect_clipped(xp+w-2, yp+1, 1,   h-2, color, dirty CLIP_NUM_DEFAULT);
+	simgraphgl_draw_rect_clipped(xp+2,   yp,   w-4, h,   color, dirty CLIP_NUM_DEFAULT);
+	simgraphgl_draw_rect_clipped(xp,     yp+2, 1,   h-4, color, dirty CLIP_NUM_DEFAULT);
+	simgraphgl_draw_rect_clipped(xp+1,   yp+1, 1,   h-2, color, dirty CLIP_NUM_DEFAULT);
+	simgraphgl_draw_rect_clipped(xp+w-1, yp+2, 1,   h-4, color, dirty CLIP_NUM_DEFAULT);
+	simgraphgl_draw_rect_clipped(xp+w-2, yp+1, 1,   h-2, color, dirty CLIP_NUM_DEFAULT);
 }
 
 
@@ -3618,7 +3618,7 @@ void display_vline_wh_rgb(const scr_coord_val xp, scr_coord_val yp, scr_coord_va
 }
 
 
-static void simgraph16_draw_vline_clipped(const scr_coord_val xp, scr_coord_val yp, scr_coord_val h, const PIXVAL color, bool dirty  CLIP_NUM_DEF)
+static void simgraphgl_draw_vline_clipped(const scr_coord_val xp, scr_coord_val yp, scr_coord_val h, const PIXVAL color, bool dirty  CLIP_NUM_DEF)
 {
 	display_vl_internal( xp, yp, h, color, dirty, CR.clip_rect.x, CR.clip_rect.xx, CR.clip_rect.y, CR.clip_rect.yy );
 }
@@ -3627,7 +3627,7 @@ static void simgraph16_draw_vline_clipped(const scr_coord_val xp, scr_coord_val 
 /**
  * Draw raw Pixel data
  */
-static void simgraph16_draw_array(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, const PIXVAL *arr)
+static void simgraphgl_draw_array(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, scr_coord_val h, const PIXVAL *arr)
 {
 	const int arr_w = w;
 	const scr_coord_val xoff = clip_wh( &xp, &w, CR0.clip_rect.x, CR0.clip_rect.xx );
@@ -3654,7 +3654,7 @@ static void simgraph16_draw_array(scr_coord_val xp, scr_coord_val yp, scr_coord_
 
 // --------------------------------- text rendering stuff ------------------------------
 
-static bool simgraph16_load_font(const char *fname, bool reload)
+static bool simgraphgl_load_font(const char *fname, bool reload)
 {
 	font_t loaded_fnt;
 
@@ -3692,13 +3692,13 @@ static bool simgraph16_load_font(const char *fname, bool reload)
 }
 
 
-static scr_coord_val simgraph16_get_char_width(utf32 c)
+static scr_coord_val simgraphgl_get_char_width(utf32 c)
 {
 	return default_font.get_glyph_advance(c);
 }
 
 
-static scr_coord_val simgraph16_get_number_width()
+static scr_coord_val simgraphgl_get_number_width()
 {
 	return default_font_numberwidth;
 }
@@ -3708,7 +3708,7 @@ static scr_coord_val simgraph16_get_number_width()
  * as well as retrieves the char byte count and the screen pixel width
  * CAUTION : The text pointer advances to point to the next logical character
  */
-static utf32 simgraph16_get_next_char_with_metrics(const char* &text, unsigned char &byte_length, unsigned char &pixel_width)
+static utf32 simgraphgl_get_next_char_with_metrics(const char* &text, unsigned char &byte_length, unsigned char &pixel_width)
 {
 	size_t len = 0;
 	utf32 const char_code = utf8_decoder_t::decode((utf8 const *)text, len);
@@ -3730,7 +3730,7 @@ static utf32 simgraph16_get_next_char_with_metrics(const char* &text, unsigned c
 
 
 /* returns true, if this is a valid character */
-static bool simgraph16_font_has_character(utf16 char_code)
+static bool simgraphgl_font_has_character(utf16 char_code)
 {
 	return default_font.is_valid_glyph(char_code);
 }
@@ -3742,7 +3742,7 @@ static bool simgraph16_font_has_character(utf16 char_code)
  * If an ellipsis len is given, it will only return the last character up to this len if the full length cannot be fitted
  * @returns index of next character. if text[index]==0 the whole string fits
  */
-static size_t simgraph16_calc_text_index_for_width(const char *text, scr_coord_val max_width)
+static size_t simgraphgl_calc_text_index_for_width(const char *text, scr_coord_val max_width)
 {
 	size_t max_idx = 0;
 
@@ -3751,7 +3751,7 @@ static size_t simgraph16_calc_text_index_for_width(const char *text, scr_coord_v
 	scr_coord_val current_offset = 0;
 
 	const char *tmp_text = text;
-	while(  simgraph16_get_next_char_with_metrics(tmp_text, byte_length, pixel_width)  &&  max_width > (current_offset+pixel_width)  ) {
+	while(  simgraphgl_get_next_char_with_metrics(tmp_text, byte_length, pixel_width)  &&  max_width > (current_offset+pixel_width)  ) {
 		current_offset += pixel_width;
 		max_idx += byte_length;
 	}
@@ -3764,7 +3764,7 @@ static size_t simgraph16_calc_text_index_for_width(const char *text, scr_coord_v
  * as well as retrieves the char byte count and the screen pixel width
  * CAUTION : The text pointer recedes to point to the previous logical character
  */
-static utf32 simgraph16_get_prev_char_with_metrics(const char* &text, const char *const text_start, unsigned char &byte_length, unsigned char &pixel_width)
+static utf32 simgraphgl_get_prev_char_with_metrics(const char* &text, const char *const text_start, unsigned char &byte_length, unsigned char &pixel_width)
 {
 	if(  text<=text_start  ) {
 		// case : start of text reached or passed -> do not move the pointer backwards
@@ -3791,14 +3791,14 @@ static utf32 simgraph16_get_prev_char_with_metrics(const char* &text, const char
 /* proportional_string_width with a text of a given length
 * extended for universal font routines with unicode support
 */
-static scr_coord_val simgraph16_calc_text_width_n(const char *text, size_t len)
+static scr_coord_val simgraphgl_calc_text_width_n(const char *text, size_t len)
 {
 	uint8 byte_length = 0;
 	uint8 pixel_width = 0;
 	size_t idx = 0;
 	scr_coord_val width = 0;
 
-	while (simgraph16_get_next_char_with_metrics(text, byte_length, pixel_width)  &&  idx < len) {
+	while (simgraphgl_get_next_char_with_metrics(text, byte_length, pixel_width)  &&  idx < len) {
 		width += pixel_width;
 		idx += byte_length;
 	}
@@ -3809,7 +3809,7 @@ static scr_coord_val simgraph16_calc_text_width_n(const char *text, size_t len)
 /* display_calc_proportional_multiline_string_len_width
 * calculates the width and hieght of a box containing the text inside
 */
-static scr_size simgraph16_calc_multiline_text_size(const char *text)
+static scr_size simgraphgl_calc_multiline_text_size(const char *text)
 {
 	const font_t* const fnt = &default_font;
 	int width = 0;
@@ -3846,7 +3846,7 @@ static scr_size simgraph16_calc_multiline_text_size(const char *text)
  * len parameter added - use -1 for previous behaviour.
  * completely renovated for unicode and 10 bit width and variable height
  */
-static scr_coord_val simgraph16_draw_text_clipped_n(scr_coord_val x, scr_coord_val y, const char* txt, control_alignment_t flags, const PIXVAL color, bool dirty, sint32 len  CLIP_NUM_DEF)
+static scr_coord_val simgraphgl_draw_text_clipped_n(scr_coord_val x, scr_coord_val y, const char* txt, control_alignment_t flags, const PIXVAL color, bool dirty, sint32 len  CLIP_NUM_DEF)
 {
 	scr_coord_val cL, cR, cT, cB;
 
@@ -3876,11 +3876,11 @@ static scr_coord_val simgraph16_draw_text_clipped_n(scr_coord_val x, scr_coord_v
 			break;
 
 		case ALIGN_CENTER_H:
-			x -= simgraph16_calc_text_width_n(txt, len) / 2;
+			x -= simgraphgl_calc_text_width_n(txt, len) / 2;
 			break;
 
 		case ALIGN_RIGHT:
-			x -= simgraph16_calc_text_width_n(txt, len);
+			x -= simgraphgl_calc_text_width_n(txt, len);
 			break;
 	}
 
@@ -3952,7 +3952,7 @@ static scr_coord_val simgraph16_draw_text_clipped_n(scr_coord_val x, scr_coord_v
 
 	if(  dirty  ) {
 		// here, because only now we know the length also for ALIGN_LEFT text
-		simgraph16_mark_rect_dirty_clip( x0, y, x - 1, y + LINESPACE - 1  CLIP_NUM_PAR);
+		simgraphgl_mark_rect_dirty_clip( x0, y, x - 1, y + LINESPACE - 1  CLIP_NUM_PAR);
 	}
 
 	// warning: actual len might be longer, due to clipping!
@@ -3962,7 +3962,7 @@ static scr_coord_val simgraph16_draw_text_clipped_n(scr_coord_val x, scr_coord_v
 
 /// Displays a string which is abbreviated by the (language specific) ellipsis character if too wide
 /// If enough space is given then it just displays the full string
-static void simgraph16_draw_text_ellipsis_shadowed(scr_rect r, const char *text, int align, const PIXVAL color, const bool dirty, bool shadowed, PIXVAL shadow_color)
+static void simgraphgl_draw_text_ellipsis_shadowed(scr_rect r, const char *text, int align, const PIXVAL color, const bool dirty, bool shadowed, PIXVAL shadow_color)
 {
 	const scr_coord_val ellipsis_width = translator::get_lang()->ellipsis_width;
 	const scr_coord_val max_screen_width = r.w;
@@ -3978,7 +3978,7 @@ static void simgraph16_draw_text_ellipsis_shadowed(scr_rect r, const char *text,
 	}
 
 	const char *tmp_text = text;
-	while(  simgraph16_get_next_char_with_metrics(tmp_text, byte_length, pixel_width)  &&  max_screen_width >= (current_offset+ellipsis_width+pixel_width)  ) {
+	while(  simgraphgl_get_next_char_with_metrics(tmp_text, byte_length, pixel_width)  &&  max_screen_width >= (current_offset+ellipsis_width+pixel_width)  ) {
 		current_offset += pixel_width;
 		max_idx += byte_length;
 	}
@@ -3991,7 +3991,7 @@ static void simgraph16_draw_text_ellipsis_shadowed(scr_rect r, const char *text,
 		current_offset += pixel_width;
 		max_idx += byte_length;
 		// check the rest ...
-		while(  simgraph16_get_next_char_with_metrics(tmp_text, byte_length, pixel_width)  &&  max_screen_width >= (current_offset+pixel_width)  ) {
+		while(  simgraphgl_get_next_char_with_metrics(tmp_text, byte_length, pixel_width)  &&  max_screen_width >= (current_offset+pixel_width)  ) {
 			current_offset += pixel_width;
 			max_idx += byte_length;
 		}
@@ -4003,15 +4003,15 @@ static void simgraph16_draw_text_ellipsis_shadowed(scr_rect r, const char *text,
 				w = (max_screen_width-max_offset_before_ellipsis-ellipsis_width)/2;
 			}
 			if (shadowed) {
-				simgraph16_draw_text_clipped_n( r.x+w+1, r.y+1, text, ALIGN_LEFT | DT_CLIP, shadow_color, dirty, max_idx_before_ellipsis  CLIP_NUM_DEFAULT);
+				simgraphgl_draw_text_clipped_n( r.x+w+1, r.y+1, text, ALIGN_LEFT | DT_CLIP, shadow_color, dirty, max_idx_before_ellipsis  CLIP_NUM_DEFAULT);
 			}
-			w += simgraph16_draw_text_clipped_n( r.x+w, r.y, text, ALIGN_LEFT | DT_CLIP, color, dirty, max_idx_before_ellipsis  CLIP_NUM_DEFAULT);
+			w += simgraphgl_draw_text_clipped_n( r.x+w, r.y, text, ALIGN_LEFT | DT_CLIP, color, dirty, max_idx_before_ellipsis  CLIP_NUM_DEFAULT);
 
 			if (shadowed) {
-				simgraph16_draw_text_clipped_n( r.x+w+1, r.y+1, translator::translate("..."), ALIGN_LEFT | DT_CLIP, shadow_color, dirty, -1  CLIP_NUM_DEFAULT);
+				simgraphgl_draw_text_clipped_n( r.x+w+1, r.y+1, translator::translate("..."), ALIGN_LEFT | DT_CLIP, shadow_color, dirty, -1  CLIP_NUM_DEFAULT);
 			}
 
-			simgraph16_draw_text_clipped_n( r.x+w, r.y, translator::translate("..."), ALIGN_LEFT | DT_CLIP, color, dirty, -1  CLIP_NUM_DEFAULT);
+			simgraphgl_draw_text_clipped_n( r.x+w, r.y, translator::translate("..."), ALIGN_LEFT | DT_CLIP, color, dirty, -1  CLIP_NUM_DEFAULT);
 			return;
 		}
 		else {
@@ -4029,19 +4029,19 @@ static void simgraph16_draw_text_ellipsis_shadowed(scr_rect r, const char *text,
 		default: ;
 	}
 	if (shadowed) {
-		simgraph16_draw_text_clipped_n( r.x+1, r.y+1, text, ALIGN_LEFT | DT_CLIP, shadow_color, dirty, -1  CLIP_NUM_DEFAULT);
+		simgraphgl_draw_text_clipped_n( r.x+1, r.y+1, text, ALIGN_LEFT | DT_CLIP, shadow_color, dirty, -1  CLIP_NUM_DEFAULT);
 	}
-	simgraph16_draw_text_clipped_n( r.x, r.y, text, ALIGN_LEFT | DT_CLIP, color, dirty, -1  CLIP_NUM_DEFAULT);
+	simgraphgl_draw_text_clipped_n( r.x, r.y, text, ALIGN_LEFT | DT_CLIP, color, dirty, -1  CLIP_NUM_DEFAULT);
 }
 
 
 /**
  * Draw shaded rectangle using direct color values
  */
-static void simgraph16_draw_box3d(scr_coord_val x1, scr_coord_val y1, scr_coord_val w, scr_coord_val h, PIXVAL tl_color, PIXVAL rd_color, bool dirty)
+static void simgraphgl_draw_box3d(scr_coord_val x1, scr_coord_val y1, scr_coord_val w, scr_coord_val h, PIXVAL tl_color, PIXVAL rd_color, bool dirty)
 {
-	simgraph16_draw_rect(x1, y1,         w, 1, tl_color, dirty);
-	simgraph16_draw_rect(x1, y1 + h - 1, w, 1, rd_color, dirty);
+	simgraphgl_draw_rect(x1, y1,         w, 1, tl_color, dirty);
+	simgraphgl_draw_rect(x1, y1 + h - 1, w, 1, rd_color, dirty);
 
 	h -= 2;
 
@@ -4050,67 +4050,67 @@ static void simgraph16_draw_box3d(scr_coord_val x1, scr_coord_val y1, scr_coord_
 }
 
 
-static void simgraph16_draw_text_outlined(scr_coord_val xpos, scr_coord_val ypos, PIXVAL text_color, PIXVAL shadow_color, const char *text, int dirty)
+static void simgraphgl_draw_text_outlined(scr_coord_val xpos, scr_coord_val ypos, PIXVAL text_color, PIXVAL shadow_color, const char *text, int dirty)
 {
 	const int flags = ALIGN_LEFT | DT_CLIP;
-	simgraph16_draw_text_clipped_n(xpos - 1, ypos    , text, flags, shadow_color, dirty, -1  CLIP_NUM_DEFAULT);
-	simgraph16_draw_text_clipped_n(xpos + 1, ypos + 2, text, flags, shadow_color, dirty, -1  CLIP_NUM_DEFAULT);
-	simgraph16_draw_text_clipped_n(xpos,     ypos + 1, text, flags, text_color,   dirty, -1  CLIP_NUM_DEFAULT);
+	simgraphgl_draw_text_clipped_n(xpos - 1, ypos    , text, flags, shadow_color, dirty, -1  CLIP_NUM_DEFAULT);
+	simgraphgl_draw_text_clipped_n(xpos + 1, ypos + 2, text, flags, shadow_color, dirty, -1  CLIP_NUM_DEFAULT);
+	simgraphgl_draw_text_clipped_n(xpos,     ypos + 1, text, flags, text_color,   dirty, -1  CLIP_NUM_DEFAULT);
 }
 
 
-static void simgraph16_draw_text_shadowed(scr_coord_val xpos, scr_coord_val ypos, PIXVAL text_color, PIXVAL shadow_color, const char *text, int dirty)
+static void simgraphgl_draw_text_shadowed(scr_coord_val xpos, scr_coord_val ypos, PIXVAL text_color, PIXVAL shadow_color, const char *text, int dirty)
 {
 	const int flags = ALIGN_LEFT | DT_CLIP;
-	simgraph16_draw_text_clipped_n(xpos + 1, ypos + 1 + (12 - LINESPACE) / 2, text, flags, shadow_color, dirty, -1  CLIP_NUM_DEFAULT);
-	simgraph16_draw_text_clipped_n(xpos,     ypos +     (12 - LINESPACE) / 2, text, flags, text_color,   dirty, -1  CLIP_NUM_DEFAULT);
+	simgraphgl_draw_text_clipped_n(xpos + 1, ypos + 1 + (12 - LINESPACE) / 2, text, flags, shadow_color, dirty, -1  CLIP_NUM_DEFAULT);
+	simgraphgl_draw_text_clipped_n(xpos,     ypos +     (12 - LINESPACE) / 2, text, flags, text_color,   dirty, -1  CLIP_NUM_DEFAULT);
 }
 
 
 /**
  * Draw shaded rectangle using direct color values
  */
-static void simgraph16_draw_box3d_clipped(scr_coord_val x1, scr_coord_val y1, scr_coord_val w, scr_coord_val h, PIXVAL tl_color, PIXVAL rd_color)
+static void simgraphgl_draw_box3d_clipped(scr_coord_val x1, scr_coord_val y1, scr_coord_val w, scr_coord_val h, PIXVAL tl_color, PIXVAL rd_color)
 {
-	simgraph16_draw_rect_clipped(x1, y1,         w, 1, tl_color, true CLIP_NUM_DEFAULT);
-	simgraph16_draw_rect_clipped(x1, y1 + h - 1, w, 1, rd_color, true CLIP_NUM_DEFAULT);
+	simgraphgl_draw_rect_clipped(x1, y1,         w, 1, tl_color, true CLIP_NUM_DEFAULT);
+	simgraphgl_draw_rect_clipped(x1, y1 + h - 1, w, 1, rd_color, true CLIP_NUM_DEFAULT);
 
 	h -= 2;
 
-	simgraph16_draw_vline_clipped(x1,         y1 + 1, h, tl_color, true CLIP_NUM_DEFAULT);
-	simgraph16_draw_vline_clipped(x1 + w - 1, y1 + 1, h, rd_color, true CLIP_NUM_DEFAULT);
+	simgraphgl_draw_vline_clipped(x1,         y1 + 1, h, tl_color, true CLIP_NUM_DEFAULT);
+	simgraphgl_draw_vline_clipped(x1 + w - 1, y1 + 1, h, rd_color, true CLIP_NUM_DEFAULT);
 }
 
 
 /**
  * display text in 3d box with clipping
  */
-static void simgraph16_draw_textbox3d_clipped(scr_coord_val xpos, scr_coord_val ypos, FLAGGED_PIXVAL ddd_color, FLAGGED_PIXVAL text_color, const char *text, int dirty  CLIP_NUM_DEF)
+static void simgraphgl_draw_textbox3d_clipped(scr_coord_val xpos, scr_coord_val ypos, FLAGGED_PIXVAL ddd_color, FLAGGED_PIXVAL text_color, const char *text, int dirty  CLIP_NUM_DEF)
 {
 	const int vpadding = LINESPACE / 7;
 	const int hpadding = LINESPACE / 4;
 
-	scr_coord_val width = simgraph16_calc_text_width_n(text, 0x7FFFu);
+	scr_coord_val width = simgraphgl_calc_text_width_n(text, 0x7FFFu);
 
 	PIXVAL lighter = display_blend_colors_alpha32(ddd_color, gfx->palette_lookup(COL_WHITE), 8 /* 25% */);
 	PIXVAL darker  = display_blend_colors_alpha32(ddd_color, gfx->palette_lookup(COL_BLACK), 8 /* 25% */);
 
-	simgraph16_draw_rect_clipped( xpos+1, ypos - vpadding + 1, width+2*hpadding-2, LINESPACE+2*vpadding-1, ddd_color, dirty CLIP_NUM_PAR);
+	simgraphgl_draw_rect_clipped( xpos+1, ypos - vpadding + 1, width+2*hpadding-2, LINESPACE+2*vpadding-1, ddd_color, dirty CLIP_NUM_PAR);
 
 	gfx->draw_rect_clipped( xpos, ypos - vpadding,             width + 2*hpadding - 2, 1, lighter, dirty CLIP_NUM_DEFAULT);
 	gfx->draw_rect_clipped( xpos, ypos + LINESPACE + vpadding, width + 2*hpadding - 2, 1, darker,  dirty CLIP_NUM_DEFAULT);
 
-	simgraph16_draw_vline_clipped( xpos,                          ypos - vpadding, LINESPACE + vpadding * 2, lighter, dirty CLIP_NUM_DEFAULT);
-	simgraph16_draw_vline_clipped( xpos + width + 2*hpadding - 2, ypos - vpadding, LINESPACE + vpadding * 2, darker,  dirty CLIP_NUM_DEFAULT);
+	simgraphgl_draw_vline_clipped( xpos,                          ypos - vpadding, LINESPACE + vpadding * 2, lighter, dirty CLIP_NUM_DEFAULT);
+	simgraphgl_draw_vline_clipped( xpos + width + 2*hpadding - 2, ypos - vpadding, LINESPACE + vpadding * 2, darker,  dirty CLIP_NUM_DEFAULT);
 
-	simgraph16_draw_text_clipped_n( xpos+hpadding, ypos+1, text, ALIGN_LEFT | DT_CLIP, text_color, dirty, -1 CLIP_NUM_DEFAULT);
+	simgraphgl_draw_text_clipped_n( xpos+hpadding, ypos+1, text, ALIGN_LEFT | DT_CLIP, text_color, dirty, -1 CLIP_NUM_DEFAULT);
 }
 
 
 /**
  * Draw multiline text
  */
-static scr_coord_val simgraph16_draw_multiline_text(scr_coord_val x, scr_coord_val y, const char *buf, PIXVAL color)
+static scr_coord_val simgraphgl_draw_multiline_text(scr_coord_val x, scr_coord_val y, const char *buf, PIXVAL color)
 {
 	scr_coord_val max_px_len = 0;
 	if (buf != NULL && *buf != '\0') {
@@ -4118,7 +4118,7 @@ static scr_coord_val simgraph16_draw_multiline_text(scr_coord_val x, scr_coord_v
 
 		do {
 			next = strchr(buf, '\n');
-			const scr_coord_val px_len = simgraph16_draw_text_clipped_n(
+			const scr_coord_val px_len = simgraphgl_draw_text_clipped_n(
 				x, y, buf,
 				ALIGN_LEFT | DT_CLIP, color, true,
 				next != NULL ? (int)(size_t)(next - buf) : -1
@@ -4137,7 +4137,7 @@ static scr_coord_val simgraph16_draw_multiline_text(scr_coord_val x, scr_coord_v
 /**
  * draw line from x,y to xx,yy
  **/
-static void simgraph16_draw_line(const scr_coord_val x, const scr_coord_val y, const scr_coord_val xx, const scr_coord_val yy, const PIXVAL colval)
+static void simgraphgl_draw_line(const scr_coord_val x, const scr_coord_val y, const scr_coord_val xx, const scr_coord_val yy, const PIXVAL colval)
 {
 	int i, steps;
 	sint64 xp, yp;
@@ -4169,8 +4169,8 @@ static void simgraph16_draw_line(const scr_coord_val x, const scr_coord_val y, c
 }
 
 
-//taken from function simgraph16_draw_line() above, to draw a dotted line: draw=pixels drawn, dontDraw=pixels skipped
-static void simgraph16_draw_line_dotted(const scr_coord_val x, const scr_coord_val y, const scr_coord_val xx, const scr_coord_val yy, const scr_coord_val draw, const scr_coord_val dontDraw, const PIXVAL colval)
+//taken from function simgraphgl_draw_line() above, to draw a dotted line: draw=pixels drawn, dontDraw=pixels skipped
+static void simgraphgl_draw_line_dotted(const scr_coord_val x, const scr_coord_val y, const scr_coord_val xx, const scr_coord_val yy, const scr_coord_val draw, const scr_coord_val dontDraw, const PIXVAL colval)
 {
 	int i, steps;
 	sint64 xp, yp;
@@ -4217,7 +4217,7 @@ static void simgraph16_draw_line_dotted(const scr_coord_val x, const scr_coord_v
 
 
 // bresenham circle (from wikipedia ...)
-static void simgraph16_draw_empty_circle( scr_coord_val x0, scr_coord_val  y0, int radius, const PIXVAL colval )
+static void simgraphgl_draw_empty_circle( scr_coord_val x0, scr_coord_val  y0, int radius, const PIXVAL colval )
 {
 	int f = 1 - radius;
 	int ddF_x = 1;
@@ -4257,7 +4257,7 @@ static void simgraph16_draw_empty_circle( scr_coord_val x0, scr_coord_val  y0, i
 
 
 // bresenham circle (from wikipedia ...)
-static void simgraph16_draw_filled_circle(scr_coord_val x0, scr_coord_val y0, int radius, const PIXVAL colval)
+static void simgraphgl_draw_filled_circle(scr_coord_val x0, scr_coord_val y0, int radius, const PIXVAL colval)
 {
 	int f = 1 - radius;
 	int ddF_x = 1;
@@ -4294,21 +4294,21 @@ static void simgraph16_draw_filled_circle(scr_coord_val x0, scr_coord_val y0, in
 }
 
 
-static void simgraph16_draw_signal_direction(scr_coord_val x, scr_coord_val y, uint8 way_dir, uint8 sig_dir, PIXVAL col1, PIXVAL col1_dark, bool is_diagonal, uint8 slope)
+static void simgraphgl_draw_signal_direction(scr_coord_val x, scr_coord_val y, uint8 way_dir, uint8 sig_dir, PIXVAL col1, PIXVAL col1_dark, bool is_diagonal, uint8 slope)
 {
-	uint8 width        = is_diagonal ? g_simgraph16.current_tile_raster_width/6*0.353 : g_simgraph16.current_tile_raster_width/6;
-	const uint8 height = is_diagonal ? g_simgraph16.current_tile_raster_width/6*0.353 : g_simgraph16.current_tile_raster_width/12;
-	const uint8 thickness = max( g_simgraph16.current_tile_raster_width/36, 2);
+	uint8 width        = is_diagonal ? g_simgraphgl.current_tile_raster_width/6*0.353 : g_simgraphgl.current_tile_raster_width/6;
+	const uint8 height = is_diagonal ? g_simgraphgl.current_tile_raster_width/6*0.353 : g_simgraphgl.current_tile_raster_width/12;
+	const uint8 thickness = max( g_simgraphgl.current_tile_raster_width/36, 2);
 
-	x += g_simgraph16.current_tile_raster_width/2;
-	y += (g_simgraph16.current_tile_raster_width*9)/16;
+	x += g_simgraphgl.current_tile_raster_width/2;
+	y += (g_simgraphgl.current_tile_raster_width*9)/16;
 
 	if (is_diagonal) {
 
 		if (way_dir == ribi_t::northeast || way_dir == ribi_t::southwest) {
 			// vertical
-			x += (way_dir==ribi_t::northeast) ? g_simgraph16.current_tile_raster_width/4 : (-g_simgraph16.current_tile_raster_width/4);
-			y += g_simgraph16.current_tile_raster_width/16;
+			x += (way_dir==ribi_t::northeast) ? g_simgraphgl.current_tile_raster_width/4 : (-g_simgraphgl.current_tile_raster_width/4);
+			y += g_simgraphgl.current_tile_raster_width/16;
 			width = width<<2; // 4x
 
 			// upper
@@ -4316,15 +4316,15 @@ static void simgraph16_draw_signal_direction(scr_coord_val x, scr_coord_val y, u
 				const uint8 yoff = (uint8)((xoff+1)/2);
 				// up
 				if (sig_dir & ribi_t::east || sig_dir & ribi_t::south) {
-					simgraph16_draw_vline_clipped(x + xoff, y+yoff, width/4 - yoff, col1, true CLIP_NUM_DEFAULT);
-					simgraph16_draw_vline_clipped(x-xoff-1, y+yoff, width/4 - yoff, col1, true CLIP_NUM_DEFAULT);
+					simgraphgl_draw_vline_clipped(x + xoff, y+yoff, width/4 - yoff, col1, true CLIP_NUM_DEFAULT);
+					simgraphgl_draw_vline_clipped(x-xoff-1, y+yoff, width/4 - yoff, col1, true CLIP_NUM_DEFAULT);
 				}
 				// down
 				if (sig_dir & ribi_t::west || sig_dir & ribi_t::north) {
-					simgraph16_draw_vline_clipped(x+xoff,   y+g_simgraph16.current_tile_raster_width/6,              width/4-yoff, col1,      true CLIP_NUM_DEFAULT);
-					simgraph16_draw_vline_clipped(x+xoff,   y+g_simgraph16.current_tile_raster_width/6+width/4-yoff, thickness,    col1_dark, true CLIP_NUM_DEFAULT);
-					simgraph16_draw_vline_clipped(x-xoff-1, y+g_simgraph16.current_tile_raster_width/6,              width/4-yoff, col1,      true CLIP_NUM_DEFAULT);
-					simgraph16_draw_vline_clipped(x-xoff-1, y+g_simgraph16.current_tile_raster_width/6+width/4-yoff, thickness,    col1_dark, true CLIP_NUM_DEFAULT);
+					simgraphgl_draw_vline_clipped(x+xoff,   y+g_simgraphgl.current_tile_raster_width/6,              width/4-yoff, col1,      true CLIP_NUM_DEFAULT);
+					simgraphgl_draw_vline_clipped(x+xoff,   y+g_simgraphgl.current_tile_raster_width/6+width/4-yoff, thickness,    col1_dark, true CLIP_NUM_DEFAULT);
+					simgraphgl_draw_vline_clipped(x-xoff-1, y+g_simgraphgl.current_tile_raster_width/6,              width/4-yoff, col1,      true CLIP_NUM_DEFAULT);
+					simgraphgl_draw_vline_clipped(x-xoff-1, y+g_simgraphgl.current_tile_raster_width/6+width/4-yoff, thickness,    col1_dark, true CLIP_NUM_DEFAULT);
 				}
 			}
 			// up
@@ -4334,22 +4334,22 @@ static void simgraph16_draw_signal_direction(scr_coord_val x, scr_coord_val y, u
 		}
 		else {
 			// horizontal
-			y -= g_simgraph16.current_tile_raster_width/12;
+			y -= g_simgraphgl.current_tile_raster_width/12;
 			if (way_dir == ribi_t::southeast) {
-				y += g_simgraph16.current_tile_raster_width/4;
+				y += g_simgraphgl.current_tile_raster_width/4;
 			}
 
 			for (uint8 xoff = 0; xoff < width*2; xoff++) {
 				const uint8 h = width*2 - (scr_coord_val)(xoff + 1);
 				// left
 				if (sig_dir & ribi_t::north || sig_dir & ribi_t::east) {
-					simgraph16_draw_vline_clipped(x - xoff - width*2, y + (scr_coord_val)((xoff+1)/2),   h,         col1,      true CLIP_NUM_DEFAULT);
-					simgraph16_draw_vline_clipped(x - xoff - width*2, y + (scr_coord_val)((xoff+1)/2)+h, thickness, col1_dark, true CLIP_NUM_DEFAULT);
+					simgraphgl_draw_vline_clipped(x - xoff - width*2, y + (scr_coord_val)((xoff+1)/2),   h,         col1,      true CLIP_NUM_DEFAULT);
+					simgraphgl_draw_vline_clipped(x - xoff - width*2, y + (scr_coord_val)((xoff+1)/2)+h, thickness, col1_dark, true CLIP_NUM_DEFAULT);
 				}
 				// right
 				if (sig_dir & ribi_t::south || sig_dir & ribi_t::west) {
-					simgraph16_draw_vline_clipped(x + xoff + width*2, y + (scr_coord_val)((xoff+1)/2),   h,         col1,      true CLIP_NUM_DEFAULT);
-					simgraph16_draw_vline_clipped(x + xoff + width*2, y + (scr_coord_val)((xoff+1)/2)+h, thickness, col1_dark, true CLIP_NUM_DEFAULT);
+					simgraphgl_draw_vline_clipped(x + xoff + width*2, y + (scr_coord_val)((xoff+1)/2),   h,         col1,      true CLIP_NUM_DEFAULT);
+					simgraphgl_draw_vline_clipped(x + xoff + width*2, y + (scr_coord_val)((xoff+1)/2)+h, thickness, col1_dark, true CLIP_NUM_DEFAULT);
 				}
 			}
 		}
@@ -4359,29 +4359,29 @@ static void simgraph16_draw_signal_direction(scr_coord_val x, scr_coord_val y, u
 			// upper right
 			scr_coord_val slope_offset_y = corner_se( slope )*TILE_HEIGHT_STEP;
 			for (uint8 xoff = 0; xoff < width; xoff++) {
-				simgraph16_draw_vline_clipped( x + xoff, y - slope_offset_y, (scr_coord_val)(xoff/2) + 1, col1, true CLIP_NUM_DEFAULT);
-				simgraph16_draw_vline_clipped( x + xoff, y - slope_offset_y + (scr_coord_val)(xoff/2) + 1, thickness, col1_dark, true CLIP_NUM_DEFAULT);
+				simgraphgl_draw_vline_clipped( x + xoff, y - slope_offset_y, (scr_coord_val)(xoff/2) + 1, col1, true CLIP_NUM_DEFAULT);
+				simgraphgl_draw_vline_clipped( x + xoff, y - slope_offset_y + (scr_coord_val)(xoff/2) + 1, thickness, col1_dark, true CLIP_NUM_DEFAULT);
 			}
 		}
 		if (sig_dir & ribi_t::east) {
 			scr_coord_val slope_offset_y = corner_se( slope )*TILE_HEIGHT_STEP;
 			for (uint8 xoff = 0; xoff < width; xoff++) {
-				simgraph16_draw_vline_clipped(x - xoff - 1, y - slope_offset_y, (scr_coord_val)(xoff/2) + 1, col1, true CLIP_NUM_DEFAULT);
-				simgraph16_draw_vline_clipped(x - xoff - 1, y - slope_offset_y + (scr_coord_val)(xoff/2) + 1, thickness, col1_dark, true CLIP_NUM_DEFAULT);
+				simgraphgl_draw_vline_clipped(x - xoff - 1, y - slope_offset_y, (scr_coord_val)(xoff/2) + 1, col1, true CLIP_NUM_DEFAULT);
+				simgraphgl_draw_vline_clipped(x - xoff - 1, y - slope_offset_y + (scr_coord_val)(xoff/2) + 1, thickness, col1_dark, true CLIP_NUM_DEFAULT);
 			}
 		}
 		if (sig_dir & ribi_t::west) {
 			scr_coord_val slope_offset_y = corner_nw( slope )*TILE_HEIGHT_STEP;
 			for (uint8 xoff = 0; xoff < width; xoff++) {
-				simgraph16_draw_vline_clipped(x + xoff, y - slope_offset_y + height*2 - (scr_coord_val)(xoff/2) + 1, (scr_coord_val)(xoff/2) + 1, col1, true CLIP_NUM_DEFAULT);
-				simgraph16_draw_vline_clipped(x + xoff, y - slope_offset_y + height*2 + 1, thickness, col1_dark, true CLIP_NUM_DEFAULT);
+				simgraphgl_draw_vline_clipped(x + xoff, y - slope_offset_y + height*2 - (scr_coord_val)(xoff/2) + 1, (scr_coord_val)(xoff/2) + 1, col1, true CLIP_NUM_DEFAULT);
+				simgraphgl_draw_vline_clipped(x + xoff, y - slope_offset_y + height*2 + 1, thickness, col1_dark, true CLIP_NUM_DEFAULT);
 			}
 		}
 		if (sig_dir & ribi_t::north) {
 			scr_coord_val slope_offset_y = corner_nw( slope )*TILE_HEIGHT_STEP;
 			for (uint8 xoff = 0; xoff < width; xoff++) {
-				simgraph16_draw_vline_clipped(x - xoff - 1, y - slope_offset_y + height*2 - (scr_coord_val)(xoff/2) + 1, (scr_coord_val)(xoff/2) + 1, col1, true CLIP_NUM_DEFAULT);
-				simgraph16_draw_vline_clipped(x - xoff - 1, y - slope_offset_y + height*2 + 1, thickness, col1_dark, true CLIP_NUM_DEFAULT);
+				simgraphgl_draw_vline_clipped(x - xoff - 1, y - slope_offset_y + height*2 - (scr_coord_val)(xoff/2) + 1, (scr_coord_val)(xoff/2) + 1, col1, true CLIP_NUM_DEFAULT);
+				simgraphgl_draw_vline_clipped(x - xoff - 1, y - slope_offset_y + height*2 + 1, thickness, col1_dark, true CLIP_NUM_DEFAULT);
 			}
 		}
 	}
@@ -4398,7 +4398,7 @@ static void simgraph16_draw_signal_direction(scr_coord_val x, scr_coord_val y, u
  * @param draw for dotted lines, how many pixels to be drawn (leave 0 for solid line)
  * @param dontDraw for dotted lines, how many pixels to not be drawn (leave 0 for solid line)
  */
-static void simgraph16_draw_bezier(scr_coord_val Ax, scr_coord_val Ay, scr_coord_val Bx, scr_coord_val By, scr_coord_val ADx, scr_coord_val ADy, scr_coord_val BDx, scr_coord_val BDy, const PIXVAL colore, scr_coord_val draw, scr_coord_val dontDraw)
+static void simgraphgl_draw_bezier(scr_coord_val Ax, scr_coord_val Ay, scr_coord_val Bx, scr_coord_val By, scr_coord_val ADx, scr_coord_val ADy, scr_coord_val BDx, scr_coord_val BDy, const PIXVAL colore, scr_coord_val draw, scr_coord_val dontDraw)
 {
 	scr_coord_val Cx,Cy,Dx,Dy;
 	Cx = Ax + ADx;
@@ -4420,7 +4420,7 @@ static void simgraph16_draw_bezier(scr_coord_val Ax, scr_coord_val Ay, scr_coord
 		ry = Ay*b*b*b + 3*Cy*b*b*a + 3*Dy*b*a*a + By*a*a*a;
 		if (t>0.0)
 			if (!draw && !dontDraw)
-				simgraph16_draw_line(rx,ry,oldx,oldy,colore);
+				simgraphgl_draw_line(rx,ry,oldx,oldy,colore);
 			else
 				display_direct_line_dotted_rgb(rx,ry,oldx,oldy,draw,dontDraw,colore);
 	  }
@@ -4450,7 +4450,7 @@ static void simgraph16_draw_bezier(scr_coord_val Ax, scr_coord_val Ay, scr_coord
 
 
 // Only right facing at the moment
-static void simgraph16_draw_right_triangle(scr_coord_val x, scr_coord_val y, scr_coord_val height, const PIXVAL colval, const bool dirty)
+static void simgraphgl_draw_right_triangle(scr_coord_val x, scr_coord_val y, scr_coord_val height, const PIXVAL colval, const bool dirty)
 {
 	y += (height / 2);
 	while(  height > 0  ) {
@@ -4482,7 +4482,7 @@ static inline uint32 get_lowest_set_bit(uint32 val)
  * copies only the changed areas to the screen using the "tile dirty buffer"
  * To get large changes, actually the current and the previous one is used.
  */
-static void simgraph16_flush_framebuffer()
+static void simgraphgl_flush_framebuffer()
 {
 #ifdef USE_SOFTPOINTER
 	ex_ord_update_mx_my();
@@ -4492,7 +4492,7 @@ static void simgraph16_flush_framebuffer()
 
 	// use mouse pointer image if available
 	if (softpointer != -1 && standard_pointer >= 0) {
-		simgraph16_draw_color_img(standard_pointer, sys_event.mx, sys_event.my, 0, false, true  CLIP_NUM_DEFAULT);
+		simgraphgl_draw_color_img(standard_pointer, sys_event.mx, sys_event.my, 0, false, true  CLIP_NUM_DEFAULT);
 
 		// if software emulated mouse pointer is over the ticker, redraw it totally at next occurs
 		if (!ticker::empty() && sys_event.my+images[standard_pointer].h >= ticker_ypos_top &&
@@ -4504,7 +4504,7 @@ static void simgraph16_flush_framebuffer()
 	else {
 		display_fb_internal(sys_event.mx - 1, sys_event.my - 3, 3, 7, gfx->palette_lookup(COL_WHITE), true, 0, disp_width, 0, disp_height);
 		display_fb_internal(sys_event.mx - 3, sys_event.my - 1, 7, 3, gfx->palette_lookup(COL_WHITE), true, 0, disp_width, 0, disp_height);
-		simgraph16_draw_line( sys_event.mx-2, sys_event.my, sys_event.mx+2, sys_event.my, gfx->palette_lookup(COL_BLACK) );
+		simgraphgl_draw_line( sys_event.mx-2, sys_event.my, sys_event.mx+2, sys_event.my, gfx->palette_lookup(COL_BLACK) );
 		display_direct_line_rgb( sys_event.mx, sys_event.my-2, sys_event.mx, sys_event.my+2, gfx->palette_lookup(COL_BLACK) );
 
 		// if crosshair is over the ticker, redraw it totally at next occurs
@@ -4588,8 +4588,8 @@ static void simgraph16_flush_framebuffer()
 				display_vline_wh_rgb( x2 << DIRTY_TILE_SHIFT,  y1 << DIRTY_TILE_SHIFT, (y2 - y1) << DIRTY_TILE_SHIFT, gfx->palette_lookup(COL_YELLOW), false);
 				display_fillbox_wh_rgb( x1 << DIRTY_TILE_SHIFT, y1 << DIRTY_TILE_SHIFT, (x2 - x1) << DIRTY_TILE_SHIFT, 1, gfx->palette_lookup(COL_YELLOW), false);
 				display_fillbox_wh_rgb( x1 << DIRTY_TILE_SHIFT, (y2 << DIRTY_TILE_SHIFT) - 1, (x2 - x1) << DIRTY_TILE_SHIFT, 1, gfx->palette_lookup(COL_YELLOW), false);
-				simgraph16_draw_line( x1 << DIRTY_TILE_SHIFT, y1 << DIRTY_TILE_SHIFT, x2 << DIRTY_TILE_SHIFT, (y2 << DIRTY_TILE_SHIFT) - 1, gfx->palette_lookup(COL_YELLOW) );
-				simgraph16_draw_line( x1 << DIRTY_TILE_SHIFT, (y2 << DIRTY_TILE_SHIFT) - 1, x2 << DIRTY_TILE_SHIFT, y1 << DIRTY_TILE_SHIFT, gfx->palette_lookup(COL_YELLOW) );
+				simgraphgl_draw_line( x1 << DIRTY_TILE_SHIFT, y1 << DIRTY_TILE_SHIFT, x2 << DIRTY_TILE_SHIFT, (y2 << DIRTY_TILE_SHIFT) - 1, gfx->palette_lookup(COL_YELLOW) );
+				simgraphgl_draw_line( x1 << DIRTY_TILE_SHIFT, (y2 << DIRTY_TILE_SHIFT) - 1, x2 << DIRTY_TILE_SHIFT, y1 << DIRTY_TILE_SHIFT, gfx->palette_lookup(COL_YELLOW) );
 #else
 				dr_textur( x1 << DIRTY_TILE_SHIFT, y1 << DIRTY_TILE_SHIFT, (x2 - x1) << DIRTY_TILE_SHIFT, (y2 - y1) << DIRTY_TILE_SHIFT );
 #endif
@@ -4614,7 +4614,7 @@ static void simgraph16_flush_framebuffer()
 /**
  * Turn mouse pointer visible/invisible
  */
-static void simgraph16_set_cursor_visible(bool show)
+static void simgraphgl_set_cursor_visible(bool show)
 {
 #ifdef USE_SOFTPOINTER
 	softpointer = show;
@@ -4627,7 +4627,7 @@ static void simgraph16_set_cursor_visible(bool show)
 /**
  * mouse pointer image
  */
-static void simgraph16_set_default_cursor(int cursor_id)
+static void simgraphgl_set_default_cursor(int cursor_id)
 {
 	standard_pointer = cursor_id;
 }
@@ -4636,7 +4636,7 @@ static void simgraph16_set_default_cursor(int cursor_id)
 /**
  * mouse pointer image
  */
-static void simgraph16_set_show_load_cursor(bool show)
+static void simgraphgl_set_show_load_cursor(bool show)
 {
 #ifdef USE_SOFTPOINTER
 	softpointer = !show;
@@ -4649,7 +4649,7 @@ static void simgraph16_set_show_load_cursor(bool show)
 /**
  * Initialises the graphics module
  */
-static bool simgraph16_init(scr_size window_size, sint16 full_screen)
+static bool simgraphgl_init(scr_size window_size, sint16 full_screen)
 {
 	disp_actual_width = window_size.w;
 	disp_height = window_size.h;
@@ -4698,7 +4698,7 @@ static bool simgraph16_init(scr_size window_size, sint16 full_screen)
 	tile_dirty = MALLOCN( uint32, tile_buffer_length );
 	tile_dirty_old = MALLOCN( uint32, tile_buffer_length );
 
-	simgraph16_mark_screen_dirty();
+	simgraphgl_mark_screen_dirty();
 	MEMZERON( tile_dirty_old, tile_buffer_length );
 
 	// init player colors
@@ -4707,11 +4707,11 @@ static bool simgraph16_init(scr_size window_size, sint16 full_screen)
 		player_offsets[i][1] = i*8+24;
 	}
 
-	simgraph16_set_clip_rect(0, 0, disp_width, disp_height CLIP_NUM_DEFAULT, false);
+	simgraphgl_set_clip_rect(0, 0, disp_width, disp_height CLIP_NUM_DEFAULT, false);
 
 	// Calculate daylight rgbmap and save it for unshaded tile drawing
 	player_day = 0;
-	simgraph16_set_daynight_level(0);
+	simgraphgl_set_daynight_level(0);
 	memcpy(specialcolormap_all_day, specialcolormap_day_night, 256 * sizeof(PIXVAL));
 	memcpy(rgbmap_all_day, rgbmap_day_night, RGBMAPSIZE * sizeof(PIXVAL));
 
@@ -4742,7 +4742,7 @@ static bool simgraph16_init(scr_size window_size, sint16 full_screen)
 /**
  * Check if the graphic module already was initialized.
  */
-static bool simgraph16_is_display_init()
+static bool simgraphgl_is_display_init()
 {
 	return textur != NULL  &&  default_font.is_loaded()  &&  images!=NULL;
 }
@@ -4751,7 +4751,7 @@ static bool simgraph16_is_display_init()
 /**
  * Close the Graphic module
  */
-static void simgraph16_exit()
+static void simgraphgl_exit()
 {
 	dr_os_close();
 
@@ -4773,7 +4773,7 @@ static void simgraph16_exit()
 
 /* changes display size
  */
-static void simgraph16_on_window_resized(scr_size new_window_size)
+static void simgraphgl_on_window_resized(scr_size new_window_size)
 {
 	disp_actual_width = max( 16, new_window_size.w );
 	if(  new_window_size.h<=0  ) {
@@ -4801,7 +4801,7 @@ static void simgraph16_on_window_resized(scr_size new_window_size)
 			gfx->set_clip_rect(0, 0, disp_actual_width, disp_height CLIP_NUM_DEFAULT, false);
 		}
 
-		simgraph16_mark_screen_dirty();
+		simgraphgl_mark_screen_dirty();
 		MEMZERON( tile_dirty_old, tile_buffer_length );
 	}
 }
@@ -4810,7 +4810,7 @@ static void simgraph16_on_window_resized(scr_size new_window_size)
 /**
  * Take Screenshot
  */
-static bool simgraph16_take_screenshot(const scr_rect &area)
+static bool simgraphgl_take_screenshot(const scr_rect &area)
 {
 	if (access(SCREENSHOT_PATH_X, W_OK) == -1) {
 		return false; // directory not accessible
@@ -4846,26 +4846,26 @@ static bool simgraph16_take_screenshot(const scr_rect &area)
 }
 
 
-static void simgraph16_set_image_procs(bool is_global)
+static void simgraphgl_set_image_procs(bool is_global)
 {
 	if(  is_global  ) {
-		g_simgraph16.draw_normal = simgraph16_draw_img_aux;;
-		g_simgraph16.draw_color  = simgraph16_draw_color_img;
-		g_simgraph16.draw_blend  = simgraph16_draw_rezoomed_img_blend;
-		g_simgraph16.draw_alpha  = simgraph16_draw_rezoomed_img_alpha;
-		g_simgraph16.current_tile_raster_width = gfx->get_tile_raster_width();
+		g_simgraphgl.draw_normal = simgraphgl_draw_img_aux;;
+		g_simgraphgl.draw_color  = simgraphgl_draw_color_img;
+		g_simgraphgl.draw_blend  = simgraphgl_draw_rezoomed_img_blend;
+		g_simgraphgl.draw_alpha  = simgraphgl_draw_rezoomed_img_alpha;
+		g_simgraphgl.current_tile_raster_width = gfx->get_tile_raster_width();
 	}
 	else {
-		g_simgraph16.draw_normal = simgraph16_draw_base_img;
-		g_simgraph16.draw_color  = simgraph16_draw_base_img;
-		g_simgraph16.draw_blend  = simgraph16_draw_base_img_blend;
-		g_simgraph16.draw_alpha  = simgraph16_draw_base_img_alpha;
-		g_simgraph16.current_tile_raster_width = gfx->get_base_tile_raster_width();
+		g_simgraphgl.draw_normal = simgraphgl_draw_base_img;
+		g_simgraphgl.draw_color  = simgraphgl_draw_base_img;
+		g_simgraphgl.draw_blend  = simgraphgl_draw_base_img_blend;
+		g_simgraphgl.draw_alpha  = simgraphgl_draw_base_img_alpha;
+		g_simgraphgl.current_tile_raster_width = gfx->get_base_tile_raster_width();
 	}
 }
 
 
-void simgraph16_set_light_color(int light_idx, rgb888_t day_colour, rgb888_t night_colour)
+void simgraphgl_set_light_color(int light_idx, rgb888_t day_colour, rgb888_t night_colour)
 {
 	display_day_lights[light_idx]   = day_colour;
 	display_night_lights[light_idx] = night_colour;
