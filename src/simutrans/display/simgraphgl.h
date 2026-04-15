@@ -3,14 +3,14 @@
  * (see LICENSE.txt)
  */
 
-#ifndef DISPLAY_SIMGRAPH16_H
-#define DISPLAY_SIMGRAPH16_H
+#ifndef DISPLAY_SIMGRAPHGL_H
+#define DISPLAY_SIMGRAPHGL_H
 
 
 #include "simgraph.h"
 
 
-extern simgraph_t g_simgraph16;
+extern simgraph_t g_simgraphgl;
 
 
 #endif
