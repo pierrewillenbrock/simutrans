@@ -6,7 +6,7 @@
 #include "simgraph.h"
 
 #include "simgraph0.h"
-#include "simgraph16.h"
+#include "simgraphgl.h"
 
 
 const simgraph_t *gfx;
@@ -23,7 +23,7 @@ const simgraph_t *simgraph_select(simgraph_type_t preferred_type)
 #if COLOUR_DEPTH == 0
 		case SIMGRAPH_TYPE_NULL:     return &g_simgraph0;
 #else
-		case SIMGRAPH_TYPE_SOFTWARE: return &g_simgraph16;
+		case SIMGRAPH_TYPE_SOFTWARE: return &g_simgraphgl;
 #endif
 
 		default: return NULL;
