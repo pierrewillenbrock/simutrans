@@ -1621,6 +1621,10 @@ static void build_stencil_for(std::vector<GLvec2s> &vertices,
 static void build_stencil(int min_x, int min_y, int max_x, int max_y,
                           clipping_info_t const &cr)
 {
+	//using most of the "default" shader here, so the model/view/projection
+	//matrices must be setup.
+	glMatrixMode( GL_PROJECTION );
+	glLoadMatrixf( gl_MVP_mat );
 	glColorMask( 0, 0, 0, 0 );
 	glBindTexture( GL_TEXTURE_2D, 0 );
 	glEnable( GL_STENCIL_TEST );
@@ -1662,6 +1666,8 @@ static void build_stencil(int min_x, int min_y, int max_x, int max_y,
 
 	glDisable( GL_STENCIL_TEST );
 	glColorMask( 1, 1, 1, 1 );
+	glMatrixMode( GL_PROJECTION );
+	glLoadIdentity();
 }
 
 /*
