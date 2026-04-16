@@ -293,24 +293,14 @@ MSVC_ALIGN(64) struct clipping_info_t {
 	}
 } GCC_ALIGN(64); // aligned to separate cachelines
 
-struct TextureAtlas_Texname {
-	GLuint tex;
-	explicit TextureAtlas_Texname(GLuint tex) : tex(tex) {}
-	TextureAtlas_Texname() : tex(0) {}
-	bool operator==(const TextureAtlas_Texname &oth) const {
-		return oth.tex == tex;
-	}
-	bool operator!=(const TextureAtlas_Texname &oth) const {
-		return oth.tex != tex;
-	}
-};
+typedef GLuint TextureAtlas_Texname;
 static bool isValidTexname(TextureAtlas_Texname const & name) {
-	return name.tex != 0;
+	return name != 0;
 }
 static TextureAtlas_Texname invalidTexname() {
 	return TextureAtlas_Texname( 0 );
 }
-#define gltexFromTexname(name) (name.tex)
+#define gltexFromTexname(name) (name)
 template<typename Key>
 class TextureAtlas
 {
