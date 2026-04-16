@@ -145,22 +145,40 @@ MSVC_ALIGN(64) struct clipping_info_t {
 	clip_line_t poly_clips[MAX_POLY_CLIPS];
 } GCC_ALIGN(64); // aligned to separate cachelines
 
+struct TextureAtlas_Texname {
+	GLuint tex;
+	explicit TextureAtlas_Texname(GLuint tex) : tex(tex) {}
+	TextureAtlas_Texname() : tex(0) {}
+	bool operator==(const TextureAtlas_Texname &oth) const {
+		return oth.tex == tex;
+	}
+	bool operator!=(const TextureAtlas_Texname &oth) const {
+		return oth.tex != tex;
+	}
+};
+static bool isValidTexname(TextureAtlas_Texname const & name) {
+	return name.tex != 0;
+}
+static TextureAtlas_Texname invalidTexname() {
+	return TextureAtlas_Texname( 0 );
+}
+#define gltexFromTexname(name) (name.tex)
 template<typename Key>
 class TextureAtlas
 {
 private:
 	struct TileInfo
 	{
-		GLuint texture;
+		TextureAtlas_Texname texture;
 		GLfloat x, y, w, h;
 		GLuint tex_x, tex_y, tex_w, tex_h;
 	};
 	struct TilePageInfo
 	{
-		GLuint texture;
+		TextureAtlas_Texname texture;
 		GLuint width, height;
 		std::deque<TileInfo> freetiles;
-		TilePageInfo(GLuint texture,
+		TilePageInfo(TextureAtlas_Texname texture,
 		             GLuint width,
 		             GLuint height)
 			: texture( texture )
@@ -300,9 +318,9 @@ public:
 		auto it = tiletex.find(k);
 		return it != tiletex.end();
 	}
-	GLuint getTexture(Key k,
-	                  GLfloat &x, GLfloat &y,
-	                  GLfloat &w, GLfloat &h)
+	TextureAtlas_Texname getTexture( Key k,
+	                                 GLfloat &x, GLfloat &y,
+	                                 GLfloat &w, GLfloat &h )
 	{
 		auto it = tiletex.find( k );
 		if(  it != tiletex.end()  ) {
@@ -312,7 +330,11 @@ public:
 			h = it->second.h;
 			return it->second.texture;
 		}
-		return -1;
+		x = 0;
+		y = 0;
+		w = 0;
+		h = 0;
+		return invalidTexname();
 	}
 	void cleanupPages()
 	{
@@ -324,7 +346,7 @@ public:
 	{
 		auto it = tiletex.find( k );
 		if(  it != tiletex.end()  ) {
-			GLuint tex = it->second.texture;
+			TextureAtlas_Texname tex = it->second.texture;
 			for(  auto &el : tilepage  ) {
 				if(  el.texture == tex  ) {
 					el.freetiles.emplace_back( it->second );
@@ -337,13 +359,14 @@ public:
 			cleanupPages();
 		}
 	}
-	GLuint createTexture(Key k,
-	                     unsigned int width,
-	                     unsigned int height,
-	                     unsigned int &tex_x,
-	                     unsigned int &tex_y,
-	                     GLfloat &tcx, GLfloat &tcy,
-	                     GLfloat &tcw, GLfloat &tch)
+
+	TextureAtlas_Texname createTexture(Key k,
+	                                   unsigned int width,
+	                                   unsigned int height,
+	                                   unsigned int &tex_x,
+	                                   unsigned int &tex_y,
+	                                   GLfloat &tcx, GLfloat &tcy,
+	                                   GLfloat &tcw, GLfloat &tch)
 	{
 		auto it = tiletex.find( k );
 		if(  it != tiletex.end()  ) {
@@ -361,7 +384,7 @@ public:
 		}
 
 		if(  (int)width > tex_width || (int)height > tex_height  ) {
-			return 0;
+			return invalidTexname();
 		}
 
 		TileInfo ci;
@@ -386,7 +409,7 @@ public:
 			glTexImage2D( GL_TEXTURE_2D, 0, tex_internalformat, tex_width, tex_height, 0,
 			              tex_format, tex_type,
 			              NULL );
-			tilepage.emplace_back( texname, tex_width, tex_height );
+			tilepage.emplace_back( TextureAtlas_Texname( texname ), tex_width, tex_height );
 
 			if(  tilepage.back().findFreeTile( width, height, ci )  ) {
 				tiletex[k] = ci;
@@ -394,7 +417,7 @@ public:
 			}
 		}
 		else {
-			glBindTexture( GL_TEXTURE_2D, tilepage.back().texture );
+			glBindTexture( GL_TEXTURE_2D, gltexFromTexname( tilepage.back().texture ) );
 		}
 
 		tex_x = ci.tex_x;
@@ -426,7 +449,7 @@ public:
 	void clear()
 	{
 		for(  auto &page : tilepage  ) {
-			glDeleteTextures( 1, &page.texture );
+			glDeleteTextures( 1, &gltexFromTexname( page.texture ) );
 		}
 		tiletex.clear();
 		tilepage.clear();
@@ -2230,9 +2253,9 @@ static GLuint getArrayTex(const PIXVAL *arr, scr_coord_val w, scr_coord_val h)
 	return texname;
 }
 
-static GLuint getGlyphTex(uint32_t c, const font_t *fnt,
-                          GLfloat &tcx, GLfloat &tcy,
-                          GLfloat &tcw, GLfloat &tch)
+static TextureAtlas_Texname getGlyphTex(uint32_t c, const font_t *fnt,
+                GLfloat &tcx, GLfloat &tcy,
+                GLfloat &tcw, GLfloat &tch)
 {
 	if(  charatlas.hasTexture( c )  ) {
 		return charatlas.getTexture( c, tcx, tcy, tcw, tch );
@@ -2244,10 +2267,10 @@ static GLuint getGlyphTex(uint32_t c, const font_t *fnt,
 	//we ignore the y_offset.
 
 	unsigned int tex_x = 0, tex_y = 0;
-	GLuint tex = charatlas.createTexture( c,
-	                                      glyph_width, glyph_height,
-	                                      tex_x, tex_y,
-	                                      tcx, tcy, tcw, tch );
+	TextureAtlas_Texname tex = charatlas.createTexture( c,
+	                           glyph_width, glyph_height,
+	                           tex_x, tex_y,
+	                           tcx, tcy, tcw, tch );
 
 	//now upload the array
 	glPixelStorei( GL_UNPACK_ROW_LENGTH, glyph_width );
@@ -3510,12 +3533,12 @@ static scr_coord_val simgraphgl_draw_text_clipped_n(scr_coord_val x, scr_coord_v
 
 			if(  w > 0 && h > 0  ) {
 				GLfloat glx = 0, gly = 0, glw = 0, glh = 0;
-				GLuint texname = getGlyphTex( c, fnt,
-				                              glx, gly,
-				                              glw, glh );
+				TextureAtlas_Texname texname = getGlyphTex( c, fnt,
+				                               glx, gly,
+				                               glw, glh );
 
 				glEnable( GL_TEXTURE_2D );
-				glBindTexture( GL_TEXTURE_2D, texname );
+				glBindTexture( GL_TEXTURE_2D, gltexFromTexname( texname ) );
 				glColor3f( ( color & 0xf800 ) / float( 0x10000 ),
 				           ( color & 0x07e0 ) / float( 0x00800 ),
 				           ( color & 0x001f ) / float( 0x00020 ) );
