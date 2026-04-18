@@ -158,16 +158,6 @@ static sint32 y_scale = SCALE_NEUTRAL_Y;
 #define TEX_TO_SCREEN_X(x) (((x) * x_scale) / SCALE_NEUTRAL_X)
 #define TEX_TO_SCREEN_Y(y) (((y) * y_scale) / SCALE_NEUTRAL_Y)
 
-#undef TEX_TO_SCREEN_X
-#undef TEX_TO_SCREEN_Y
-#undef SCREEN_TO_TEX_X
-#undef SCREEN_TO_TEX_Y
-
-#define TEX_TO_SCREEN_X(v) (v)
-#define TEX_TO_SCREEN_Y(v) (v)
-#define SCREEN_TO_TEX_X(v) (v)
-#define SCREEN_TO_TEX_Y(v) (v)
-
 static int tex_max_size;
 
 /**
@@ -522,7 +512,19 @@ int dr_os_open(const scr_size window_size, sint16 fs)
 	glGenFramebuffers( 1, &framebuffer );
 	glGenRenderbuffers( 1, &fb_depth_rb );
 
+	glViewport( 0, 0, tex_w, tex_h );
+	//map x[0,width] to x[-1,1]: X(x) = x/width*2-1
+	//map y[0,height] to y[1,-1]: Y(x) = -x/height*2+1
+	gl_MVP_mat[0] = 2.0 / tex_w;
+	gl_MVP_mat[5] = -2.0 / tex_h;
+
 	glBindTexture( GL_TEXTURE_2D, fb_color_tex );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
+	                 GL_CLAMP_TO_EDGE );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
+	                 GL_CLAMP_TO_EDGE );
 	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA8, tex_w, tex_h, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL );
 	glBindFramebuffer( GL_FRAMEBUFFER, framebuffer );
 	glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fb_color_tex, 0 );
@@ -614,6 +616,8 @@ int dr_textur_resize(unsigned short** const textur, int _tex_w, int const _tex_h
 
 	setupGL();
 
+	DBG_MESSAGE( "dr_textur_resize(SDL2+GL)", "SDL realized screen size width=%d, height=%d (internal w=%d, h=%d)", tex_w, tex_h, width, height );
+
 	return tex_w;
 }
 
@@ -652,13 +656,8 @@ void dr_flush()
 	gfx->flush_framebuffer();
 
 	glViewport( 0, 0, width, height );
-	glBindFramebuffer( GL_READ_FRAMEBUFFER, framebuffer );
-	glBindFramebuffer( GL_DRAW_FRAMEBUFFER, sdl_draw_framebuffer );
-	glDisable( GL_TEXTURE_2D );
-	glDisable( GL_BLEND );
-	glRasterPos2i( 0, height );
-	glCopyPixels( 0, 0, width, height, GL_COLOR );
-	glBindFramebuffer( GL_FRAMEBUFFER, framebuffer );
+	simgraphgl_CopyTexBufferToBuffer( sdl_draw_framebuffer, framebuffer,
+	                                  fb_color_tex, width, height, x_scale / SCALE_NEUTRAL_X, y_scale / SCALE_NEUTRAL_Y );
 	glViewport( 0, 0, tex_w, tex_h );
 
 	glFlush();
@@ -791,6 +790,9 @@ static void internal_GetEvents()
 			if(  event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED  ) {
 				sys_event.new_window_size_w = max( 1, SCREEN_TO_TEX_X( event.window.data1 ) );
 				sys_event.new_window_size_h = max( 1, SCREEN_TO_TEX_Y( event.window.data2 ) );
+				DBG_MESSAGE( "SDL Resize event", "Window is %dx%d, which is reported as %dx%d",
+				             event.window.data1, event.window.data2,
+				             sys_event.new_window_size_w, sys_event.new_window_size_h );
 				sys_event.type = SIM_SYSTEM;
 				sys_event.code = SYSTEM_RESIZE;
 			}
