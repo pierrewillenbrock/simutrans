@@ -149,6 +149,16 @@ sint32 y_scale = SCALE_NEUTRAL_Y;
 #define TEX_TO_SCREEN_X(x) (((x) * x_scale) / SCALE_NEUTRAL_X)
 #define TEX_TO_SCREEN_Y(y) (((y) * y_scale) / SCALE_NEUTRAL_Y)
 
+#undef TEX_TO_SCREEN_X
+#undef TEX_TO_SCREEN_Y
+#undef SCREEN_TO_TEX_X
+#undef SCREEN_TO_TEX_Y
+
+#define TEX_TO_SCREEN_X(v) (v)
+#define TEX_TO_SCREEN_Y(v) (v)
+#define SCREEN_TO_TEX_X(v) (v)
+#define SCREEN_TO_TEX_Y(v) (v)
+
 
 bool has_soft_keyboard = false;
 
