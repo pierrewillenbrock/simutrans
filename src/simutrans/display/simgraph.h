@@ -92,6 +92,7 @@ enum simgraph_type_t
 {
 	SIMGRAPH_TYPE_NULL     = 0, // Dummy renderer, used for headless servers
 	SIMGRAPH_TYPE_SOFTWARE = 1, // 16 bit software (CPU) renderer, default
+	SIMGRAPH_TYPE_GL       = 2, // opengl accelerated renderer
 };
 
 

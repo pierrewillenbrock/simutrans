@@ -923,7 +923,7 @@ int simu_main(int argc, char** argv)
 #if COLOUR_DEPTH == 0
 		SIMGRAPH_TYPE_NULL;
 #else
-		SIMGRAPH_TYPE_SOFTWARE;
+		SIMGRAPH_TYPE_GL;
 #endif
 
 	gfx = simgraph_select(preferred_renderer_type);

@@ -1765,7 +1765,7 @@ static void            simgraphgl_activate_ribi_clip         (int ribi  CLIP_NUM
 
 
 simgraph_t g_simgraphgl = {
-	/*.type                      =*/ SIMGRAPH_TYPE_SOFTWARE,
+	/*.type                      =*/ SIMGRAPH_TYPE_GL,
 
 	/*.tile_raster_width         =*/ 16, // zoomed
 	/*.base_tile_raster_width    =*/ 16, // original
