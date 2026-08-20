@@ -24,6 +24,7 @@ const simgraph_t *simgraph_select(simgraph_type_t preferred_type)
 		case SIMGRAPH_TYPE_NULL:     return &g_simgraph0;
 #else
 		case SIMGRAPH_TYPE_SOFTWARE: return &g_simgraphgl;
+		case SIMGRAPH_TYPE_GL: return &g_simgraphgl;
 #endif
 
 		default: return NULL;
