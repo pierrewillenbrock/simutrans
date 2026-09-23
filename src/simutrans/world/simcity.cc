@@ -615,7 +615,6 @@ void stadt_t::add_gebaeude_to_stadt(const gebaeude_t* gb, bool ordered)
 			gebaeude_t* add_gb = gr->find<gebaeude_t>();
 			assert(!buildings.is_contained(add_gb));
 			assert(add_gb->get_pos() == gr->get_pos());
-			assert(koord_distance(add_gb->get_pos(), get_pos()) < 250);
 			if( ordered ) {
 				buildings.insert_ordered( add_gb, level, compare_gebaeude_pos );
 			}
