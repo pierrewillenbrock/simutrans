@@ -996,8 +996,8 @@ simgraph_t g_simgraphgl = {
 	/*.draw_blend                =*/ NULL,
 	/*.draw_alpha                =*/ NULL,
 
-	/*.zoom_num =*/ { 2, 7, 3, 11, 4, 5, 9, 1, 3, 5, 1, 3, 1, 1 },
-	/*.zoom_den =*/ { 1, 4, 2,  8, 3, 4, 8, 1, 4, 8, 2, 8, 4, 8 }, /* attention, denominator can be only 1,2,3,4,8! */
+	/*.zoom_num =*/ { 2, 7, 3, 11, 4, 5, 9, 1, 3, 5, 1, 3, 1,  3, 1,  3,  1 },
+	/*.zoom_den =*/ { 1, 4, 2,  8, 3, 4, 8, 1, 4, 8, 2, 8, 4, 16, 8, 32, 16 },
 
 	/*.palette_lookup              =*/ simgraphgl_palette_lookup,
 	/*.palette_indexof             =*/ simgraphgl_palette_indexof,
